@@ -1,0 +1,48 @@
+# The docker file that starts everything up
+
+version: '1'
+
+services:
+  # System API & Frontend
+  gateway:
+    build: ./services/gateway
+    container_name: home_gateway
+    restart: always
+    env_file: .env
+    ports:
+      - "8000:8000" # Access UI at http://localhost:8000
+    depends_on:
+      - postgres
+      - redis
+
+  # LLM Agent Logic
+  agent:
+    build: ./services/agent
+    container_name: home_agent
+    restart: always
+    env_file: .env
+    depends_on:
+      - gateway
+      - postgres
+      - redis
+
+  # Short-term Memory
+  redis:
+    image: redis:7-alpine
+    container_name: home_redis
+    volumes:
+      - ./volumes/redis_data:/data
+
+  # Long-term Memory
+  postgres:
+    image: postgres:15-alpine
+    container_name: home_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: home_os
+    volumes:
+      - ./volumes/postgres_data:/var/lib/postgresql/data
+      - ./services/database/init.sql:/docker-entrypoint-initdb.d/init.sqlversion: '3.8'
+
+      
