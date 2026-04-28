@@ -1,0 +1,14 @@
+[project]
+name = "gateway"
+version = "0.1.0"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "redis[hiredis]",
+    "paho-mqtt",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "cryptography",
+    "pydantic-settings",
+    "aiomqtt>=2.5.1",
+]
