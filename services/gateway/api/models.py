@@ -8,6 +8,9 @@ class DeviceState(BaseModel):
     ignoring any fields not explicitly defined here. We can add common attributes as needed.
     """
     model_config = ConfigDict(extra='ignore')
+
+    # General Attributes
+    linkquality: Optional[int] = None
     
     # Lights / Switches
     state: Optional[str] = None
@@ -17,7 +20,6 @@ class DeviceState(BaseModel):
     # Sensors
     temperature: Optional[float] = None
     temperature_units: Optional[str] = None
-    humidity: Optional[float] = None
     battery: Optional[int] = None
     
     # Smart Plugs
@@ -47,3 +49,50 @@ class RPCResponse(BaseModel):
     status: str
     transaction: str
     data: Optional[dict] = None
+
+class GroupMember(BaseModel):
+    """Represents a device endpoint that belongs to a group."""
+    endpoint: int
+    ieee_address: str
+    
+    model_config = ConfigDict(extra="ignore")
+
+class GroupInfo(BaseModel):
+    """Information about a specific Zigbee group."""
+    id: int
+    friendly_name: str
+    members: List[GroupMember] = Field(default_factory=list)
+    
+    model_config = ConfigDict(extra="ignore")
+
+class BridgeHealthResponse(BaseModel):
+    healthy: bool
+    status: str
+    
+    model_config = ConfigDict(extra="ignore")
+
+class BridgeInfoResponse(BaseModel):
+    version: str
+    commit: Optional[str] = None
+    coordinator: Optional[dict] = None
+    network: Optional[dict] = None
+    
+    model_config = ConfigDict(extra="ignore")
+
+class PermitJoinRequest(BaseModel):
+    # Time in seconds to allow joining. Z2M max is 254. 
+    # Setting time to 0 disables joining.
+    value: bool = True
+    time: Optional[int] = Field(254, ge=0, le=254)
+    
+    model_config = ConfigDict(extra="ignore")
+
+class GroupCreateRequest(BaseModel):
+    friendly_name: str
+        
+    model_config = ConfigDict(extra="ignore")
+
+class GroupMemberRequest(BaseModel):
+    device: str
+    
+    model_config = ConfigDict(extra="ignore")

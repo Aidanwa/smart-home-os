@@ -19,28 +19,24 @@ class AsyncMqttBus:
         
         # Redis client
         self.redis = redis.from_url(redis_url, decode_responses=True)
-        
-        # aiomqtt client (instantiated during connect)
         self.client: Optional[aiomqtt.Client] = None
         
-        # Dictionary to hold our RPC futures. Key: transaction_id, Value: asyncio.Future
+        # Holds our RPC futures. Key: transaction_id OR friendly_name, Value: asyncio.Future
         self._pending_rpcs: Dict[str, asyncio.Future] = {}
-        
-        # Background task reference
         self._listen_task: Optional[asyncio.Task] = None
 
+        # A local memory cache of group names to filter the Digital Twin
+        self._known_groups = set()
+
     async def start(self):
-        """Starts the background MQTT listening loop."""
         self._listen_task = asyncio.create_task(self._listen_loop())
 
     async def stop(self):
-        """Cleanly shuts down the bus."""
         if self._listen_task:
             self._listen_task.cancel()
         await self.redis.close()
 
     async def _listen_loop(self):
-        """Main reconnection and message processing loop."""
         reconnect_interval = 3
         while True:
             try:
@@ -52,11 +48,8 @@ class AsyncMqttBus:
                 ) as client:
                     self.client = client
                     logger.info("Connected to MQTT Broker")
-                    
-                    # Subscribe to all Zigbee traffic
                     await client.subscribe(f"{self.z2m_base}/#")
                     
-                    # Async generator yields messages as they arrive
                     async for message in client.messages:
                         await self._process_message(message)
                         
@@ -64,7 +57,6 @@ class AsyncMqttBus:
                 logger.warning(f"MQTT connection lost: {error}. Reconnecting in {reconnect_interval}s...")
                 await asyncio.sleep(reconnect_interval)
             except asyncio.CancelledError:
-                logger.info("MQTT listening loop cancelled.")
                 break
 
     async def _process_message(self, message: aiomqtt.Message):
@@ -76,55 +68,68 @@ class AsyncMqttBus:
 
         topic_parts = topic.split("/")
 
-        logger.info(f"Received MQTT message on topic: {topic} with payload: {payload}")
-        
-        # 1. Update Digital Twin (Strictly filter for exactly 'base/device_name')
+        # 0.5 Capture Bridge Configuration (Retained Topics)
+        if topic == f"{self.z2m_base}/bridge/groups":
+            await self.redis.set("gateway:groups", json.dumps(payload))
+            if isinstance(payload, list):
+                self._known_groups = {g.get("friendly_name") for g in payload if isinstance(g, dict)}
+            
+        # Catch the heavy info payload so we never have to RPC for it
+        if topic == f"{self.z2m_base}/bridge/info":
+            await self.redis.set("gateway:bridge_info", json.dumps(payload))
+
+        # 1. Update Digital Twin & Resolve Device Futures
         if len(topic_parts) == 2 and topic_parts[0] == self.z2m_base:
             device_name = topic_parts[1]
             
-            # Ignore the bridge's own status updates
-            if device_name != "bridge":
+            # Ignore the bridge AND any known groups
+            if device_name != "bridge" and device_name not in self._known_groups:
                 await self.redis.hset("gateway:digital_twin", device_name, json.dumps(payload))
+                
+                # If we were waiting on a device state change via RPC, resolve it!
+                if device_name in self._pending_rpcs:
+                    if not self._pending_rpcs[device_name].done():
+                        self._pending_rpcs[device_name].set_result(payload)
         
-        # 2. Resolve pending RPC Requests (Strict Confirmation)
-        if isinstance(payload, dict):
-            # Check if this message has a transaction ID we are waiting for
+        # 2. Resolve pending Bridge RPC Requests via Transaction ID,
+        #    explicitly ignore '/request/' topics to ignore outgoing msg we publish
+        if isinstance(payload, dict) and "/request/" not in topic:
             tx_id = payload.get("transaction") or payload.get("id")
             if tx_id and tx_id in self._pending_rpcs:
                 if not self._pending_rpcs[tx_id].done():
                     self._pending_rpcs[tx_id].set_result(payload)
 
     async def rpc(self, topic: str, payload: dict, timeout: float = 5.0) -> dict:
-        """
-        Publishes a payload with a transaction ID and awaits the corresponding response.
-        """
         if not self.client:
             raise RuntimeError("MQTT Client is not connected.")
 
-        # Generate a unique correlation ID
-        tx_id = uuid.uuid4().hex[:8]
-        payload["transaction"] = tx_id
-        
-        # Create a Future that will be resolved by _process_message
         loop = asyncio.get_running_loop()
         future = loop.create_future()
-        self._pending_rpcs[tx_id] = future
+        
+        # Check if this is a bridge request or a hardware device request
+        is_bridge_request = topic.startswith(f"{self.z2m_base}/bridge/request/")
+        
+        if is_bridge_request:
+            # Bridge requests safely support custom transaction IDs
+            correlation_key = uuid.uuid4().hex[:8]
+            payload["transaction"] = correlation_key
+        else:
+            # Device sets error out if injected with unknown fields.
+            # Instead, we extract the friendly_name and use that as the correlation key.
+            # Topic format: zigbee2mqtt/Bedroom1/set -> Extract 'Bedroom1'
+            correlation_key = topic.split("/")[1]  
+
+        self._pending_rpcs[correlation_key] = future
 
         try:
-            # Publish the command
             await self.client.publish(topic, json.dumps(payload))
-            
-            # Pause this function until the Future is resolved or times out
             result = await asyncio.wait_for(future, timeout=timeout)
             return result
-            
         except asyncio.TimeoutError:
-            raise TimeoutError(f"RPC Timeout waiting for transaction {tx_id} on {topic}")
+            raise TimeoutError(f"RPC Timeout waiting for {correlation_key} on {topic}")
         finally:
-            # Always clean up the memory
-            self._pending_rpcs.pop(tx_id, None)
+            self._pending_rpcs.pop(correlation_key, None)
 
     async def get_digital_twin(self) -> dict:
-        """Returns the entire current state of the home from Redis."""
         raw_data = await self.redis.hgetall("gateway:digital_twin")
         return {k: json.loads(v) for k, v in raw_data.items()}

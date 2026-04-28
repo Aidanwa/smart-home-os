@@ -43,22 +43,8 @@ async def lifespan(app: FastAPI):
     # Give the MQTT client a moment to establish connection
     await asyncio.sleep(0.5)
 
-    # 3. Startup Hydration: Force Z2M to broadcast all device states
-    try:
-        logger.info("Hydrating Digital Twin from Zigbee2MQTT...")
-        
-        if bus.client:
-
-            # We don't need a full RPC here, just a publish to trigger the broadcast
-            await bus.client.publish(
-                "zigbee2mqtt/bridge/request/devices", 
-                payload='{"transaction": "startup_hydration"}'
-            )
-            # Wait 1-2 seconds for the network to respond and Redis to fill
-            await asyncio.sleep(3)
-            logger.info("Hydration complete.")
-    except Exception as e:
-        logger.error(f"Failed to hydrate state: {e}")
+    # ONLY UNCOMMENT TO REST THE DIGITAL TWIN ON STARTUP - TESTING USE ONLY
+    # await bus.redis.delete("gateway:digital_twin")
 
     yield  # --- The API is now running and accepting requests ---
 
