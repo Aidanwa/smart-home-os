@@ -28,6 +28,9 @@ class AsyncMqttBus:
         # A local memory cache of group names to filter the Digital Twin
         self._known_groups = set()
 
+        # Websocket subscribers to push real time updates to the frontend
+        self._subscribers: set[asyncio.Queue] = set()
+
     async def start(self):
         self._listen_task = asyncio.create_task(self._listen_loop())
 
@@ -59,6 +62,15 @@ class AsyncMqttBus:
             except asyncio.CancelledError:
                 break
 
+    def subscribe(self) -> asyncio.Queue:
+        """Returns a queue that receives all digital twin updates."""
+        q = asyncio.Queue()
+        self._subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue):
+        self._subscribers.discard(q)
+
     async def _process_message(self, message: aiomqtt.Message):
         topic = str(message.topic)
         try:
@@ -85,6 +97,13 @@ class AsyncMqttBus:
             # Ignore the bridge AND any known groups
             if device_name != "bridge" and device_name not in self._known_groups:
                 await self.redis.hset("gateway:digital_twin", device_name, json.dumps(payload))
+
+                update_msg = {"type": "device_update", "device": device_name, "state": payload}
+                for q in list(self._subscribers):
+                    try:
+                        q.put_nowait(update_msg)
+                    except asyncio.QueueFull:
+                        pass
                 
                 # If we were waiting on a device state change via RPC, resolve it!
                 if device_name in self._pending_rpcs:

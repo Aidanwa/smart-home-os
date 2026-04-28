@@ -1,7 +1,6 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import Any, List
-import asyncio
 
 from core.mqtt_bus import AsyncMqttBus
 from api.dependencies import get_mqtt_bus
@@ -13,6 +12,10 @@ from api.models import (
 from api.auth import verify_api_key
 
 router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(verify_api_key)])
+
+# ====================================================================================
+# Device Routes
+# ====================================================================================
 
 @router.get("/devices", response_model=DeviceListResponse, response_model_exclude_none=True)
 async def list_devices(bus: AsyncMqttBus = Depends(get_mqtt_bus)):
@@ -107,9 +110,9 @@ async def set_device_state(
             detail=f"An error occurred while setting device state: {str(e)}"
         )
     
-# ==========================================
+# ====================================================================================
 # Group Routes
-# ==========================================
+# ====================================================================================
 
 @router.post("/groups")
 async def create_group(request: GroupCreateRequest, bus=Depends(get_mqtt_bus)):
@@ -278,9 +281,9 @@ async def delete_group(group_name: str, bus=Depends(get_mqtt_bus)):
         raise HTTPException(status_code=500, detail=str(e))
     
 
-# ==========================================
+# ====================================================================================
 # Bridge Routes
-# ==========================================
+# ====================================================================================
 
 @router.get("/bridge/info", response_model=BridgeInfoResponse)
 async def get_bridge_info(bus=Depends(get_mqtt_bus)):
@@ -356,3 +359,25 @@ async def permit_join(request: PermitJoinRequest, bus=Depends(get_mqtt_bus)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+# ====================================================================================
+# Websocket Routes
+# ====================================================================================
+
+# Create a separate router WITHOUT the verify_api_key dependency
+ws_router = APIRouter(prefix="/api", tags=["Realtime"])
+
+@ws_router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """Real-time stream of digital twin updates."""
+    await websocket.accept()
+    
+    # Grab the bus directly from the application state to avoid dependency clashes
+    bus = websocket.app.state.bus 
+    queue = bus.subscribe()
+    
+    try:
+        while True:
+            msg = await queue.get()
+            await websocket.send_json(msg)
+    except WebSocketDisconnect:
+        bus.unsubscribe(queue)

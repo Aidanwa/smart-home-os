@@ -1,12 +1,15 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+import os
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from core.mqtt_bus import AsyncMqttBus
 from api.config import get_config
-from api.routes import router
+from api.routes import router, ws_router
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -61,6 +64,31 @@ def create_app() -> FastAPI:
     
     # Mount routers
     app.include_router(router)
+    app.include_router(ws_router)
+
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
+
+    if os.path.exists(FRONTEND_DIST):
+        logger.info(f"Serving frontend assets from {FRONTEND_DIST}")
+        
+        # Mount the assets directory explicitly (Vite puts JS/CSS here)
+        app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+        
+        # Catch-all route for SPA (Single Page Application) routing
+        @app.get("/{catchall:path}")
+        async def serve_spa(catchall: str):
+            file_path = os.path.join(FRONTEND_DIST, catchall)
+            
+            # If the exact file exists (like favicon.ico, manifest.json), serve it
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                return FileResponse(file_path)
+                
+            # Otherwise, default to index.html for React Router to handle
+            return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+    else:
+        logger.warning(f"Frontend dist folder not found at {FRONTEND_DIST}. Running in API-only mode.")
     return app
 
 app = create_app()
+
