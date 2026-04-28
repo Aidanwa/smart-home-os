@@ -4,7 +4,7 @@ from typing import Any
 
 from core.mqtt_bus import AsyncMqttBus
 from api.dependencies import get_mqtt_bus
-from api.models import DeviceListResponse, DeviceStateResponse, DeviceState
+from api.models import DeviceListResponse, DeviceStateResponse, DeviceSetRequest
 from api.auth import verify_api_key
 
 router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(verify_api_key)])
@@ -58,3 +58,27 @@ async def get_device_state(friendly_name: str, bus: AsyncMqttBus = Depends(get_m
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Failed to read device state: {str(e)}"
         )
+    
+@router.post("/devices/{friendly_name}/set")
+async def set_device_state(
+    friendly_name: str, 
+    request: DeviceSetRequest, 
+    bus=Depends(get_mqtt_bus)
+):
+    # Convert model to dict, removing None values to keep MQTT payloads lean
+    payload = request.model_dump(exclude_unset=True)
+    
+    if not payload:
+        raise HTTPException(status_code=400, detail="No valid state fields provided")
+
+    topic = f"zigbee2mqtt/{friendly_name}/set"
+    
+    # This awaits the Zigbee network's confirmation 
+    # via the Future-backed RPC system
+    result = await bus.rpc(topic, payload)
+    
+    return {
+        "status": "success",
+        "device": friendly_name,
+        "confirmed_state": result
+    }

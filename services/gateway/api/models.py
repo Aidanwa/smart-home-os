@@ -1,5 +1,5 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Dict, Any, Literal
+from pydantic import BaseModel, ConfigDict, Field
 
 class DeviceState(BaseModel):
     """
@@ -34,3 +34,16 @@ class DeviceListResponse(BaseModel):
     count: int
     # A dictionary mapping friendly_name to its cleaned state
     devices: Dict[str, DeviceState]
+
+class DeviceSetRequest(BaseModel):
+    state: Optional[Literal["ON", "OFF", "TOGGLE"]] = None
+    brightness: Optional[int] = Field(None, ge=0, le=254)
+    color_temp: Optional[int] = Field(None, ge=150, le=500)
+    transition: Optional[float] = Field(None, ge=0)
+
+    model_config = ConfigDict(extra="ignore")
+
+class RPCResponse(BaseModel):
+    status: str
+    transaction: str
+    data: Optional[dict] = None
