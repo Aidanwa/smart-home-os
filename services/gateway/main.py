@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from logging import config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -43,7 +42,7 @@ async def lifespan(app: FastAPI):
     # Give the MQTT client a moment to establish connection
     await asyncio.sleep(0.5)
 
-    # ONLY UNCOMMENT TO REST THE DIGITAL TWIN ON STARTUP - TESTING USE ONLY
+    # ONLY UNCOMMENT TO RESET THE DIGITAL TWIN ON STARTUP - TESTING USE ONLY
     # await bus.redis.delete("gateway:digital_twin")
 
     yield  # --- The API is now running and accepting requests ---
