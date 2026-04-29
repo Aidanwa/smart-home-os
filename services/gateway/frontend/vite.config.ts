@@ -18,6 +18,10 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         ws: true, // Crucial: Tells Vite to proxy WebSockets on this route
+      },
+      '/api/ws': {
+        target: 'http://localhost:8000',
+        ws: true, // This MUST be true
       }
     }
   }
