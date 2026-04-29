@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useDevices } from './hooks/useDevices';
 import { useSystemHealth } from './hooks/useSystemHealth';
-import { Home, Sparkles, Settings, LayoutGrid, PanelLeftClose, PanelLeft, Radio} from 'lucide-react';
-import { DeviceRenderer } from './components/devices/DeviceRenderer';
+import { 
+  Home, Sparkles, Settings, PanelLeftClose, PanelLeft, Radio, Workflow,
+  Lightbulb, Zap, Thermometer, ToggleRight, Box
+} from 'lucide-react';
+import { getDeviceCategory } from './lib/deviceUtils';
+import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
+import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
 
 export default function App() {
-  const { devices, toggleDevice, sendCommand, permitJoin} = useDevices();
+  const { devices, toggleDevice, sendCommand, permitJoin, renameDevice} = useDevices();
   const healthStatus = useSystemHealth();
   
   // State for tabs and sidebar
@@ -18,6 +23,49 @@ export default function App() {
 
   // Pair mode state
   const [isPairing, setIsPairing] = useState(false);
+
+  // Sorting State
+  type SortMode = 'type' | 'alphabetical';
+  const [sortMode, setSortMode] = useState<SortMode>('type');
+
+  // Unified Sorting Pipeline
+  const displaySections = useMemo(() => {
+    // 1. Filter out the bridge and format the array
+    const activeDevices = Object.entries(devices)
+      .filter(([name]) => name !== 'bridge')
+      .map(([name, state]) => ({ name, state }));
+
+    // 2. Mode: Alphabetical (Flat List)
+    if (sortMode === 'alphabetical') {
+      const sorted = activeDevices.sort((a, b) => a.name.localeCompare(b.name));
+      return [{ 
+        id: 'all', 
+        title: null, 
+        devices: sorted 
+      }] as DeviceSection[];
+    }
+
+    // 3. Mode: By Type (Grouped List)
+    if (sortMode === 'type') {
+      const groups: Record<string, DeviceSection> = {
+        'Lights': { id: 'lights', title: 'Lights', icon: <Lightbulb size={18} />, devices: [] },
+        'Smart Plugs': { id: 'plugs', title: 'Smart Plugs', icon: <Zap size={18} />, devices: [] },
+        'Sensors': { id: 'sensors', title: 'Environment', icon: <Thermometer size={18} />, devices: [] },
+        'Switches': { id: 'switches', title: 'Switches', icon: <ToggleRight size={18} />, devices: [] },
+        'Other': { id: 'other', title: 'Other Devices', icon: <Box size={18} />, devices: [] }
+      };
+
+      activeDevices.forEach(device => {
+        const category = getDeviceCategory(device.state);
+        groups[category].devices.push(device);
+      });
+
+      // Only return sections that actually have devices in them
+      return Object.values(groups).filter(section => section.devices.length > 0);
+    }
+
+    return [];
+  }, [devices, sortMode]);
 
   const handleTogglePairing = () => {
     if (isPairing) {
@@ -100,9 +148,9 @@ export default function App() {
           </div>
         </div>
 
-        <NavItem id="home" icon={Home} label="Dashboard" />
-        <NavItem id="agent" icon={Sparkles} label="AI Agent" />
-        <NavItem id="routines" icon={LayoutGrid} label="Routines" />
+        <NavItem id="home" icon={Home} label="Home" />
+        <NavItem id="agent" icon={Sparkles} label="Agent" />
+        <NavItem id="routines" icon={Workflow} label="Routines" />
         
         <div className="md:mt-auto">
           <NavItem id="settings" icon={Settings} label="Settings" />
@@ -119,9 +167,27 @@ export default function App() {
             {/* Header & Toggle */}
             <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-medium tracking-tight">Dashboard</h1>
+                <h1 className="text-2xl font-medium tracking-tight">My Devices</h1>
                 {/* Mobile health dot */}
                 <div className={`md:hidden w-2.5 h-2.5 rounded-full ${healthStatus === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
+              </div>
+
+              {/* Dashboard Header with Toggle */}
+              <div className="flex justify-between items-end mb-6">                
+                <div className="flex items-center gap-1 bg-neutral-900/50 p-1 rounded-xl border border-neutral-800">
+                  <button 
+                    onClick={() => setSortMode('type')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${sortMode === 'type' ? 'bg-neutral-800 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
+                  >
+                    By Type
+                  </button>
+                  <button 
+                    onClick={() => setSortMode('alphabetical')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${sortMode === 'alphabetical' ? 'bg-neutral-800 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
+                  >
+                    Alphabetical
+                  </button>
+                </div>
               </div>
 
               {/* View Toggle */}
@@ -140,7 +206,7 @@ export default function App() {
                     dashboardView === 'groups' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
                   }`}
                 >
-                  Room Groups
+                  Groups
                 </button>
               </div>
             </header>
@@ -148,17 +214,18 @@ export default function App() {
             {/* Content Routing */}
             {dashboardView === 'devices' ? (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-300">
-                  {Object.entries(devices).map(([name, state]) => (
-                    <DeviceRenderer 
-                      key={name} 
-                      name={name} 
-                      state={state} 
-                      sendCommand={sendCommand}
-                      toggleDevice={toggleDevice}
-                    />
-                  ))}
-                </div>
+              {/* Render the unified sections */}
+              <div className="w-full">
+                {displaySections.map(section => (
+                  <DeviceCategorySection 
+                    key={section.id} 
+                    {...section} 
+                    sendCommand={sendCommand} 
+                    toggleDevice={toggleDevice} 
+                    renameDevice={renameDevice}
+                  />
+                ))}
+              </div>
 
                 {/* Permit Join Floating Action Button */}
                 <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-50 animate-in slide-in-from-bottom-8 duration-500">
@@ -187,6 +254,7 @@ export default function App() {
                 devices={devices} 
                 sendCommand={sendCommand} 
                 toggleDevice={toggleDevice} 
+                renameDevice={renameDevice}
               />
             )}
           </div>
@@ -199,6 +267,17 @@ export default function App() {
               <Sparkles className="mx-auto mb-4 opacity-50" size={48} />
               <h2 className="text-xl font-medium text-neutral-300">Agentic Orchestrator</h2>
               <p className="mt-2 text-sm">LLM Interface coming in Phase 3.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Routines (Placeholder) */}
+        {activeTab === 'routines' && (
+          <div className="h-[80vh] flex items-center justify-center text-neutral-500 animate-in fade-in">
+            <div className="text-center">
+              <Workflow className="mx-auto mb-4 opacity-50" size={48} />
+              <h2 className="text-xl font-medium text-neutral-300">Routine Orchestrator</h2>
+              <p className="mt-2 text-sm">Routine orchestration coming in Phase 4</p>
             </div>
           </div>
         )}

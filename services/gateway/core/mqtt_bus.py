@@ -28,6 +28,9 @@ class AsyncMqttBus:
         # A local memory cache of group names to filter the Digital Twin
         self._known_groups = set()
 
+        # High-speed memory cache mapping friendly_name to ieee_address
+        self._device_registry: Dict[str, str] = {}
+
         # Websocket subscribers to push real time updates to the frontend
         self._subscribers: set[asyncio.Queue] = set()
 
@@ -97,12 +100,70 @@ class AsyncMqttBus:
         if topic == f"{self.z2m_base}/bridge/info":
             await self.redis.set("gateway:bridge_info", json.dumps(payload))
 
+        # 0.6 Capture Bridge Devices (Topology Sync)
+        if topic == f"{self.z2m_base}/bridge/devices":
+            if not isinstance(payload, list):
+                return
+                
+            new_registry = {}
+            for device in payload:
+                # Skip the coordinator itself as it doesn't have a normal state
+                if device.get("type") == "Coordinator":
+                    continue
+                
+                friendly_name = device.get("friendly_name")
+                ieee_address = device.get("ieee_address")
+                
+                if friendly_name and ieee_address:
+                    new_registry[friendly_name] = ieee_address
+            
+            # Update our fast in-memory registry
+            self._device_registry = new_registry
+            
+            # The Diff Engine: Sync Redis Topology
+            current_twin = await self.redis.hgetall("gateway:digital_twin")
+            
+            for old_friendly_name, state_str in current_twin.items():
+                try:
+                    state_obj = json.loads(state_str)
+                    old_ieee = state_obj.get("ieee_address")
+                except json.JSONDecodeError:
+                    continue
+                
+                # Check if the device was completely removed from the network
+                is_deleted = old_ieee not in new_registry.values()
+                
+                if is_deleted:
+                    logger.info(f"Device removed from network: {old_friendly_name}")
+                    await self.redis.hdel("gateway:digital_twin", old_friendly_name)
+                    continue
+                
+                # Check if the device was renamed
+                if old_friendly_name not in new_registry:
+                    # Find the new friendly name for this ieee_address
+                    new_friendly_name = next(
+                        (name for name, ieee in new_registry.items() if ieee == old_ieee), 
+                        None
+                    )
+                    
+                    if new_friendly_name:
+                        logger.info(f"Device renamed in Twin: {old_friendly_name} -> {new_friendly_name}")
+                        # Move the old state to the new key to preserve UI continuity
+                        await self.redis.hset("gateway:digital_twin", new_friendly_name, state_str)
+                        await self.redis.hdel("gateway:digital_twin", old_friendly_name)
+
         # 1. Update Digital Twin & Resolve Device Futures
         if len(topic_parts) == 2 and topic_parts[0] == self.z2m_base:
             device_name = topic_parts[1]
             
             # Ignore the bridge AND any known groups
             if device_name != "bridge" and device_name not in self._known_groups:
+                
+                # INJECT IEEE ADDRESS HERE
+                ieee_address = self._device_registry.get(device_name)
+                if ieee_address:
+                    payload["ieee_address"] = ieee_address
+                
                 logger.debug(f"Updating digital twin for {device_name}: {payload}")
                 await self.redis.hset("gateway:digital_twin", device_name, json.dumps(payload))
 

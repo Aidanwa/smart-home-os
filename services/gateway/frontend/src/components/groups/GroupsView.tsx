@@ -9,6 +9,7 @@ interface Props {
   devices: Record<string, DeviceState>;
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
+  renameDevice: (oldName: string, newName: string) => void;
 }
 
 // Polished Tooltip Wrapper utilizing Tailwind CSS group hovering
@@ -21,7 +22,7 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
   </div>
 );
 
-export function GroupsView({ devices, sendCommand, toggleDevice }: Props) {
+export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice }: Props) {
   const { groups, createGroup, deleteGroup, addDeviceToGroup, removeDeviceFromGroup, sendGroupCommand, renameGroup } = useGroups();
   
   const [newGroupName, setNewGroupName] = useState('');
@@ -66,7 +67,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice }: Props) {
       {/* Header & Create Group */}
       <div className="flex justify-between items-center bg-neutral-900/50 p-4 rounded-2xl border border-neutral-800 shadow-sm">
         <div>
-          <h2 className="text-lg font-medium text-white">Room Groups</h2>
+          <h2 className="text-lg font-medium text-white">Groups</h2>
           <p className="text-sm text-neutral-400">Control multiple devices together</p>
         </div>
         {!isCreating ? (
@@ -188,12 +189,12 @@ export function GroupsView({ devices, sendCommand, toggleDevice }: Props) {
             {activeDevicesInGroup.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {activeDevicesInGroup.map(([name, state]) => (
-                  <DeviceRenderer key={name} name={name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} />
+                  <DeviceRenderer key={name} name={name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} />
                 ))}
               </div>
             ) : (
               <div className="p-8 text-center bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
-                No devices in this group yet. Click the gear icon to add some.
+                No devices in this group yet. Click the options icon to add some.
               </div>
             )}
           </div>

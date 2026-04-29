@@ -85,11 +85,20 @@ export function useDevices() {
     }
   }, []);
 
+  const renameDevice = useCallback(async (old_name: string, new_name: string) => {
+    await fetch(`/api/device/${old_name}/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' },
+        body: JSON.stringify({ new_name })
+    });
+  }, []);
+
   return {
     devices,
     sendCommand,
     toggleDevice,
-    permitJoin // <-- Make sure to add this to the return object!
+    renameDevice,
+    permitJoin,
   };
 
 }

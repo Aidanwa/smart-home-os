@@ -9,9 +9,10 @@ interface Props {
   state: DeviceState;
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
+  renameDevice: (oldName: string, newName: string) => void;
 }
 
-export function DeviceRenderer({ name, state, sendCommand, toggleDevice }: Props) {
+export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameDevice }: Props) {
   // 1. Determine Device Capabilities based on the payload schema
   const hasColorTemp = state.color_temp !== undefined;
   const hasBrightness = state.brightness !== undefined;
@@ -30,6 +31,7 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice }: Props
         state={state} 
         sendCommand={sendCommand} 
         toggleDevice={toggleDevice} 
+        renameDevice={renameDevice}
       />
     );
   }
@@ -39,7 +41,8 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice }: Props
       <SmartPlugCard 
         name={name} 
         state={state} 
-        toggleDevice={toggleDevice} 
+        toggleDevice={toggleDevice}
+        renameDevice={renameDevice}
       />
     );
   }
@@ -49,7 +52,8 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice }: Props
     <BasicSwitchCard 
       name={name} 
       state={state} 
-      toggleDevice={toggleDevice} 
+      toggleDevice={toggleDevice}
+      renameDevice={renameDevice}
     />
   );
 }

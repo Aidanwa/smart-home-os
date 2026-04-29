@@ -1,43 +1,41 @@
-import { Power, Zap, Activity } from 'lucide-react';
-import type { DeviceState } from '../../hooks/useDevices';
+import { Zap, Activity } from 'lucide-react';
+import { BaseDeviceCard } from './BaseDeviceCard';
 
-export function SmartPlugCard({ name, state, toggleDevice }: any) {
+export function SmartPlugCard({ name, state, toggleDevice, renameDevice }: any) {
   const isOn = state.state === 'ON';
 
+  // Build the sleek subtitle with the icon
+  const subtitle = (
+    <span className="flex items-center gap-1">
+      {isOn ? 'On' : 'Off'}
+      {isOn && state.power !== undefined && (
+        <>
+          <span className="text-neutral-600 mx-0.5">•</span>
+          <Activity size={12} className="text-blue-400" />
+          <span>{state.power} W</span>
+        </>
+      )}
+    </span>
+  );
+
   return (
-    <div className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between min-h-[160px] ${
-      isOn ? 'bg-neutral-800/80 border-neutral-700 shadow-lg shadow-black/20' : 'bg-neutral-900/30 border-neutral-800/50'
-    }`}>
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-2.5 rounded-full transition-colors ${isOn ? 'bg-blue-500/10 text-blue-400' : 'bg-neutral-800 text-neutral-500'}`}>
-          <Zap size={22} strokeWidth={2.5} />
-        </div>
-        <button 
-          onClick={() => toggleDevice(name, state.state)}
-          className={`p-2.5 rounded-full transition-all active:scale-95 ${isOn ? 'bg-neutral-700 hover:bg-neutral-600 text-white' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-400'}`}
-        >
-          <Power size={18} strokeWidth={2.5} />
-        </button>
-      </div>
-      
-      <div>
-        <h3 className="font-medium text-lg tracking-tight truncate mb-3">{name}</h3>
-        
-        {/* Telemetry Data */}
-        <div className="flex items-center gap-3 text-xs">
-          {state.power !== undefined && (
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${isOn && state.power > 0 ? 'bg-neutral-950/50 text-blue-300' : 'text-neutral-500'}`}>
-              <Activity size={12} />
-              <span className="font-medium">{state.power} W</span>
-            </div>
-          )}
-          {state.energy !== undefined && (
-            <div className="text-neutral-500 font-medium">
-              {state.energy} kWh
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <BaseDeviceCard
+      name={name}
+      state={state}
+      icon={<Zap size={22} strokeWidth={2.5} />}
+      iconColorClass={isOn ? 'bg-blue-500/10 text-blue-400' : 'bg-neutral-800 text-neutral-500'}
+      subtitle={subtitle}
+      onToggle={() => toggleDevice(name, state.state)}
+      // Send the Total Energy metric to the Side Drawer
+      advancedConfig={
+        state.energy !== undefined ? (
+          <div className="p-4 bg-neutral-900/50 border border-neutral-800/50 rounded-xl flex justify-between items-center text-sm mt-2">
+            <span className="text-neutral-400">Total Energy Usage</span>
+            <span className="font-medium text-neutral-200">{state.energy} kWh</span>
+          </div>
+        ) : null
+      }
+      renameDevice={renameDevice}
+    />
   );
 }
