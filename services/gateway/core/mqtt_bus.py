@@ -37,7 +37,14 @@ class AsyncMqttBus:
     async def stop(self):
         if self._listen_task:
             self._listen_task.cancel()
-        await self.redis.close()
+            # Wait for the task to fully clean up the aiomqtt client
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+                
+        if self.redis:
+            await self.redis.close()
 
     async def _listen_loop(self):
         reconnect_interval = 3
@@ -96,6 +103,7 @@ class AsyncMqttBus:
             
             # Ignore the bridge AND any known groups
             if device_name != "bridge" and device_name not in self._known_groups:
+                logger.debug(f"Updating digital twin for {device_name}: {payload}")
                 await self.redis.hset("gateway:digital_twin", device_name, json.dumps(payload))
 
                 update_msg = {"type": "device_update", "device": device_name, "state": payload}

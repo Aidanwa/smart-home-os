@@ -1,6 +1,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import Any, List
+import asyncio
 
 from core.mqtt_bus import AsyncMqttBus
 from api.dependencies import get_mqtt_bus
@@ -371,7 +372,7 @@ async def websocket_endpoint(websocket: WebSocket):
     """Real-time stream of digital twin updates."""
     await websocket.accept()
     
-    # Grab the bus directly from the application state to avoid dependency clashes
+    # Grab the bus directly from the application state
     bus = websocket.app.state.bus 
     queue = bus.subscribe()
     
@@ -380,4 +381,11 @@ async def websocket_endpoint(websocket: WebSocket):
             msg = await queue.get()
             await websocket.send_json(msg)
     except WebSocketDisconnect:
+        # Normal client disconnect
+        pass
+    except asyncio.CancelledError:
+        # Server is shutting down, Uvicorn is cancelling this task
+        raise
+    finally:
+        # ALWAYS clean up the queue to prevent memory leaks
         bus.unsubscribe(queue)

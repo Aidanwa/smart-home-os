@@ -11,11 +11,13 @@ class DeviceState(BaseModel):
 
     # General Attributes
     linkquality: Optional[int] = None
+    ieee_address: Optional[str] = None
     
     # Lights / Switches
     state: Optional[str] = None
     brightness: Optional[int] = None
     color_temp: Optional[int] = None
+    color: Optional[Dict[str, Any]] = None  # e.g. {"x": 0.5, "y": 0.5}
     
     # Sensors
     temperature: Optional[float] = None
