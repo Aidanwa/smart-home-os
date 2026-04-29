@@ -8,7 +8,7 @@ from api.dependencies import get_mqtt_bus
 from api.models import (
     DeviceListResponse, DeviceStateResponse, DeviceSetRequest, GroupInfo,
     BridgeHealthResponse, BridgeInfoResponse, PermitJoinRequest, GroupCreateRequest, 
-    GroupMemberRequest,
+    GroupMemberRequest, RenameRequest,
 )
 from api.auth import verify_api_key
 
@@ -110,6 +110,28 @@ async def set_device_state(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while setting device state: {str(e)}"
         )
+    
+@router.put("/device/{device_name}/rename")
+async def rename_device(device_name: str, request: RenameRequest, bus=Depends(get_mqtt_bus)
+):
+    """
+    Rename a Zigbee device on the network.
+    The Bridge will automatically broadcast the updated device list to Redis.
+    """
+    try:
+        payload = {"from": device_name, "to": request.new_name}
+        # Publish to the Z2M bridge rename device endpoint
+        res = await bus.rpc("zigbee2mqtt/bridge/request/device/rename", payload)
+        
+        if res.get("status") != "ok":
+            raise HTTPException(status_code=400, detail=res.get("error", "Failed to rename device"))
+            
+        return {"status": "success", "message": f"Device '{device_name}' renamed to '{request.new_name}' successfully."}
+        
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Bridge timeout during device renaming.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
 # ====================================================================================
 # Group Routes
@@ -278,6 +300,28 @@ async def delete_group(group_name: str, bus=Depends(get_mqtt_bus)):
         
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout during group deletion.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.put("/groups/{group_name}/rename")
+async def rename_group(group_name: str, request: RenameRequest, bus=Depends(get_mqtt_bus)
+):
+    """
+    Rename a Zigbee group on the network.
+    The Bridge will automatically broadcast the updated group list to Redis.
+    """
+    try:
+        payload = {"from": group_name, "to": request.new_name}
+        # Publish to the Z2M bridge rename group endpoint
+        res = await bus.rpc("zigbee2mqtt/bridge/request/group/rename", payload)
+        
+        if res.get("status") != "ok":
+            raise HTTPException(status_code=400, detail=res.get("error", "Failed to rename group"))
+            
+        return {"status": "success", "message": f"Group '{group_name}' renamed to '{request.new_name}' successfully."}
+        
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Bridge timeout during group renaming.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     

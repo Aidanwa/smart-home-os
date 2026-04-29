@@ -71,6 +71,15 @@ export function useGroups() {
       body: JSON.stringify(payload)
     });
   };
+  
+  const renameGroup = async (old_name: string, new_name: string) => {
+    await fetch(`/api/groups/${old_name}/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' },
+        body: JSON.stringify({ new_name })
+    });
+    setTimeout(fetchGroups, 1000);
+  };
 
-  return { groups, fetchGroups, createGroup, deleteGroup, addDeviceToGroup, removeDeviceFromGroup, sendGroupCommand };
+  return { groups, fetchGroups, createGroup, deleteGroup, addDeviceToGroup, removeDeviceFromGroup, sendGroupCommand, renameGroup };
 }

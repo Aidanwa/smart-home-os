@@ -98,3 +98,8 @@ class GroupMemberRequest(BaseModel):
     device: str
     
     model_config = ConfigDict(extra="ignore")
+
+class RenameRequest(BaseModel):
+    new_name: str
+    
+    model_config = ConfigDict(extra="ignore")
