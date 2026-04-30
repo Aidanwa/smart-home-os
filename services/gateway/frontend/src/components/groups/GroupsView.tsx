@@ -10,6 +10,7 @@ interface Props {
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (name: string) => void;
 }
 
 // Polished Tooltip Wrapper utilizing Tailwind CSS group hovering
@@ -22,7 +23,7 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
   </div>
 );
 
-export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice }: Props) {
+export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   const { groups, createGroup, deleteGroup, addDeviceToGroup, removeDeviceFromGroup, sendGroupCommand, renameGroup } = useGroups();
   
   const [newGroupName, setNewGroupName] = useState('');
@@ -189,7 +190,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice }:
             {activeDevicesInGroup.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {activeDevicesInGroup.map(([name, state]) => (
-                  <DeviceRenderer key={name} name={state.friendly_name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} />
+                  <DeviceRenderer key={name} name={state.friendly_name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} deleteDevice={deleteDevice} />
                 ))}
               </div>
             ) : (

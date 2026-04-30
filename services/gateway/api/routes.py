@@ -1,4 +1,5 @@
 import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import Any, List
 import asyncio
@@ -11,6 +12,8 @@ from api.models import (
     GroupMemberRequest, RenameRequest,
 )
 from api.auth import verify_api_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(verify_api_key)])
 
@@ -117,6 +120,67 @@ async def set_device_state(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while setting device state: {str(e)}"
         )
+
+@router.delete("/devices/{device_id}")
+async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
+    """
+    Remove a device from the Zigbee network.
+    """
+    try:
+        # 1. Fetch the state from Redis to get the current friendly_name 
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        
+        if not raw_state_str:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Device '{device_id}' not found."
+            )
+            
+        state = json.loads(raw_state_str)
+        friendly_name = state.get("friendly_name")
+        
+        if not friendly_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not resolve friendly_name for exclusion."
+            )
+
+        # 2. Issue the RPC call to Zigbee2MQTT bridge to remove the device
+        payload = {"id": friendly_name, "force": False} 
+        res = await bus.rpc(f"{bus.z2m_base}/bridge/request/device/remove", payload)
+
+        if res.get("status") != "ok":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=res.get("error", "Bridge failed to remove device.")
+            )
+        
+        # delete the device from digital twin and broadcast the deletion to all subscribers
+        await bus.redis.hdel("gateway:digital_twin", device_id)
+        update_msg = {"type": "device_delete", "device": device_id}
+        for q in list(bus._subscribers):
+            try:
+                q.put_nowait(update_msg)
+            except asyncio.QueueFull:
+                pass
+
+        return {
+            "status": "success", 
+            "message": f"Device '{friendly_name}' ({device_id}) successfully removed from network."
+        }
+
+    except TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Bridge timeout while attempting to remove device."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred during device deletion: {str(e)}"
+        )
     
 @router.put("/device/{device_id}/rename")
 async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_mqtt_bus)):
@@ -125,7 +189,7 @@ async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_
     The Bridge will automatically broadcast the updated device list to Redis.
     """
     try:
-        if [char in request.new_name for char in ['+', '#']]:
+        if any(char in request.new_name for char in ['+', '#']):
             raise HTTPException(status_code=400, detail="Device names cannot contain MQTT wildcard characters '+' or '#'")
         # 1. Look up the CURRENT friendly_name to tell Z2M what to rename
         raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
@@ -315,7 +379,7 @@ async def rename_group(group_name: str, request: RenameRequest, bus=Depends(get_
     The Bridge will automatically broadcast the updated group list to Redis.
     """
     try:
-        if [char in request.new_name for char in ['+', '#']]:
+        if any(char in request.new_name for char in ['+', '#']):
             raise HTTPException(status_code=400, detail="Device names cannot contain MQTT wildcard characters '+' or '#'")
         payload = {"from": group_name, "to": request.new_name}
         # Publish to the Z2M bridge rename group endpoint

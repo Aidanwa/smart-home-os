@@ -1,7 +1,7 @@
 import { Thermometer } from 'lucide-react';
 import { BaseDeviceCard } from './BaseDeviceCard';
 
-export function EnvironmentSensorCard({ name, state, renameDevice }: any) {
+export function EnvironmentSensorCard({ name, state, renameDevice, deleteDevice }: any) {
   // Handle temperature conversions safely
   const temperature = state.temperature_units === "fahrenheit" 
     ? Math.round((state.temperature * (9/5) + 32)) 
@@ -19,6 +19,7 @@ export function EnvironmentSensorCard({ name, state, renameDevice }: any) {
       iconColorClass="bg-orange-500/10 text-orange-400"
       subtitle={subtitle}
       renameDevice={renameDevice}
+      deleteDevice={deleteDevice}
       // Note: No onToggle provided!
     >
       {/* Primary Data: Renders beautifully centered in the middle row */}

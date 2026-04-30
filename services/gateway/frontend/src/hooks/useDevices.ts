@@ -39,6 +39,13 @@ export function useDevices() {
           [data.device]: { ...prev[data.device], ...data.state }
         }));
       }
+      if (data.type === 'device_delete') {
+        setDevices(prev => {
+          const newDevices = { ...prev };
+          delete newDevices[data.device];
+          return newDevices;
+        });
+      }
     };
 
     return () => {
@@ -93,12 +100,27 @@ export function useDevices() {
     });
   }, []);
 
+  const deleteDevice = useCallback(async (deviceId: string) => {
+    try {
+      await fetch(`/api/devices/${deviceId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' 
+        }
+      });
+    } catch (e) {
+      console.error(`Failed to delete device ${deviceId}`, e);
+    }
+  }, []);
+
   return {
     devices,
     sendCommand,
     toggleDevice,
     renameDevice,
     permitJoin,
+    deleteDevice
   };
 
 }

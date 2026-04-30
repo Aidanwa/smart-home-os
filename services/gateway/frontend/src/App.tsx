@@ -11,7 +11,7 @@ import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
 
 export default function App() {
-  const { devices, toggleDevice, sendCommand, permitJoin, renameDevice} = useDevices();
+  const { devices, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice} = useDevices();
   const healthStatus = useSystemHealth();
   
   // State for tabs and sidebar
@@ -69,7 +69,7 @@ export default function App() {
 
   const handleTogglePairing = () => {
     if (isPairing) {
-      permitJoin(false);
+      permitJoin(false, 0);
       setIsPairing(false);
     } else {
       permitJoin(true, 254); // Standard 254 seconds
@@ -223,6 +223,7 @@ export default function App() {
                     sendCommand={sendCommand} 
                     toggleDevice={toggleDevice} 
                     renameDevice={renameDevice}
+                    deleteDevice={deleteDevice}
                   />
                 ))}
               </div>
@@ -255,6 +256,7 @@ export default function App() {
                 sendCommand={sendCommand} 
                 toggleDevice={toggleDevice} 
                 renameDevice={renameDevice}
+                deleteDevice={deleteDevice}
               />
             )}
           </div>

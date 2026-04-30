@@ -14,9 +14,10 @@ interface Props extends DeviceSection {
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (name: string) => void;
 }
 
-export function DeviceCategorySection({ id, title, icon, devices, sendCommand, toggleDevice, renameDevice }: Props) {
+export function DeviceCategorySection({ id, title, icon, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   // 1. Create a unique storage key for this specific category (e.g., "section-expanded-lights")
   const storageKey = `section-expanded-${id}`;
 
@@ -60,6 +61,7 @@ export function DeviceCategorySection({ id, title, icon, devices, sendCommand, t
               sendCommand={sendCommand}
               toggleDevice={toggleDevice}
               renameDevice={renameDevice}
+              deleteDevice={deleteDevice}
             />
           ))}
         </div>

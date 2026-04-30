@@ -10,9 +10,10 @@ interface Props {
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (name: string) => void;
 }
 
-export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameDevice }: Props) {
+export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   // 1. Determine Device Capabilities based on the payload schema
   const hasColorTemp = state.color_temp !== undefined;
   const hasBrightness = state.brightness !== undefined;
@@ -21,8 +22,17 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameD
   
   // 2. Route to the specialized component
   if (isEnvironmentSensor) {
-    return <EnvironmentSensorCard name={name} state={state} />;
-  }
+    return ( 
+        <EnvironmentSensorCard 
+          name={name} 
+          state={state} 
+          sendCommand={sendCommand} 
+          toggleDevice={toggleDevice} 
+          renameDevice={renameDevice}
+          deleteDevice={deleteDevice}
+        />
+      );
+    }
 
   if (hasColorTemp || hasBrightness) {
     return (
@@ -32,6 +42,7 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameD
         sendCommand={sendCommand} 
         toggleDevice={toggleDevice} 
         renameDevice={renameDevice}
+        deleteDevice={deleteDevice}
       />
     );
   }
@@ -43,6 +54,7 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameD
         state={state} 
         toggleDevice={toggleDevice}
         renameDevice={renameDevice}
+        deleteDevice={deleteDevice}
       />
     );
   }
@@ -54,6 +66,7 @@ export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameD
       state={state} 
       toggleDevice={toggleDevice}
       renameDevice={renameDevice}
+      deleteDevice={deleteDevice}
     />
   );
 }

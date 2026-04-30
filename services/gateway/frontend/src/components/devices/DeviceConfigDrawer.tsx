@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Check, X, Signal, Battery, Clock, Download } from 'lucide-react';
+import { Pencil, Check, X, Signal, Battery, Clock, Download, Trash2, AlertTriangle } from 'lucide-react';
 import { 
   Sheet, 
   SheetContent, 
@@ -26,6 +26,7 @@ interface DeviceConfigDrawerProps {
   onOpenChange: (open: boolean) => void;
   advancedConfig?: React.ReactNode;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (deviceId: string) => void;
 }
 
 export function DeviceConfigDrawer({ 
@@ -35,14 +36,24 @@ export function DeviceConfigDrawer({
   onOpenChange, 
   advancedConfig,
   renameDevice,
+  deleteDevice,
 }: DeviceConfigDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(name);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Reset draft if the device name actually changes via WebSocket
   useEffect(() => {
     setEditDraft(name);
   }, [name]);
+
+  // Reset modal state if drawer closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowDeleteConfirm(false);
+      setIsEditing(false);
+    }
+  }, [isOpen]);
 
   const handleRenameSubmit = () => {
     if (editDraft.trim() && editDraft !== name) {
@@ -51,16 +62,22 @@ export function DeviceConfigDrawer({
     setIsEditing(false);
   };
 
+  const confirmDelete = () => {
+    // Use ieee_address if available, fallback to name
+    deleteDevice(state.ieee_address || name);
+    setShowDeleteConfirm(false);
+    onOpenChange(false);
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto w-full sm:max-w-md flex flex-col gap-8 p-6 sm:p-4">
-        
+      <SheetContent className="bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden w-full sm:max-w-md flex flex-col gap-8 p-6 sm:p-4">        
         <SheetHeader className="text-left space-y-0">
           <SheetDescription className="text-xs uppercase tracking-wider text-neutral-500 mb-1">
             Device Configuration
           </SheetDescription>
           
-        {/* Rename Module */}
+          {/* Rename Module */}
           {isEditing ? (
             <div className="flex items-center gap-2 pt-1">
               <input
@@ -84,14 +101,14 @@ export function DeviceConfigDrawer({
                 </button>
               </Tooltip>
             </div>
-) : (
+          ) : (
             <div className="flex items-start justify-between group">
               <div className="flex flex-col">
                 <SheetTitle className="text-2xl font-semibold tracking-tight text-white pr-4">
                   {name}
                 </SheetTitle>
                 {state.ieee_address && (
-                  <span className="text-xs font-mono text-neutral-500 mt-0.5 select-all">
+                  <span className="text-xs font-mono text-neutral-500 mt-0.5 select-all break-all">
                     {state.ieee_address}
                   </span>
                 )}
@@ -158,6 +175,51 @@ export function DeviceConfigDrawer({
             {advancedConfig}
           </div>
         )}
+
+        {/* Danger Zone: Trigger Modal */}
+        <div className="space-y-3 mt-auto pt-8 pb-4">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 rounded-xl px-4 py-3 text-sm font-medium transition-colors"
+          >
+            <Trash2 size={18} />
+            Remove Device
+          </button>
+        </div>
+
+        {/* Delete Confirmation Panel */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+              <div className="flex items-center gap-3 text-red-400">
+                <AlertTriangle size={24} />
+                <h3 className="font-medium text-lg">Remove Device?</h3>
+              </div>
+              <p className="text-neutral-400 text-sm">
+                Are you sure you want to permanently remove <strong className="text-white">"{name}"</strong> from the network? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3 pt-4">
+                <Tooltip text="Cancel removal">
+                  <button 
+                    onClick={() => setShowDeleteConfirm(false)} 
+                    className="px-4 py-2 rounded-xl text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </Tooltip>
+                <Tooltip text="Permanently remove device">
+                  <button 
+                    onClick={confirmDelete} 
+                    className="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
+                  >
+                    Remove
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+        )}
+
       </SheetContent>
     </Sheet>
   );

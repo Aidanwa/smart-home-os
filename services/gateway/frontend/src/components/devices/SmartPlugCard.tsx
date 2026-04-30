@@ -1,7 +1,7 @@
 import { Zap, Activity } from 'lucide-react';
 import { BaseDeviceCard } from './BaseDeviceCard';
 
-export function SmartPlugCard({ name, state, toggleDevice, renameDevice }: any) {
+export function SmartPlugCard({ name, state, toggleDevice, renameDevice, deleteDevice }: any) {
   const isOn = state.state === 'ON';
 
   // Build the sleek subtitle with the icon
@@ -26,6 +26,7 @@ export function SmartPlugCard({ name, state, toggleDevice, renameDevice }: any) 
       iconColorClass={isOn ? 'bg-blue-500/10 text-blue-400' : 'bg-neutral-800 text-neutral-500'}
       subtitle={subtitle}
       onToggle={() => toggleDevice(name, state.state)}
+      deleteDevice={deleteDevice}
       // Send the Total Energy metric to the Side Drawer
       advancedConfig={
         state.energy !== undefined ? (

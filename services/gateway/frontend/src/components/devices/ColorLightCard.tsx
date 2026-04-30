@@ -12,7 +12,7 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
   </div>
 );
 
-export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameDevice }: any) {
+export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameDevice, deleteDevice }: any) {
   const isOn = state.state === 'ON';
   
   // Brightness Logic
@@ -56,6 +56,7 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
         </div>
       }
       renameDevice={renameDevice}
+      deleteDevice={deleteDevice}
     >
 {/* Primary UI: Sliders stack vertically */}
       {isOn && (

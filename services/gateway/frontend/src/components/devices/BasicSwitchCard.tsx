@@ -7,9 +7,10 @@ interface Props {
   state: DeviceState;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (name: string) => void;
 }
 
-export function BasicSwitchCard({ name, state, toggleDevice, renameDevice }: Props) {
+export function BasicSwitchCard({ name, state, toggleDevice, renameDevice, deleteDevice }: Props) {
   const isOn = state.state === 'ON';
 
   return (
@@ -21,6 +22,7 @@ export function BasicSwitchCard({ name, state, toggleDevice, renameDevice }: Pro
       subtitle={isOn ? 'On' : 'Off'}
       onToggle={() => toggleDevice(name, state.state)}
       renameDevice={renameDevice}
+      deleteDevice={deleteDevice}
     />
   );
 }

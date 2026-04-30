@@ -23,6 +23,7 @@ interface BaseDeviceCardProps {
   children?: React.ReactNode; 
   advancedConfig?: React.ReactNode;
   renameDevice: (oldName: string, newName: string) => void;
+  deleteDevice: (deviceId: string) => void;
 }
 
 export function BaseDeviceCard({ 
@@ -35,6 +36,7 @@ export function BaseDeviceCard({
   children, 
   advancedConfig,
   renameDevice,
+  deleteDevice,
 }: BaseDeviceCardProps) {
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -104,6 +106,7 @@ export function BaseDeviceCard({
         onOpenChange={setIsDrawerOpen}
         advancedConfig={advancedConfig}
         renameDevice={renameDevice}
+        deleteDevice={deleteDevice}
       />
     </>
   );
