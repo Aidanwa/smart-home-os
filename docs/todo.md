@@ -1,7 +1,5 @@
 Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
 
-add device deletion
-
 Group page doesn't update info automatically, need to add websocket support.
 
 ugh I need to add binding stuff
