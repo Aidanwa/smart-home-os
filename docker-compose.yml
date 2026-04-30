@@ -1,47 +1,97 @@
-# The docker file that starts everything up
-
-version: '1'
+# Explicitly define our internal network
+networks:
+  smarthome_net:
+    driver: bridge
 
 services:
-  # System API & Frontend
+  # ----------------------------------------
+  # 1. System API & Frontend Gateway
+  # ----------------------------------------
   gateway:
-    build: ./services/gateway
+    build:
+      context: . 
+      dockerfile: ./services/gateway/Dockerfile
     container_name: home_gateway
-    restart: always
+    restart: unless-stopped
     env_file: .env
     ports:
-      - "8000:8000" # Access UI at http://localhost:8000
+      - "8000:8000"
+    networks:
+      - smarthome_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  # LLM Agent Logic
+  # ----------------------------------------
+  # 2. LLM Agent Logic
+  # ----------------------------------------
   agent:
-    build: ./services/agent
+    build:
+      context: .
+      dockerfile: ./services/agent/Dockerfile
     container_name: home_agent
-    restart: always
+    restart: unless-stopped
     env_file: .env
+    networks:
+      - smarthome_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G # Prevent LLM processing from starving the gateway
     depends_on:
-      - gateway
-      - postgres
-      - redis
+      gateway:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
-  # Short-term Memory
+  # ----------------------------------------
+  # 3. Short-term Memory (Digital Twin)
+  # ----------------------------------------
   redis:
     image: redis:7-alpine
     container_name: home_redis
+    restart: unless-stopped
     volumes:
       - ./volumes/redis_data:/data
+    networks:
+      - smarthome_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # Long-term Memory
+  # ----------------------------------------
+  # 4. Long-term Memory
+  # ----------------------------------------
   postgres:
     image: postgres:15-alpine
     container_name: home_postgres
+    restart: unless-stopped
+    # Using defaults prevents compose from crashing if the .env is missing during a quick boot
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
       POSTGRES_DB: home_os
     volumes:
       - ./volumes/postgres_data:/var/lib/postgresql/data
       - ./services/database/init.sql:/docker-entrypoint-initdb.d/init.sql
-      
+    networks:
+      - smarthome_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d home_os"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
