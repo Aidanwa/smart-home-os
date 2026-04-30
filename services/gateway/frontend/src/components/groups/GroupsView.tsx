@@ -189,7 +189,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice }:
             {activeDevicesInGroup.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {activeDevicesInGroup.map(([name, state]) => (
-                  <DeviceRenderer key={name} name={name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} />
+                  <DeviceRenderer key={name} name={state.friendly_name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} />
                 ))}
               </div>
             ) : (

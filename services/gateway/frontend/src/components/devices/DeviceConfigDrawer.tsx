@@ -84,15 +84,22 @@ export function DeviceConfigDrawer({
                 </button>
               </Tooltip>
             </div>
-          ) : (
-            <div className="flex items-center justify-between group">
-              <SheetTitle className="text-2xl font-semibold tracking-tight text-white pr-4">
-                {name}
-              </SheetTitle>
+) : (
+            <div className="flex items-start justify-between group">
+              <div className="flex flex-col">
+                <SheetTitle className="text-2xl font-semibold tracking-tight text-white pr-4">
+                  {name}
+                </SheetTitle>
+                {state.ieee_address && (
+                  <span className="text-xs font-mono text-neutral-500 mt-0.5 select-all">
+                    {state.ieee_address}
+                  </span>
+                )}
+              </div>
               <Tooltip text="Rename Device">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="p-2 rounded-full text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors"
+                  className="p-2 rounded-full text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors mt-1"
                 >
                   <Pencil size={16} />
                 </button>

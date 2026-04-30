@@ -1,6 +1,6 @@
 Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
 
-Renaming devices is problematic at the moment, needs a webpage reload to render correct right now.
+add device deletion
 
 Group page doesn't update info automatically, need to add websocket support.
 

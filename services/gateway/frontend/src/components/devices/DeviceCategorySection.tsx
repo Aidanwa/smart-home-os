@@ -32,7 +32,7 @@ export function DeviceCategorySection({ title, icon, devices, sendCommand, toggl
         {devices.map((device) => (
           <DeviceRenderer 
             key={device.name} 
-            name={device.name} 
+            name={device.state.friendly_name}
             state={device.state}
             sendCommand={sendCommand}
             toggleDevice={toggleDevice}

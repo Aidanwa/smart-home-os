@@ -12,6 +12,7 @@ class DeviceState(BaseModel):
     # General Attributes
     linkquality: Optional[int] = None
     ieee_address: Optional[str] = None
+    friendly_name: Optional[str] = None
     
     # Lights / Switches
     state: Optional[str] = None

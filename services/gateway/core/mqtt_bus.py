@@ -95,7 +95,7 @@ class AsyncMqttBus:
             await self.redis.set("gateway:groups", json.dumps(payload))
             if isinstance(payload, list):
                 self._known_groups = {g.get("friendly_name") for g in payload if isinstance(g, dict)}
-            
+        
         # Catch the heavy info payload so we never have to RPC for it
         if topic == f"{self.z2m_base}/bridge/info":
             await self.redis.set("gateway:bridge_info", json.dumps(payload))
@@ -123,34 +123,35 @@ class AsyncMqttBus:
             # The Diff Engine: Sync Redis Topology
             current_twin = await self.redis.hgetall("gateway:digital_twin")
             
-            for old_friendly_name, state_str in current_twin.items():
-                try:
-                    state_obj = json.loads(state_str)
-                    old_ieee = state_obj.get("ieee_address")
-                except json.JSONDecodeError:
-                    continue
+            for ieee_address, state_str in current_twin.items():
                 
                 # Check if the device was completely removed from the network
-                is_deleted = old_ieee not in new_registry.values()
+                is_deleted = ieee_address not in new_registry.values()
                 
                 if is_deleted:
-                    logger.info(f"Device removed from network: {old_friendly_name}")
-                    await self.redis.hdel("gateway:digital_twin", old_friendly_name)
+                    logger.info(f"Device removed from network: IEEE {ieee_address}")
+                    await self.redis.hdel("gateway:digital_twin", ieee_address)
                     continue
                 
                 # Check if the device was renamed
-                if old_friendly_name not in new_registry:
-                    # Find the new friendly name for this ieee_address
-                    new_friendly_name = next(
-                        (name for name, ieee in new_registry.items() if ieee == old_ieee), 
-                        None
-                    )
-                    
-                    if new_friendly_name:
-                        logger.info(f"Device renamed in Twin: {old_friendly_name} -> {new_friendly_name}")
-                        # Move the old state to the new key to preserve UI continuity
-                        await self.redis.hset("gateway:digital_twin", new_friendly_name, state_str)
-                        await self.redis.hdel("gateway:digital_twin", old_friendly_name)
+                try:
+                    state_obj = json.loads(state_str)
+                except json.JSONDecodeError:
+                    continue
+                
+                # Find the current true friendly name for this ieee_address
+                new_friendly_name = next(
+                    (name for name, ieee in new_registry.items() if ieee == ieee_address), 
+                    None
+                )
+                
+                old_friendly_name = state_obj.get("friendly_name")
+
+                if new_friendly_name and old_friendly_name != new_friendly_name:
+                    logger.info(f"Device renamed in Twin: {old_friendly_name} -> {new_friendly_name}")
+                    # Simply update the property and save it back to the exact same IEEE key
+                    state_obj["friendly_name"] = new_friendly_name
+                    await self.redis.hset("gateway:digital_twin", ieee_address, json.dumps(state_obj))
 
         # 1. Update Digital Twin & Resolve Device Futures
         if len(topic_parts) == 2 and topic_parts[0] == self.z2m_base:
@@ -159,22 +160,27 @@ class AsyncMqttBus:
             # Ignore the bridge AND any known groups
             if device_name != "bridge" and device_name not in self._known_groups:
                 
-                # INJECT IEEE ADDRESS HERE
                 ieee_address = self._device_registry.get(device_name)
+                
+                # Determine the primary key for Redis & Frontend (Fallback to name if IEEE is somehow missing)
+                twin_key = ieee_address if ieee_address else device_name
+
                 if ieee_address:
                     payload["ieee_address"] = ieee_address
+                    payload["friendly_name"] = device_name
                 
-                logger.debug(f"Updating digital twin for {device_name}: {payload}")
-                await self.redis.hset("gateway:digital_twin", device_name, json.dumps(payload))
+                logger.debug(f"Updating digital twin for {twin_key} ({device_name}): {payload}")
+                await self.redis.hset("gateway:digital_twin", twin_key, json.dumps(payload))
 
-                update_msg = {"type": "device_update", "device": device_name, "state": payload}
+                # Broadcast to UI using the IEEE address so it maps perfectly
+                update_msg = {"type": "device_update", "device": twin_key, "state": payload}
                 for q in list(self._subscribers):
                     try:
                         q.put_nowait(update_msg)
                     except asyncio.QueueFull:
                         pass
                 
-                # If we were waiting on a device state change via RPC, resolve it!
+                # If we were waiting on a device state change via RPC, resolve it using the reference name!
                 if device_name in self._pending_rpcs:
                     if not self._pending_rpcs[device_name].done():
                         self._pending_rpcs[device_name].set_result(payload)

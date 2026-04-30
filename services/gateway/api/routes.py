@@ -39,22 +39,24 @@ async def list_devices(bus: AsyncMqttBus = Depends(get_mqtt_bus)):
             detail=f"Failed to read Digital Twin: {str(e)}"
         )
 
-@router.get("/devices/{friendly_name}", response_model=DeviceStateResponse, response_model_exclude_none=True)
-async def get_device_state(friendly_name: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
+@router.get("/devices/{device_id}", response_model=DeviceStateResponse, response_model_exclude_none=True)
+async def get_device_state(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
     """
-    Get the current state of a single specific device.
+    Get the current state of a single specific device using its UUID (IEEE Address).
     """
     try:
-        # HGET just pulls the single JSON string for this specific device
-        raw_state_str = await bus.redis.hget("gateway:digital_twin", friendly_name)
+        # HGET pulls the single JSON string using the IEEE address
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
         
         if not raw_state_str:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, 
-                detail=f"Device '{friendly_name}' not found in Digital Twin."
+                detail=f"Device '{device_id}' not found in Digital Twin."
             )
             
         raw_state = json.loads(raw_state_str)
+        # Ensure friendly_name is returned, fallback to device_id if missing
+        friendly_name = raw_state.get("friendly_name", device_id)
         
         return DeviceStateResponse(
             friendly_name=friendly_name,
@@ -68,9 +70,9 @@ async def get_device_state(friendly_name: str, bus: AsyncMqttBus = Depends(get_m
             detail=f"Failed to read device state: {str(e)}"
         )
     
-@router.post("/devices/{friendly_name}/set")
+@router.post("/devices/{device_id}/set")
 async def set_device_state(
-    friendly_name: str, 
+    device_id: str, 
     request: DeviceSetRequest, 
     bus=Depends(get_mqtt_bus)
 ):
@@ -86,6 +88,13 @@ async def set_device_state(
             detail="No valid state fields provided"
         )
 
+    # 1. Translate UUID (IEEE) to friendly_name for Z2M routing
+    raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+    friendly_name = device_id
+    if raw_state_str:
+        state_obj = json.loads(raw_state_str)
+        friendly_name = state_obj.get("friendly_name", device_id)
+
     topic = f"zigbee2mqtt/{friendly_name}/set"
     
     try:
@@ -95,12 +104,10 @@ async def set_device_state(
         
         return {
             "status": "success",
-            "device": friendly_name,
+            "device": device_id,
             "confirmed_state": result
         }
     except TimeoutError as e:
-        # Catch the specific TimeoutError raised by bus.rpc() 
-        # and translate it to a 504 Gateway Timeout
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=f"Device '{friendly_name}' did not confirm the state change in time. It might be offline or unresponsive."
@@ -111,22 +118,29 @@ async def set_device_state(
             detail=f"An error occurred while setting device state: {str(e)}"
         )
     
-@router.put("/device/{device_name}/rename")
-async def rename_device(device_name: str, request: RenameRequest, bus=Depends(get_mqtt_bus)
-):
+@router.put("/device/{device_id}/rename")
+async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_mqtt_bus)):
     """
     Rename a Zigbee device on the network.
     The Bridge will automatically broadcast the updated device list to Redis.
     """
     try:
-        payload = {"from": device_name, "to": request.new_name}
+        # 1. Look up the CURRENT friendly_name to tell Z2M what to rename
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        friendly_name = device_id
+        if raw_state_str:
+            state_obj = json.loads(raw_state_str)
+            friendly_name = state_obj.get("friendly_name", device_id)
+
+        payload = {"from": friendly_name, "to": request.new_name}
+        
         # Publish to the Z2M bridge rename device endpoint
         res = await bus.rpc("zigbee2mqtt/bridge/request/device/rename", payload)
         
         if res.get("status") != "ok":
             raise HTTPException(status_code=400, detail=res.get("error", "Failed to rename device"))
             
-        return {"status": "success", "message": f"Device '{device_name}' renamed to '{request.new_name}' successfully."}
+        return {"status": "success", "message": f"Device '{friendly_name}' renamed to '{request.new_name}' successfully."}
         
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout during device renaming.")
@@ -140,50 +154,74 @@ async def rename_device(device_name: str, request: RenameRequest, bus=Depends(ge
 @router.post("/groups")
 async def create_group(request: GroupCreateRequest, bus=Depends(get_mqtt_bus)):
     """
-    Create a new Zigbee group and initialize it with members.
+    Create a new Zigbee group on the network.
     """
     try:
-        # 1. Create the Group
-        res = await bus.rpc("zigbee2mqtt/bridge/request/group/add", {"friendly_name": request.friendly_name})
+        payload = {"friendly_name": request.friendly_name}
         
-        if res.get("status") != "ok":
-            raise HTTPException(status_code=400, detail=res.get("error", "Unknown error creating group"))
-
+        # Publish to the Z2M bridge add group endpoint and await confirmation
+        response = await bus.rpc("zigbee2mqtt/bridge/request/group/add", payload)
+        
+        if response.get("status") != "ok":
+            error_msg = response.get("error", "Unknown error")
+            raise HTTPException(status_code=400, detail=f"Failed to create group: {error_msg}")
+            
         return {
             "status": "success",
-            "group": request.friendly_name,
+            "message": f"Group '{request.friendly_name}' created successfully.",
+            "data": response.get("data", {})
         }
-        
     except TimeoutError:
-        raise HTTPException(status_code=504, detail="Bridge timeout during group creation.")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Bridge did not respond to the group creation request in time."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/groups/{group_name}/members")
 async def add_group_member(group_name: str, request: GroupMemberRequest, bus=Depends(get_mqtt_bus)):
     """Add a single device to an existing group."""
     try:
+        # Translate device UUID (ieee_address) to friendly_name for Z2M
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", request.device)
+        device_ref = request.device
+        if raw_state_str:
+            state_obj = json.loads(raw_state_str)
+            device_ref = state_obj.get("friendly_name", request.device)
+
         res = await bus.rpc(
             "zigbee2mqtt/bridge/request/group/members/add", 
-            {"group": group_name, "device": request.device}
+            {"group": group_name, "device": device_ref}
         )
         if res.get("status") != "ok":
             raise HTTPException(status_code=400, detail=res.get("error", "Failed to add member"))
             
-        return {"status": "success", "message": f"Added {request.device} to {group_name}"}
+        return {"status": "success", "message": f"Added {device_ref} to {group_name}"}
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout.")
 
-@router.delete("/groups/{group_name}/members/{device_name}")
-async def remove_group_member(group_name: str, device_name: str, bus=Depends(get_mqtt_bus)):
+@router.delete("/groups/{group_name}/members/{device_id}")
+async def remove_group_member(group_name: str, device_id: str, bus=Depends(get_mqtt_bus)):
     """Remove a single device from an existing group."""
     try:
+        # Translate device UUID (ieee_address) to friendly_name for Z2M
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        device_ref = device_id
+        if raw_state_str:
+            state_obj = json.loads(raw_state_str)
+            device_ref = state_obj.get("friendly_name", device_id)
+
         res = await bus.rpc(
             "zigbee2mqtt/bridge/request/group/members/remove", 
-            {"group": group_name, "device": device_name}
+            {"group": group_name, "device": device_ref}
         )
         if res.get("status") != "ok":
             raise HTTPException(status_code=400, detail=res.get("error", "Failed to remove member"))
             
-        return {"status": "success", "message": f"Removed {device_name} from {group_name}"}
+        return {"status": "success", "message": f"Removed {device_ref} from {group_name}"}
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout.")
     
@@ -201,8 +239,6 @@ async def list_groups(bus=Depends(get_mqtt_bus)):
             return []
             
         groups_data = json.loads(raw_groups)
-        
-        # Pydantic will automatically validate the raw Z2M array against your GroupInfo model list
         return groups_data
         
     except Exception as e:
@@ -246,40 +282,6 @@ async def set_group_state(
             detail=f"Failed to publish group command: {str(e)}"
         )
     
-    
-@router.post("/groups")
-async def create_group(request: GroupCreateRequest, bus=Depends(get_mqtt_bus)):
-    """
-    Create a new Zigbee group on the network.
-    The Bridge will automatically broadcast the updated group list to our Redis Digital Twin.
-    """
-    try:
-        payload = {"friendly_name": request.friendly_name}
-        
-        # Publish to the Z2M bridge add group endpoint and await confirmation
-        response = await bus.rpc("zigbee2mqtt/bridge/request/group/add", payload)
-        
-        if response.get("status") != "ok":
-            # Z2M puts error reasons (like 'group already exists') in the 'error' field
-            error_msg = response.get("error", "Unknown error")
-            raise HTTPException(status_code=400, detail=f"Failed to create group: {error_msg}")
-            
-        return {
-            "status": "success",
-            "message": f"Group '{request.friendly_name}' created successfully.",
-            "data": response.get("data", {})
-        }
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Bridge did not respond to the group creation request in time."
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-
 @router.delete("/groups/{group_name}")
 async def delete_group(group_name: str, bus=Depends(get_mqtt_bus)):
     """
