@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type HealthStatus = 'healthy' | 'unhealthy' | 'checking';
+export type HealthStatus = 'healthy' | 'unhealthy' | 'mqtt is unhealthy' | 'checking' | 'smart home os is unhealthy';
 
 export function useSystemHealth() {
   const [status, setStatus] = useState<HealthStatus>('checking');
@@ -11,10 +11,12 @@ export function useSystemHealth() {
         const res = await fetch('/api/bridge/health', { 
             headers: { 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' } 
         });
-        if (res.ok) {
+        if (res.status ===200) {
           setStatus('healthy');
+        } else if (res.status === 502){
+          setStatus('smart home os is unhealthy');
         } else {
-          setStatus('unhealthy');
+          setStatus('mqtt is unhealthy');
         }
       } catch (e) {
         setStatus('unhealthy');

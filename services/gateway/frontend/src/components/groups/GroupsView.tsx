@@ -218,12 +218,12 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice }:
                   ? managingGroup.members.some(m => m.ieee_address === state.ieee_address)
                   : managingGroup.members.some(m => m.name === deviceName);
 
-                // Pass the IEEE address as the true identifier if available [cite: 373]
+                // Pass the IEEE address as the true identifier if available
                 const identifier = state.ieee_address || deviceName;
 
                 return (
                   <div key={deviceName} className="flex items-center justify-between p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50">
-                    <span className="text-sm font-medium text-neutral-200">{deviceName}</span>
+                    <span className="text-sm font-medium text-neutral-200">{state.friendly_name}</span>
                     <Tooltip text={isInGroup ? "Remove device from group" : "Add device to group"}>
                       <button
                         onClick={() => {

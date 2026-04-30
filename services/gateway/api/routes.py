@@ -125,6 +125,8 @@ async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_
     The Bridge will automatically broadcast the updated device list to Redis.
     """
     try:
+        if [char in request.new_name for char in ['+', '#']]:
+            raise HTTPException(status_code=400, detail="Device names cannot contain MQTT wildcard characters '+' or '#'")
         # 1. Look up the CURRENT friendly_name to tell Z2M what to rename
         raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
         friendly_name = device_id
@@ -313,6 +315,8 @@ async def rename_group(group_name: str, request: RenameRequest, bus=Depends(get_
     The Bridge will automatically broadcast the updated group list to Redis.
     """
     try:
+        if [char in request.new_name for char in ['+', '#']]:
+            raise HTTPException(status_code=400, detail="Device names cannot contain MQTT wildcard characters '+' or '#'")
         payload = {"from": group_name, "to": request.new_name}
         # Publish to the Z2M bridge rename group endpoint
         res = await bus.rpc("zigbee2mqtt/bridge/request/group/rename", payload)
