@@ -45,11 +45,13 @@ async def list_devices(bus: AsyncMqttBus = Depends(get_mqtt_bus)):
 @router.get("/devices/{device_id}", response_model=DeviceStateResponse, response_model_exclude_none=True)
 async def get_device_state(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
     """
-    Get the current state of a single specific device using its UUID (IEEE Address).
+    Get the current state of a single specific device using either its UUID or friendly_name.
     """
     try:
-        # HGET pulls the single JSON string using the IEEE address
-        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        # If passed a friendly_name, convert to IEEE address
+        target_ieee = bus._device_registry.get(device_id, device_id)
+
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", target_ieee)
         
         if not raw_state_str:
             raise HTTPException(
@@ -58,7 +60,6 @@ async def get_device_state(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_
             )
             
         raw_state = json.loads(raw_state_str)
-        # Ensure friendly_name is returned, fallback to device_id if missing
         friendly_name = raw_state.get("friendly_name", device_id)
         
         return DeviceStateResponse(
@@ -91,9 +92,13 @@ async def set_device_state(
             detail="No valid state fields provided"
         )
 
+    # TRANSLATION STEP
+    target_ieee = bus._device_registry.get(device_id, device_id)
+
     # 1. Translate UUID (IEEE) to friendly_name for Z2M routing
-    raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
-    friendly_name = device_id
+    raw_state_str = await bus.redis.hget("gateway:digital_twin", target_ieee)
+    friendly_name = device_id # Fallback
+    
     if raw_state_str:
         state_obj = json.loads(raw_state_str)
         friendly_name = state_obj.get("friendly_name", device_id)
@@ -123,12 +128,12 @@ async def set_device_state(
 
 @router.delete("/devices/{device_id}")
 async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
-    """
-    Remove a device from the Zigbee network.
-    """
     try:
-        # 1. Fetch the state from Redis to get the current friendly_name 
-        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        # TRANSLATION STEP
+        target_ieee = bus._device_registry.get(device_id, device_id)
+
+        # 1. Fetch the state from Redis using target_ieee
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", target_ieee)
         
         if not raw_state_str:
             raise HTTPException(
@@ -156,8 +161,8 @@ async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus
             )
         
         # delete the device from digital twin and broadcast the deletion to all subscribers
-        await bus.redis.hdel("gateway:digital_twin", device_id)
-        update_msg = {"type": "device_delete", "device": device_id}
+        await bus.redis.hdel("gateway:digital_twin", target_ieee)
+        update_msg = {"type": "device_delete", "device": target_ieee} # sends ieee address to subscribers
         for q in list(bus._subscribers):
             try:
                 q.put_nowait(update_msg)
@@ -184,15 +189,15 @@ async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus
     
 @router.put("/device/{device_id}/rename")
 async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_mqtt_bus)):
-    """
-    Rename a Zigbee device on the network.
-    The Bridge will automatically broadcast the updated device list to Redis.
-    """
     try:
         if any(char in request.new_name for char in ['+', '#']):
             raise HTTPException(status_code=400, detail="Device names cannot contain MQTT wildcard characters '+' or '#'")
+            
+        # TRANSLATION STEP
+        target_ieee = bus._device_registry.get(device_id, device_id)
+
         # 1. Look up the CURRENT friendly_name to tell Z2M what to rename
-        raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
+        raw_state_str = await bus.redis.hget("gateway:digital_twin", target_ieee)
         friendly_name = device_id
         if raw_state_str:
             state_obj = json.loads(raw_state_str)

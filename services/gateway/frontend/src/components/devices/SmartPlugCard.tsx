@@ -31,7 +31,7 @@ export function SmartPlugCard({ name, state, toggleDevice, renameDevice, deleteD
       advancedConfig={
         state.energy !== undefined ? (
           <div className="p-4 bg-neutral-900/50 border border-neutral-800/50 rounded-xl flex justify-between items-center text-sm mt-2">
-            <span className="text-neutral-400">Total Energy Usage</span>
+            <span className="text-neutral-400">Lifetime Energy Usage</span>
             <span className="font-medium text-neutral-200">{state.energy} kWh</span>
           </div>
         ) : null
