@@ -2,8 +2,11 @@ import logging
 import json
 from typing import Callable, List, Dict, Any, AsyncGenerator
 from core.memory import MemoryManager
+from tools.weather_service import WeatherService
 from tools.gateway_api import GatewayClient
 from providers.base import BaseLLMProvider
+import asyncio
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +14,8 @@ class SmartHomeOrchestrator:
     def __init__(
         self,
         llm_provider: BaseLLMProvider,       
-        gateway_client: GatewayClient,     
+        gateway_client: GatewayClient,
+        weather_service: WeatherService,    
         memory_manager: MemoryManager,     
         system_prompt_tmpl: str, 
         tools_schema: List[Dict],
@@ -20,22 +24,33 @@ class SmartHomeOrchestrator:
         self.llm = llm_provider
         self.gateway = gateway_client
         self.memory = memory_manager
+        self.weather = weather_service
         self.system_prompt_tmpl = system_prompt_tmpl
         self.tools_schema = tools_schema
         self.tool_map = tool_map
-        self.max_iterations = 5 
+        self.max_iterations = 5
 
     async def process_intent_stream(self, user_id: str, user_text: str) -> AsyncGenerator[Dict[str, Any], None]:
         # 1. Fetch Data
-        home_context = await self.gateway.get_filtered_context(user_id)
+        home_context_task = self.gateway.get_filtered_context(user_id)
+        weather_info_task = self.weather.get_weather(user_id=user_id, granularity="hourly", forecast_times_iso="now", location="home")
+        home_context, weather_response = await asyncio.gather(home_context_task, weather_info_task)
         logger.debug(f"Fetched home context for {user_id}: {home_context}")
+        if weather_response.get("status") == "success":
+            current_weather = weather_response["data"]
+        else:
+            current_weather = "Current weather unavailable."
+        logger.debug(f"Fetched weather info for {user_id}: {current_weather}")
         user_profile = self.memory.get_user_profile(user_id)
         logger.debug(f"Fetched user profile for {user_id}: {user_profile}")
-
+        now = datetime.now().astimezone().strftime('%A, %B %d, %Y at %I:%M %p %Z')
+        
         # 2. Build Instructions
         instructions = self.system_prompt_tmpl.format(
             homestate=home_context,
-            userprofile=user_profile
+            userprofile=user_profile,
+            weatherinfo=current_weather,
+            timeinfo=now,
         )
 
         # 3. Retrieve Pruned History (1 Hour Limit)
@@ -78,6 +93,8 @@ class SmartHomeOrchestrator:
                         assistant_msg = {"role": "assistant", "content": accumulated_text}
                         current_messages.append(assistant_msg)
                         self.memory.add_message(user_id, assistant_msg)
+                        print(f"SYSTEM PROMPT:\n{instructions}\n")
+                        self.memory.pretty_print_history(user_id)
                     return
                 
                 elif chunk["type"] == "tool_calls":

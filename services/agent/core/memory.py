@@ -39,6 +39,50 @@ class MemoryManager:
             "message": message
         })
 
+
+    def pretty_print_history(self, user_id: str):
+        """
+        Prints a nicely formatted, human-readable view of a user's 
+        short-term memory for debugging purposes.
+        """
+        history = self._short_term.get(user_id, [])
+        
+        print(f"\n{'='*60}")
+        print(f"SHORT-TERM MEMORY: {user_id}")
+        print(f"Total Messages: {len(history)}")
+        print(f"{'='*60}")
+
+        if not history:
+            print("  (Empty)\n")
+            return
+
+        for i, item in enumerate(history):
+            timestamp = item["timestamp"].strftime("%H:%M:%S")
+            message = item["message"]
+            
+            # Extract role for quick scanning, default to UNKNOWN
+            role = message.get("role", "FUNCTION").upper()
+            
+            print(f"\n[{i+1}] {timestamp} | {role}")
+            print("-" * 60)
+            
+            # If it's a standard text message, pull 'content' out for easy reading
+            if "content" in message and isinstance(message["content"], str):
+                print(message["content"])
+                
+                # Print any leftover keys (like tool_calls, name, etc.) as indented JSON
+                other_keys = {k: v for k, v in message.items() if k != "content" and v}
+                if other_keys:
+                    print(f"\n[Metadata]:")
+                    # default=str prevents crashes if there are nested datetimes or weird objects
+                    print(json.dumps(other_keys, indent=2, default=str))
+            else:
+                # If there is no string content (e.g., pure tool calls), print the whole thing
+                print(json.dumps(message, indent=2, default=str))
+                
+        print(f"\n{'='*60}\n")
+
+
     # --- Long-Term Memory (Persistent Text File) ---
     
     def get_user_profile(self, user_id: str) -> str:

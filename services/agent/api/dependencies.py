@@ -6,6 +6,7 @@ from providers.openai import OpenAIProvider
 from tools.gateway_api import GatewayClient
 from core.memory import MemoryManager
 from tools.schema import SMART_HOME_TOOLS
+from tools.weather_service import WeatherService
 
 # Configuration from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -16,14 +17,22 @@ GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8000")
 llm_provider = OpenAIProvider(api_key=OPENAI_API_KEY, model="gpt-5-mini")
 gateway_client = GatewayClient(base_url=GATEWAY_URL)
 memory_manager = MemoryManager()
+weather_service = WeatherService()
 
 # Base Persona
 SYSTEM_PROMPT = """
-You are a smart home assistant.
+You are a smart home brain.
 Your job is to assist the user by manipulating the smart devices.
+Be very concise. Use as few words as possible when talking to the user.
 
 Current Home State:
 {homestate}
+
+Current Time and Date:
+{timeinfo}
+
+Current Weather Information:
+{weatherinfo}
 
 User Information:
 {userprofile}
@@ -41,12 +50,16 @@ TOOL_REGISTRY = {
     
     # Memory
     "update_user_profile": memory_manager.update_user_profile,
+
+    # Weather
+    "get_weather": weather_service.get_weather,
 }
 
 orchestrator = SmartHomeOrchestrator(
     llm_provider=llm_provider,
     gateway_client=gateway_client,
-    memory_manager=MemoryManager(),
+    memory_manager=memory_manager,
+    weather_service=weather_service,
     system_prompt_tmpl=SYSTEM_PROMPT,
     tools_schema=SMART_HOME_TOOLS,
     tool_map=TOOL_REGISTRY

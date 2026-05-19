@@ -83,7 +83,6 @@ async def chat_sync(
     # try:
     # We iterate over the stream but build a single string
     async for chunk in orchestrator.process_intent_stream(request.user_id, request.text):
-        logger.debug(f"received chunk: {chunk}")
         if chunk["type"] == "text_chunk":
             full_response += chunk["content"]
             
