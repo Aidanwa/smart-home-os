@@ -1,0 +1,57 @@
+# src/api/dependencies.py
+import os
+from fastapi import Request
+from core.orchestrator import SmartHomeOrchestrator
+from providers.openai import OpenAIProvider
+from tools.gateway_api import GatewayClient
+from core.memory import MemoryManager
+from tools.schema import SMART_HOME_TOOLS
+
+# Configuration from environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8000")
+
+# Singleton instances
+# By instantiating these once here, we reuse the HTTP connection pools across all requests
+llm_provider = OpenAIProvider(api_key=OPENAI_API_KEY, model="gpt-5-mini")
+gateway_client = GatewayClient(base_url=GATEWAY_URL)
+memory_manager = MemoryManager()
+
+# Base Persona
+SYSTEM_PROMPT = """
+You are a smart home assistant.
+Your job is to assist the user by manipulating the smart devices.
+
+Current Home State:
+{homestate}
+
+User Information:
+{userprofile}
+
+Rules:
+1. Only control devices you see in the Home State.
+2. If asked to turn on a light, use the `set_device_state` tool with the devices friendly name.
+3. Be concise and conversational. Do not list device IDs to the user. Keep interactions short and natural.
+"""
+
+TOOL_REGISTRY = {
+    # Home Control
+    "set_device_state": gateway_client.set_device_state,
+    "rename_group": gateway_client.rename_group,
+    
+    # Memory
+    "update_user_profile": memory_manager.update_user_profile,
+}
+
+orchestrator = SmartHomeOrchestrator(
+    llm_provider=llm_provider,
+    gateway_client=gateway_client,
+    memory_manager=MemoryManager(),
+    system_prompt_tmpl=SYSTEM_PROMPT,
+    tools_schema=SMART_HOME_TOOLS,
+    tool_map=TOOL_REGISTRY
+)
+
+def get_orchestrator() -> SmartHomeOrchestrator:
+    """FastAPI Dependency for injecting the orchestrator into routes."""
+    return orchestrator
