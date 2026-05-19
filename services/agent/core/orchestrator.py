@@ -204,17 +204,17 @@ class SmartHomeOrchestrator:
         for call in tool_calls:
             tool_id = call.get("id")
             tool_name = call.get("name")
-            # try:
-            args = json.loads(call.get("arguments", "{}"))
-            tool_method = self.tool_map.get(tool_name)
+            try:
+                args = json.loads(call.get("arguments", "{}"))
+                tool_method = self.tool_map.get(tool_name)
+                
+                if not tool_method:
+                    raise AttributeError(f"Tool '{tool_name}' is not registered.")
+                
+                result_data = await tool_method(user_id=user_id, **args)
             
-            if not tool_method:
-                raise AttributeError(f"Tool '{tool_name}' is not registered.")
-            
-            result_data = await tool_method(user_id=user_id, **args)
-            
-            # except Exception as e:
-            #     result_data = {"error": str(e)}
+            except Exception as e:
+                result_data = {"error": str(e)}
 
             results.append({
                 "type": "function_call_output",

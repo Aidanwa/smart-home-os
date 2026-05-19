@@ -41,31 +41,31 @@ async def chat_stream(
     await websocket.accept()
     logger.info(f"WebSocket connected for user: {user_id}")
     
-    # try:
-    while True:
-        user_text = await websocket.receive_text()
-        logger.debug(f"Received message from {user_id}: {user_text}")
-        
-        async for chunk in orchestrator.process_intent_stream(user_id, user_text):
-            if chunk["type"] == "text_chunk":
-                # Instantly send the token to the React UI
-                await websocket.send_text(chunk["content"])
-
-            elif chunk["type"] == "tool_call":
-                import json
-                await websocket.send_text(json.dumps(chunk))
-        
-        await websocket.send_text("[DONE]")
+    try:
+        while True:
+            user_text = await websocket.receive_text()
+            logger.debug(f"Received message from {user_id}: {user_text}")
             
-    # except WebSocketDisconnect:
-    #     logger.info(f"WebSocket disconnected for user: {user_id}")
-    # except Exception as e:
-    #     logger.error(f"WebSocket Error for {user_id}: {str(e)}")
-    #     try:
-    #         await websocket.send_text(f"\n[System Error: {str(e)}]")
-    #         await websocket.send_text("[DONE]")
-    #     except:
-    #         pass # Socket might already be closed
+            async for chunk in orchestrator.process_intent_stream(user_id, user_text):
+                if chunk["type"] == "text_chunk":
+                    # Instantly send the token to the React UI
+                    await websocket.send_text(chunk["content"])
+
+                elif chunk["type"] == "tool_call":
+                    import json
+                    await websocket.send_text(json.dumps(chunk))
+            
+            await websocket.send_text("[DONE]")
+            
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for user: {user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket Error for {user_id}: {str(e)}")
+        try:
+            await websocket.send_text(f"\n[System Error: {str(e)}]")
+            await websocket.send_text("[DONE]")
+        except:
+            pass # Socket might already be closed
 
 # ---------------------------------------------------------
 # Conversation history retrieval route
