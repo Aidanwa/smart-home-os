@@ -21,6 +21,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -30,6 +31,7 @@ requires-dist = [
     { name = "openai", specifier = ">=2.37.0" },
     { name = "pydantic", specifier = ">=2.13.3" },
     { name = "uvicorn", specifier = ">=0.46.0" },
+    { name = "websockets", specifier = ">=16.0" },
 ]
 
 [[package]]

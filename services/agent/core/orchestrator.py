@@ -98,19 +98,32 @@ class SmartHomeOrchestrator:
                     return
                 
                 elif chunk["type"] == "tool_calls":
-                    assistant_msg = chunk.get("message")
-                    current_messages.extend(assistant_msg)
-                    for msg in assistant_msg:
+                    tool_calls = chunk.get("message", [])
+                    
+                    current_messages.extend(tool_calls)
+                    for msg in tool_calls:
                         self.memory.add_message(user_id, msg)
+                        
+                        yield {
+                            "type": "tool_call", 
+                            "name": msg.get("name", "Unknown Tool"), 
+                            "arguments": msg.get("arguments", "{}"),
+                            "status": "pending"
+                        }
 
-                    # 2. Execute the tools
-                    tool_calls = chunk["message"]
                     tool_results = await self._execute_tool_calls(user_id, tool_calls)
                     
-                    # 3. Append the tool results to current array AND to memory
                     current_messages.extend(tool_results)
                     for tr in tool_results:
                         self.memory.add_message(user_id, tr)
+
+                    for msg in tool_calls:
+                        yield {
+                            "type": "tool_call", 
+                            "name": msg.get("name", "Unknown Tool"), 
+                            "arguments": msg.get("arguments", "{}"),
+                            "status": "completed"
+                        }
                     
                     break # Break inner stream loop to restart outer LLM loop with updated context
 

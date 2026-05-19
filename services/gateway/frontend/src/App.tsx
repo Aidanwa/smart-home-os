@@ -9,6 +9,7 @@ import { getDeviceCategory } from './lib/deviceUtils';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
 import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
+import { AgentChat } from './components/agent/AgentChat';
 
 export default function App() {
   const { devices, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice} = useDevices();
@@ -262,15 +263,9 @@ export default function App() {
           </div>
         )}
         
-        {/* Agent Tab (Placeholder) */}
+        {/* Agent Tab */}
         {activeTab === 'agent' && (
-          <div className="h-[80vh] flex items-center justify-center text-neutral-500 animate-in fade-in">
-            <div className="text-center">
-              <Sparkles className="mx-auto mb-4 opacity-50" size={48} />
-              <h2 className="text-xl font-medium text-neutral-300">Agentic Orchestrator</h2>
-              <p className="mt-2 text-sm">LLM Interface coming in Phase 3.</p>
-            </div>
-          </div>
+          <AgentChat />
         )}
 
         {/* Routines (Placeholder) */}
