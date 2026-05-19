@@ -3,7 +3,19 @@
 
 ## Adding agent logic
 
-need to start this from scratch
+add more providers i.e. ollama, gemini
+
+spotify integration
+
+improve prompting?
+
+improve agentic ui
+
+## Adding Accounts and user settings
+
+start from scratch
+
+allow configuring different houses for saving home shapes
 
 ## adding routines/scheduling/automations
 
@@ -12,10 +24,6 @@ add cool triggers such as sunrise/sunset
 ## Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
 
 have ui that allows users to custom define room shapes
-
-## Create postgres table for rbac
-
-allow configuring different houses for saving home shapes
 
 # SMALLER FEATURES:
 
