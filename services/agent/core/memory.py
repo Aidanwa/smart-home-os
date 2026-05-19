@@ -1,7 +1,10 @@
+import logging
 import os
 import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class MemoryManager:
     def __init__(self, profile_dir: str = "/app/data/profiles"):
@@ -42,18 +45,20 @@ class MemoryManager:
 
     def pretty_print_history(self, user_id: str):
         """
-        Prints a nicely formatted, human-readable view of a user's 
+        Logs a nicely formatted, human-readable view of a user's 
         short-term memory for debugging purposes.
         """
         history = self._short_term.get(user_id, [])
         
-        print(f"\n{'='*60}")
-        print(f"SHORT-TERM MEMORY: {user_id}")
-        print(f"Total Messages: {len(history)}")
-        print(f"{'='*60}")
+        output = []
+        output.append(f"\n{'='*60}")
+        output.append(f"SHORT-TERM MEMORY: {user_id}")
+        output.append(f"Total Messages: {len(history)}")
+        output.append(f"{'='*60}")
 
         if not history:
-            print("  (Empty)\n")
+            output.append("  (Empty)\n")
+            logger.info("\n".join(output))
             return
 
         for i, item in enumerate(history):
@@ -63,25 +68,26 @@ class MemoryManager:
             # Extract role for quick scanning, default to UNKNOWN
             role = message.get("role", "FUNCTION").upper()
             
-            print(f"\n[{i+1}] {timestamp} | {role}")
-            print("-" * 60)
+            output.append(f"\n[{i+1}] {timestamp} | {role}")
+            output.append("-" * 60)
             
             # If it's a standard text message, pull 'content' out for easy reading
             if "content" in message and isinstance(message["content"], str):
-                print(message["content"])
+                output.append(message["content"])
                 
                 # Print any leftover keys (like tool_calls, name, etc.) as indented JSON
                 other_keys = {k: v for k, v in message.items() if k != "content" and v}
                 if other_keys:
-                    print(f"\n[Metadata]:")
+                    output.append("\n[Metadata]:")
                     # default=str prevents crashes if there are nested datetimes or weird objects
-                    print(json.dumps(other_keys, indent=2, default=str))
+                    output.append(json.dumps(other_keys, indent=2, default=str))
             else:
                 # If there is no string content (e.g., pure tool calls), print the whole thing
-                print(json.dumps(message, indent=2, default=str))
+                output.append(json.dumps(message, indent=2, default=str))
                 
-        print(f"\n{'='*60}\n")
-
+        output.append(f"\n{'='*60}\n")
+        
+        logger.info("\n".join(output))
 
     # --- Long-Term Memory (Persistent Text File) ---
     

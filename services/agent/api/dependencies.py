@@ -3,6 +3,7 @@ import os
 from fastapi import Request
 from core.orchestrator import SmartHomeOrchestrator
 from providers.openai import OpenAIProvider
+from tools.spotify_service import SpotifyService
 from tools.gateway_api import GatewayClient
 from core.memory import MemoryManager
 from tools.schema import SMART_HOME_TOOLS
@@ -18,6 +19,7 @@ llm_provider = OpenAIProvider(api_key=OPENAI_API_KEY, model="gpt-5-mini")
 gateway_client = GatewayClient(base_url=GATEWAY_URL)
 memory_manager = MemoryManager()
 weather_service = WeatherService()
+spotify_service = SpotifyService()
 
 # Base Persona
 SYSTEM_PROMPT = """
@@ -27,6 +29,9 @@ Be very concise, responses will be read aloud and should be natural but efficien
 
 Current Home State:
 {homestate}
+
+Current Spotify Information:
+{spotifyinfo}
 
 Current Time and Date:
 {timeinfo}
@@ -41,6 +46,7 @@ Rules:
 1. Only control devices you see in the Home State.
 2. If asked to turn on a light, use the `set_device_state` tool with the devices friendly name.
 3. Be concise and conversational. Do not list device IDs to the user. Keep interactions short and natural.
+4. If the user requests specific music, search for exact matches before playing with a general query.
 """
 
 TOOL_REGISTRY = {
@@ -53,6 +59,12 @@ TOOL_REGISTRY = {
 
     # Weather
     "get_weather": weather_service.get_weather,
+
+    # spotify
+    "spotify_play": spotify_service.spotify_play,
+    "spotify_controller": spotify_service.spotify_controller,
+    "spotify_get_advanced_info": spotify_service.spotify_get_advanced_info,
+    "spotify_search": spotify_service.spotify_search,
 }
 
 orchestrator = SmartHomeOrchestrator(
@@ -60,6 +72,7 @@ orchestrator = SmartHomeOrchestrator(
     gateway_client=gateway_client,
     memory_manager=memory_manager,
     weather_service=weather_service,
+    spotify_service=spotify_service,
     system_prompt_tmpl=SYSTEM_PROMPT,
     tools_schema=SMART_HOME_TOOLS,
     tool_map=TOOL_REGISTRY

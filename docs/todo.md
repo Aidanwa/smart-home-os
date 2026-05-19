@@ -5,8 +5,6 @@
 
 add more providers i.e. ollama, gemini
 
-spotify integration
-
 improve prompting?
 
 improve agentic ui
