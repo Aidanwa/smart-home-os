@@ -23,6 +23,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    
+    window.fetch = async (...args) => {
+        try {
+        const response = await originalFetch(...args);
+        
+        // Intercept 401 Unauthorized responses across the whole application
+        if (response.status === 401) {
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+            
+            // Skip intercepting the check-session route itself to avoid loop crashes
+            if (!url.includes('/api/auth/me') && !url.includes('/api/auth/login')) {
+            console.warn("Session expired or unauthorized request intercepted. Redirecting to auth entry context.");
+            setIsAuthenticated(false);
+            setUser(null);
+            }
+        }
+        
+        return response;
+        } catch (error) {
+        // Forward network errors cleanly
+        throw error;
+        }
+    };
+
+    // Gracefully restore pristine window context on unmount
+    return () => {
+        window.fetch = originalFetch;
+    };
+    }, []);
+
   // Global Response Interception wrapper for native fetch
   const authenticatedFetch = async (url: string, options?: RequestInit) => {
     const res = await fetch(url, options);

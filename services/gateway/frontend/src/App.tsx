@@ -5,73 +5,14 @@ import { useSystemHealth } from './hooks/useSystemHealth';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { 
   Home, Sparkles, Settings, PanelLeftClose, PanelLeft, Radio, Workflow,
-  Lightbulb, Zap, Thermometer, ToggleRight, Box, LogOut, Lock
+  Lightbulb, Zap, Thermometer, ToggleRight, Box, LogOut,
 } from 'lucide-react';
 import { getDeviceCategory } from './lib/deviceUtils';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
 import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
 import { AgentChat } from './components/agent/AgentChat';
-
-function LoginCard() {
-  const { login, register } = useAuth();
-  const [isRegister, setIsRegister] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    if (isRegister) {
-      const res = await register(username, password);
-      if (res.success) {
-        setSuccess('Identity initialized! Proceed to Login.');
-        setIsRegister(false);
-      } else {
-        setError(res.error || '');
-      }
-    } else {
-      const res = await login(username, password);
-      if (!res.success) setError(res.error || '');
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl">
-        <div className="flex flex-col items-center mb-6">
-          <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl mb-3">
-            <Lock size={24} />
-          </div>
-          <h2 className="text-xl font-medium tracking-tight">
-            {isRegister ? 'Create System Identity' : 'Authenticate Dashboard Context'}
-          </h2>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-neutral-400">Username</label>
-            <input type="text" required value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-400">Password</label>
-            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" />
-          </div>
-          {error && <p className="text-xs font-medium text-red-400 bg-red-500/10 p-3 rounded-xl">{error}</p>}
-          {success && <p className="text-xs font-medium text-green-400 bg-green-500/10 p-3 rounded-xl">{success}</p>}
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl p-3 text-sm transition-colors shadow-lg shadow-blue-600/20">
-            {isRegister ? 'Initialize' : 'Sign In'}
-          </button>
-        </form>
-        <button onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess(''); }} className="w-full text-center text-xs text-neutral-500 hover:text-neutral-300 mt-4 transition-colors">
-          {isRegister ? 'Already registered? Log in' : 'Request new relational profile allocation'}
-        </button>
-      </div>
-    </div>
-  );
-}
+import { LoginCard } from './components/auth/LoginCard';
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {

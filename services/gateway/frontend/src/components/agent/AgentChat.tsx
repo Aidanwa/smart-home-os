@@ -4,7 +4,7 @@ import { useAgentChat } from '../../hooks/useAgentChat';
 import { ToolCallChip } from './ToolCallChip';
 
 export const AgentChat: React.FC = () => {
-  const { messages, isConnected, isStreaming, sendMessage } = useAgentChat('admin');
+  const { messages, isConnected, isStreaming, sendMessage } = useAgentChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

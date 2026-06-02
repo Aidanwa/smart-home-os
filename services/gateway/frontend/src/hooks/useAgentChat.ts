@@ -1,4 +1,6 @@
+// services/gateway/frontend/src/hooks/useAgentChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 export interface ChatMessage {
   id: string;
@@ -10,7 +12,9 @@ export interface ChatMessage {
   status?: 'pending' | 'completed';
 }
 
-export function useAgentChat(userId: string = 'admin') {
+export function useAgentChat() {
+  // Pruned userId argument: Account parameters are natively resolved via signed ambient tracking cookies
+  const { authenticatedFetch } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -18,50 +22,54 @@ export function useAgentChat(userId: string = 'admin') {
 
   useEffect(() => {
     let ws: WebSocket | null = null;
-    let isMounted = true; // Prevents state updates if component unmounts quickly
+    let isMounted = true; 
 
     const initializeChat = async () => {
-      // 1. Get current protocol and hostname, ignoring whatever port the UI is on
-      const httpProtocol = window.location.protocol; // 'http:' or 'https:'
-      const hostname = window.location.hostname;
-
-      // 2. Fetch the conversation history directly from the Agent container
+      // 1. Fetch historical timelines using the global intercepting client wrapper.
+      // This routes directly through the unified gateway layer, allowing seamless cookie transmission.
       try {
-        const res = await fetch(`${httpProtocol}//${hostname}:8001/api/agent/chat/history/${userId}`);
+        const res = await authenticatedFetch('/api/agent/chat/history');
         if (res.ok) {
           const data = await res.json();
           const historicalMessages: ChatMessage[] = data.messages
             .map((m: any, index: number) => {
-              const isToolCall = m.type === 'function_call';
+              // Gracefully handle alternate property strings from different API variations
+              const isToolCall = m.type === 'function_call' || m.type === 'tool_call';
               return {
                 id: `hist-${Date.now()}-${index}`,
                 text: m.content || '',
                 sender: isToolCall ? 'tool' : (m.role === 'user' ? 'user' : 'agent'),
-                toolName: m.name,
-                toolArgs: m.arguments,
+                toolName: m.name || m.tool_name,
+                toolArgs: m.arguments || m.tool_args,
                 isStreaming: false,
                 status: 'completed'
               };
             })
-            .filter((m: ChatMessage) => m.sender === 'tool' || m.text.trim() !== '');
+            .filter((m: ChatMessage) => m.sender === 'tool' || (m.text && m.text.trim() !== ''));
 
           if (isMounted) setMessages(historicalMessages);
         }
       } catch (err) {
-        console.error("Failed to load chat history:", err);
+        console.error("Failed to safely sync agentic background layout history:", err);
       }
 
-      // 3. Open the WebSocket connection AFTER history is loaded
+      // 2. Open the WebSocket connection utilizing ambient cookie propagation
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${window.location.host}/api/agent/chat/stream`;
       
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => setIsConnected(true);
-      ws.onclose = () => setIsConnected(false);
+      ws.onopen = () => {
+        if (isMounted) setIsConnected(true);
+      };
+      
+      ws.onclose = () => {
+        if (isMounted) setIsConnected(false);
+      };
       
       ws.onmessage = (event) => {
+        if (!isMounted) return;
         const data = event.data;
         
         if (data === '[DONE]') {
@@ -76,7 +84,7 @@ export function useAgentChat(userId: string = 'admin') {
           return;
         }
 
-        if (data.startsWith('[System Error:')) {
+        if (data.startsWith('[System Error:') || data.startsWith('[Auth Error:')) {
            setMessages(prev => [...prev, { id: Date.now().toString(), text: data, sender: 'system' }]);
            setIsStreaming(false);
            return;
@@ -86,10 +94,8 @@ export function useAgentChat(userId: string = 'admin') {
           const parsed = JSON.parse(data);
           if (parsed.type === 'tool_call') {
             setMessages(prev => {
-              // If it's completed, find the existing pending chip and update it
               if (parsed.status === 'completed') {
                 const newMessages = [...prev];
-                // Search backwards to find the most recent matching pending tool
                 for (let i = newMessages.length - 1; i >= 0; i--) {
                   if (
                     newMessages[i].sender === 'tool' && 
@@ -101,9 +107,7 @@ export function useAgentChat(userId: string = 'admin') {
                   }
                 }
                 return newMessages;
-              } 
-              // Otherwise, it's a new pending tool call, append it!
-              else {
+              } else {
                 return [
                   ...prev, 
                   { 
@@ -112,7 +116,7 @@ export function useAgentChat(userId: string = 'admin') {
                     sender: 'tool', 
                     toolName: parsed.name, 
                     toolArgs: parsed.arguments,
-                    status: 'pending' // <-- Attach the status
+                    status: 'pending'
                   }
                 ];
               }
@@ -120,7 +124,7 @@ export function useAgentChat(userId: string = 'admin') {
             return; 
           }
         } catch (e) {
-           // Not JSON, continue to normal text streaming...
+            // Context payload is non-JSON stream chunking text. Fall through.
         }
 
         setMessages(prev => {
@@ -134,23 +138,18 @@ export function useAgentChat(userId: string = 'admin') {
       };
     };
 
-    // Fire the initialization sequence
     initializeChat();
 
-    // Cleanup function when the component unmounts
     return () => {
       isMounted = false;
       if (ws) ws.close();
     };
-  }, [userId]);
+  }, [authenticatedFetch]); // Monitored stable dependencies safely tracking environment shifts
 
   const sendMessage = useCallback((text: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      // Instantly add the user's message to the UI
       setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'user' }]);
       setIsStreaming(true);
-      
-      // Send raw text to the backend orchestrator
       wsRef.current.send(text);
     }
   }, []);
