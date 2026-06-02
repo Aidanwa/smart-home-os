@@ -7,6 +7,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy the ROOT lockfile and workspace configurations
 COPY pyproject.toml uv.lock ./
 
+# If you have a shared folder, copy it now so uv sync can install it
+COPY shared/ ./shared/
+
 # Sync dependencies for the agent
 RUN uv sync --frozen --no-dev --package agent
 

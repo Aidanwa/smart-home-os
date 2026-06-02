@@ -57,6 +57,8 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   # ----------------------------------------
   # 3. Short-term Memory (Digital Twin)
@@ -95,6 +97,8 @@ services:
     volumes:
       - ./volumes/postgres_data:/var/lib/postgresql/data
       - ./services/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     networks:
       - smarthome_net
     logging:

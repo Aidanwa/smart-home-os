@@ -17,6 +17,8 @@ allow configuring different houses for saving home shapes
 
 ## adding routines/scheduling/automations
 
+This is a big necessary next step for smart home robustness
+
 add cool triggers such as sunrise/sunset
 
 ## Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.

@@ -11,4 +11,8 @@ dependencies = [
     "cryptography",
     "pydantic-settings",
     "aiomqtt>=2.5.1",
+    "shared",
 ]
+
+[tool.uv.sources]
+shared = { workspace = true }
