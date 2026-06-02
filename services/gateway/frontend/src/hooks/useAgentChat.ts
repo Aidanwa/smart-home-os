@@ -53,7 +53,7 @@ export function useAgentChat(userId: string = 'admin') {
 
       // 3. Open the WebSocket connection AFTER history is loaded
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${hostname}:8001/api/agent/chat/stream?user_id=${userId}`;
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/agent/chat/stream`;
       
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;

@@ -43,25 +43,15 @@ class SmartHomeOrchestrator:
         cached_weather: str | None = None, 
         cached_spotify: str | None = None
     ) -> Tuple[str, str, str]:
-        """
-        Builds the system prompt. Always fetches the instant local gateway state.
-        Only fetches external APIs (Weather, Spotify) if their cache is None.
-        Returns the finalized prompt string, plus the state of the caches.
-        """
-        # 1. ALWAYS fetch the ultra-fast local Digital Twin
-        home_context = await self.gateway.get_filtered_context(user_id)
-        logger.debug(f"Fetched home context for {user_id}: {home_context}")
         
+        home_context = await self.gateway.get_filtered_context(user_id)
         now = datetime.now().astimezone()
         
-        # 2. Conditionally fetch Weather (with 1-Hour System Cache)
         if cached_weather is None:
-            # Check if our system-level cache is missing or expired
             if (self._system_weather_cache is None or 
                 self._weather_last_fetched is None or 
                 (now - self._weather_last_fetched) > self._weather_cache_ttl):
                 
-                logger.debug(f"System weather cache missing or expired. Fetching new weather...")
                 weather_response = await self.weather.get_weather(
                     user_id=user_id, granularity="hourly", forecast_times_iso="now", location="home"
                 )
@@ -69,20 +59,15 @@ class SmartHomeOrchestrator:
                     self._system_weather_cache = weather_response["data"]
                 else:
                     self._system_weather_cache = "Current weather unavailable."
-                
                 self._weather_last_fetched = now
-            else:
-                logger.debug("Using valid 1-hour system weather cache.")
-                
             current_weather = self._system_weather_cache
         else:
-            # Used during rapid tool-loops to completely bypass all checks
             current_weather = cached_weather
             
-        # 3. Conditionally fetch Spotify (No system cache, only intra-loop cache)
+        # Inject user_id to read specific user relational tokens
         if cached_spotify is None:
-            current_spotify = await self.spotify.get_spotify_context()
-            logger.debug(f"Fetched new Spotify context for {user_id}")
+            current_spotify = await self.spotify.get_spotify_context(user_id=user_id)
+            logger.debug(f"Fetched vault-resolved Spotify context for user: {user_id}")
         else:
             current_spotify = cached_spotify
 

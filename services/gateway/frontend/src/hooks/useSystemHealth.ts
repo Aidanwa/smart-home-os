@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 export type HealthStatus = 'healthy' | 'unhealthy' | 'mqtt is unhealthy' | 'checking' | 'smart home os is unhealthy';
 
 export function useSystemHealth() {
+  const { authenticatedFetch } = useAuth();
   const [status, setStatus] = useState<HealthStatus>('checking');
 
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch('/api/bridge/health', { 
-            headers: { 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' } 
-        });
+        const res = await authenticatedFetch('/api/bridge/health', {});
         if (res.status ===200) {
           setStatus('healthy');
         } else if (res.status === 502){
@@ -31,3 +31,4 @@ export function useSystemHealth() {
 
   return status;
 }
+

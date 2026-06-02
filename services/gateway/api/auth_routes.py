@@ -92,6 +92,20 @@ async def logout_user(response: Response):
 
     return {"status": "success", "message": "Active session cleared successfully."}
 
+@auth_router.get("/me")
+async def get_current_identity(current_user: User = Depends(get_current_user)):
+    """
+    HTTP route dependency ensuring incoming cookie payloads resolve 
+    to an active relational User record.
+    """
+    return {
+        "status": "success",
+        "user": {
+            "id": str(current_user.id),
+            "username": current_user.username
+        }
+    }
+
 # ====================================================================================
 # User Preferences & Cryptographic Vault Management
 # ====================================================================================

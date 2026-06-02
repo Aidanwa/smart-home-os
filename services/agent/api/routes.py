@@ -1,7 +1,11 @@
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+import json
+import jwt
+import os
+from http.cookies import SimpleCookie
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, Cookie, status
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from api.dependencies import get_orchestrator
 from core.orchestrator import SmartHomeOrchestrator
@@ -10,112 +14,105 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent", tags=["Agentic Chat"])
 
-# ---------------------------------------------------------
-# Pydantic Schemas for REST Fallback
-# ---------------------------------------------------------
-class ChatRequest(BaseModel):
-    user_id: str
-    text: str
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7b9d8df2ac3ce72b8d0093cf1b988fce899ea298b11119fcd5c95279da7311ef")
+ALGORITHM = "HS256"
+
+# Cryptographic Token Extraction Helper
+def extract_user_id_from_cookie(cookie_string: Optional[str]) -> str:
+    if not cookie_string:
+        raise HTTPException(status_code=401, detail="Session token missing.")
+    
+    cookie = SimpleCookie()
+    cookie.load(cookie_string)
+    if "access_token" not in cookie:
+        raise HTTPException(status_code=401, detail="Access authentication cookie absent.")
+        
+    token = cookie["access_token"].value
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid session subject.")
+        return user_id
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Session context expired or signature mismatch.")
 
 class ChatResponse(BaseModel):
-    user_id: str
     response: str
 
 class HistoryResponse(BaseModel):
     user_id: str
     messages: List[Dict[str, Any]]
 
-# ---------------------------------------------------------
-# Streaming WebSocket Route (For React UI)
-# ---------------------------------------------------------
 @router.websocket("/chat/stream")
 async def chat_stream(
     websocket: WebSocket, 
-    user_id: str, 
     orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
 ):
     """
-    Persistent WebSocket connection for real-time streaming chat.
-    Connect via: ws://<agent-ip>:<port>/api/agent/chat/stream?user_id=aidan
+    Persistent WebSocket connection utilizing native cookie extraction 
+    to map the independent orchestrator run against a verified PostgreSQL account.
     """
     await websocket.accept()
-    logger.info(f"WebSocket connected for user: {user_id}")
+    
+    try:
+        # Extract cookie from raw headers to ensure multi-browser/proxy safety
+        cookie_header = websocket.headers.get("cookie")
+        user_id = extract_user_id_from_cookie(cookie_header)
+    except HTTPException as e:
+        await websocket.send_text(f"\n[Auth Error: {e.detail}]")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    logger.info(f"WebSocket agent loop initialized for verified profile: {user_id}")
     
     try:
         while True:
             user_text = await websocket.receive_text()
-            logger.debug(f"Received message from {user_id}: {user_text}")
-            
             async for chunk in orchestrator.process_intent_stream(user_id, user_text):
                 if chunk["type"] == "text_chunk":
-                    # Instantly send the token to the React UI
                     await websocket.send_text(chunk["content"])
-
                 elif chunk["type"] == "tool_call":
-                    import json
                     await websocket.send_text(json.dumps(chunk))
             
             await websocket.send_text("[DONE]")
             
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for user: {user_id}")
+        logger.info(f"WebSocket closed for profile context: {user_id}")
     except Exception as e:
-        logger.error(f"WebSocket Error for {user_id}: {str(e)}")
+        logger.error(f"Internal Orchestration Processing Error: {str(e)}")
         try:
             await websocket.send_text(f"\n[System Error: {str(e)}]")
             await websocket.send_text("[DONE]")
         except:
-            pass # Socket might already be closed
+            pass
 
-# ---------------------------------------------------------
-# Conversation history retrieval route
-# ---------------------------------------------------------
-
-@router.get("/chat/history/{user_id}", response_model=HistoryResponse)
+@router.get("/chat/history", response_model=HistoryResponse)
 async def get_user_chat_history(
-    user_id: str,
+    request: Request,
     orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
 ):
-    """
-    Retrieves the short-term conversation history for a specific user.
-    """
+    user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
     try:
-        # Fetch the history using the MemoryManager inside your orchestrator
         history = orchestrator.memory.get_history(user_id)
-        
-        return {
-            "user_id": user_id,
-            "messages": history
-        }
-        
+        return {"user_id": user_id, "messages": history}
     except Exception as e:
-        logger.error(f"Error fetching history for {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve chat history")
+        raise HTTPException(status_code=500, detail="Failed to pull historical timeline.")
 
-# ---------------------------------------------------------
-# Standard REST Route (For Edge Nodes / Testing)
-# ---------------------------------------------------------
 @router.post("/chat", response_model=ChatResponse)
 async def chat_sync(
-    request: ChatRequest, 
+    request: Request,
+    body: Dict[str, str],
     orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
 ):
-    """
-    Standard HTTP POST fallback. 
-    It runs the exact same streaming orchestrator but accumulates the chunks 
-    server-side before returning the complete string.
-    """
-    logger.info(f"Sync chat request from {request.user_id}: {request.text}")
+    user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
+    user_text = body.get("text", "")
     
     full_response = ""
     try:
-    # We iterate over the stream but build a single string
-        async for chunk in orchestrator.process_intent_stream(request.user_id, request.text):
+        async for chunk in orchestrator.process_intent_stream(user_id, user_text):
             if chunk["type"] == "text_chunk":
                 full_response += chunk["content"]
-                
-        return ChatResponse(user_id=request.user_id, response=full_response)
-        
+        return ChatResponse(response=full_response)
     except Exception as e:
-        logger.error(f"REST Chat Error for {request.user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 export interface DeviceState {
   state?: string;
@@ -10,12 +11,13 @@ export interface DeviceState {
 }
 
 export function useDevices() {
+  const { authenticatedFetch } = useAuth();
   const [devices, setDevices] = useState<Record<string, DeviceState>>({});
   const wsRef = useRef<WebSocket | null>(null);
 
   // 1. Initial REST Fetch (Read Replica)
   useEffect(() => {
-    fetch('/api/devices', { headers: { 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' } })
+    authenticatedFetch('/api/devices')
       .then(res => res.json())
       .then(data => {
         if (data.devices) setDevices(data.devices);
@@ -60,11 +62,10 @@ export function useDevices() {
   // 3. Hardware Write Action
   // We use useCallback so this function reference is stable if passed to deeply nested cards
   const sendCommand = useCallback(async (name: string, payload: Record<string, any>) => {
-    await fetch(`/api/devices/${name}/set`, {
+    await authenticatedFetch(`/api/devices/${name}/set`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI'
       },
       body: JSON.stringify(payload)
     });
@@ -79,11 +80,10 @@ export function useDevices() {
   // permit join control
   const permitJoin = useCallback(async (value: boolean, time: number = 254) => {
     try {
-      await fetch('/api/bridge/permit_join', {
+      await authenticatedFetch('/api/bridge/permit_join', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI'
         },
         body: JSON.stringify({ value, time })
       });
@@ -93,20 +93,19 @@ export function useDevices() {
   }, []);
 
   const renameDevice = useCallback(async (old_name: string, new_name: string) => {
-    await fetch(`/api/device/${old_name}/rename`, {
+    await authenticatedFetch(`/api/device/${old_name}/rename`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' },
+        headers: { 'Content-Type': 'application/json'},
         body: JSON.stringify({ new_name })
     });
   }, []);
 
   const deleteDevice = useCallback(async (deviceId: string) => {
     try {
-      await fetch(`/api/devices/${deviceId}`, {
+      await authenticatedFetch(`/api/devices/${deviceId}`, {
         method: 'DELETE',
         headers: { 
-          'Content-Type': 'application/json', 
-          'X-API-Key': '8tA2A5XDOmoObaeAPJsTiopbrXAcdKfMtrlke6M3NlI' 
+          'Content-Type': 'application/json' 
         }
       });
     } catch (e) {
