@@ -11,11 +11,12 @@ from api.models import (
     BridgeHealthResponse, BridgeInfoResponse, PermitJoinRequest, GroupCreateRequest, 
     GroupMemberRequest, RenameRequest,
 )
-from api.auth import verify_api_key
+from api.auth import get_current_user, get_ws_authenticated_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(verify_api_key)])
+# Change this line in services/gateway/api/routes.py
+router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(get_current_user)])
 
 # ====================================================================================
 # Device Routes
@@ -488,23 +489,26 @@ ws_router = APIRouter(prefix="/api", tags=["Realtime"])
 
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Real-time stream of digital twin updates."""
+    """Real-time stream of digital twin updates protected by HttpOnly Session context."""
     await websocket.accept()
     
-    # Grab the bus directly from the application state
+    # 1. Execute initial handshake authentication via ambient cookie extraction
+    user = await get_ws_authenticated_user(websocket)
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+        
     bus = websocket.app.state.bus 
     queue = bus.subscribe()
-    
     try:
         while True:
             msg = await queue.get()
             await websocket.send_json(msg)
     except WebSocketDisconnect:
-        # Normal client disconnect
         pass
     except asyncio.CancelledError:
-        # Server is shutting down, Uvicorn is cancelling this task
         raise
     finally:
-        # ALWAYS clean up the queue to prevent memory leaks
         bus.unsubscribe(queue)
+
+

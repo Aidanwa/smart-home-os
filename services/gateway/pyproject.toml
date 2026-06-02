@@ -12,6 +12,9 @@ dependencies = [
     "pydantic-settings",
     "aiomqtt>=2.5.1",
     "shared",
+    "pyjwt>=2.13.0",
+    "passlib>=1.7.4",
+    "bcrypt==4.0.1",
 ]
 
 [tool.uv.sources]

@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from core.mqtt_bus import AsyncMqttBus
 from api.config import get_config
 from api.routes import router, ws_router
+from api.auth_routes import auth_router, platform_router
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -65,6 +66,8 @@ def create_app() -> FastAPI:
     # Mount routers
     app.include_router(router)
     app.include_router(ws_router)
+    app.include_router(auth_router)
+    app.include_router(platform_router)
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
