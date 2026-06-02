@@ -37,22 +37,48 @@ export function LoginCard() {
       if (isRegister) {
         const res = await register(username, password);
         if (res.success) {
-          setSuccess('Account created! Proceed to Login.');
+          setSuccess('Identity initialized! Proceed to Login.');
           setIsRegister(false);
           setPassword(''); 
         } else {
-          setError(res.error || 'Registration failed.');
+          // Robust checking loop for registration errors
+          if (res.error && typeof res.error === 'object') {
+            const errorObj = res.error as any;
+            if (Array.isArray(errorObj.detail)) {
+              setError(errorObj.detail.map((d: any) => d.msg).join(', '));
+            } else if (errorObj.detail) {
+              setError(String(errorObj.detail));
+            } else {
+              setError(JSON.stringify(res.error));
+            }
+          } else {
+            setError(res.error || 'Registration failed.');
+          }
         }
       } else {
         const res = await login(username, password);
         if (!res.success) {
-          setError(res.error || 'Authentication failed.');
+          // COMPLETE STABILITY FIX: Handle nested validation arrays safely without passing objects to the DOM
+          if (res.error && typeof res.error === 'object') {
+            const errorObj = res.error as any;
+            
+            // Check if it matches the standard nested detail array array format from your payload
+            if (Array.isArray(errorObj.detail)) {
+              setError(errorObj.detail.map((d: any) => d.msg).join(', '));
+            } else if (errorObj.detail) {
+              setError(String(errorObj.detail));
+            } else {
+              setError(JSON.stringify(res.error));
+            }
+          } else {
+            setError(res.error || 'Invalid username or password.');
+          }
         }
       }
     } catch (err) {
       const isGatewayAlive = await checkGatewayConnectivity();
       if (!isGatewayAlive) {
-        setError('⚠️ Gateway Mesh Unreachable - Verify local host docker-compose stability and container availability.');
+        setError('⚠️ Gateway Mesh Unreachable – Verify local host docker-compose stability and container availability.');
       } else {
         setError('A critical gateway communication error occurred.');
       }
