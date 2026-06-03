@@ -95,7 +95,7 @@ class SmartHomeOrchestrator:
 
         # Conditionally build the tools schema based on the user's ID
         self.tools_schema = get_agent_tools(has_spotify=await self.spotify.check_credentials(user_id))
-        logger.info(f"Tools schema for user {user_id}: {[tool['name'] for tool in self.tools_schema]}")
+        logger.debug(f"Tools schema for user {user_id}: {[tool['name'] for tool in self.tools_schema]}")
         # 2. Retrieve Pruned History
         history = self.memory.get_history(user_id)
         
