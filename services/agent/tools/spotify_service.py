@@ -28,12 +28,20 @@ class SpotifyService:
         # Guard concurrent multi-user refreshes and asyncio.gather splits
         self._lock = asyncio.Lock()
         
-        # Per-User Token Cache: user_id -> {"access_token": str, "expires_at": float}
+        # Per-User Token Cache: user_id -> {"access_token": str}
         self._token_cache: Dict[str, Dict[str, Any]] = {}
 
     async def close(self):
         """Gracefully close the HTTP connection pool."""
         await self.client.aclose()
+
+    async def check_credentials(self, user_id: str) -> bool:
+        """Utility method to verify if valid Spotify credentials exist for a given user."""
+        try:
+            await self._ensure_token(user_id)
+            return True
+        except Exception:
+            return False
 
     async def _resolve_vault_credentials(self, user_id: str) -> dict:
         """
@@ -55,37 +63,49 @@ class SpotifyService:
             return json.loads(raw_payload)
 
     async def _ensure_token(self, user_id: str) -> str:
-        """
-        Resolves access tokens utilizing double-checked locks and per-user
-        in-memory TTL caches to protect against external rate limits.
-        """
+        # 1. ALWAYS query the database first (Sub-millisecond local check)
+        # We do this OUTSIDE the lock so fast-path reads aren't bottlenecked.
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(UserSecret).where(
+                    UserSecret.user_id == user_id, 
+                    UserSecret.provider == "spotify"
+                )
+            )
+            secret_record = result.scalar_one_or_none()
+
+        # 2. Instant Revocation Check
+        if not secret_record:
+            self._token_cache.pop(user_id, None) # Wipe memory if user disconnected
+            raise RuntimeError(
+                "[System Observation: Spotify configuration is absent. "
+                "Prompt the user to navigate to Settings to link their account profile (Settings → External Providers).]"
+            )
+
         now = time.time()
         
-        # 1. Hotpath Check: Return cache instantly if valid (using 30-second buffer window)
+        # 3. Hotpath Cache Check (with 30-second safety buffer)
         if user_id in self._token_cache:
             cache = self._token_cache[user_id]
             if now < cache["expires_at"] - 30:
                 return cache["access_token"]
 
-        # 2. Synchronize concurrent paths (e.g. from asyncio.gather loops)
+        # 4. Coldpath: Token is missing or expired. Acquire lock to prevent race conditions.
         async with self._lock:
             now = time.time()
-            # Double-check cache state after acquiring lock
+            
+            # Double-check cache state after acquiring lock 
+            # (Another concurrent task might have JUST finished refreshing it while we waited!)
             if user_id in self._token_cache:
                 cache = self._token_cache[user_id]
                 if now < cache["expires_at"] - 30:
                     return cache["access_token"]
 
-            try:
-                creds = await self._resolve_vault_credentials(user_id)
-                client_id = creds.get("client_id")
-                client_secret = creds.get("client_secret")
-                refresh_token = creds.get("refresh_token")
-            except Exception:
-                raise RuntimeError(
-                    "[System Observation: Spotify configuration is absent. "
-                    "Prompt the user to navigate to Settings to link their account profile.]"
-                )
+            # 5. Extract Vault Credentials
+            creds = json.loads(secret_record.encrypted_credentials)
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
+            refresh_token = creds.get("refresh_token")
 
             if not (client_id and client_secret and refresh_token):
                 raise RuntimeError(
@@ -93,7 +113,7 @@ class SpotifyService:
                     "Prompt the user to re-link credentials in Settings.]"
                 )
 
-            # Execute OAuth refresh token update
+            # 6. Execute OAuth refresh token update
             response = await self.client.post(
                 self.token_url,
                 data={"grant_type": "refresh_token", "refresh_token": refresh_token},
@@ -102,16 +122,16 @@ class SpotifyService:
             response.raise_for_status()
             data = response.json()
             
-            access_token = data["access_token"]
+            new_access_token = data["access_token"]
             expires_in = int(data.get("expires_in", 3600))
             
-            # Commit item to the context cache map
+            # 7. Commit new token to the memory cache map
             self._token_cache[user_id] = {
-                "access_token": access_token,
+                "access_token": new_access_token,
                 "expires_at": now + expires_in
             }
             
-            return access_token
+            return new_access_token
 
     async def _request(self, user_id: str, method: str, path: str, params=None, json_data=None) -> Dict[str, Any]:
         # Fetch token and build explicit local request context
@@ -125,7 +145,30 @@ class SpotifyService:
         # Guard against 204 No Content or hidden whitespace payload strings
         if response.status_code == 204 or not response.text.strip():
             return {}
-            
+        
+        if response.status_code == 403:
+            try:
+                # Parse JSON exactly once
+                error_data = response.json()
+                
+                # Spotify often nests errors like: {"error": {"status": 403, "message": "..."}}
+                nested_error = error_data.get("error", {})
+                
+                if isinstance(nested_error, dict):
+                    err_msg = nested_error.get("message", "No message provided")
+                    err_code = nested_error.get("status", "Unknown 403")
+                else:
+                    # Fallback for flat error structures
+                    err_msg = error_data.get("message", "No message provided")
+                    err_code = nested_error
+                
+                # Use logger.warning or error for 403s so they stand out in your console
+                logger.warning(f"Spotify 403 Error [{err_code}]: {err_msg}.\n Try adding user in spotify developer dashboard")
+                
+            except Exception:
+                # Fallback if the 403 response isn't valid JSON (e.g., an HTML gateway error)
+                logger.warning(f"Spotify 403 Error (Non-JSON response): {response.text}.\n Try adding user in spotify developer dashboard")
+                
         response.raise_for_status()
         
         content_type = response.headers.get("Content-Type", "")

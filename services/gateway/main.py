@@ -15,6 +15,7 @@ from core.mqtt_bus import AsyncMqttBus
 from api.config import get_config
 from api.routes import router, ws_router
 from api.auth_routes import auth_router, platform_router
+from api.integration_routes import integrations_router
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_router)
     app.include_router(auth_router)
     app.include_router(platform_router)
+    app.include_router(integrations_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

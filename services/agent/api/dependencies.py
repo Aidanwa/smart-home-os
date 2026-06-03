@@ -6,7 +6,6 @@ from providers.openai import OpenAIProvider
 from tools.spotify_service import SpotifyService
 from tools.gateway_api import GatewayClient
 from core.memory import MemoryManager
-from tools.schema import SMART_HOME_TOOLS
 from tools.weather_service import WeatherService
 
 # Configuration from environment variables
@@ -26,6 +25,7 @@ SYSTEM_PROMPT = """
 You are a smart home brain.
 Your job is to assist the user by manipulating the smart devices.
 Be very concise, responses will be read aloud and should be natural but efficient.
+Keep responses short and to the point, as they will be read aloud.
 
 Current Home State:
 {homestate}
@@ -74,7 +74,6 @@ orchestrator = SmartHomeOrchestrator(
     weather_service=weather_service,
     spotify_service=spotify_service,
     system_prompt_tmpl=SYSTEM_PROMPT,
-    tools_schema=SMART_HOME_TOOLS,
     tool_map=TOOL_REGISTRY
 )
 

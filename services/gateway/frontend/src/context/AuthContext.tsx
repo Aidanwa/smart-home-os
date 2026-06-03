@@ -13,7 +13,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   logout: () => Promise<void>;
-  authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>; // <-- ADDED THIS
+  authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

@@ -11,7 +11,7 @@ const SpotifyLogo = () => (
 
 const OpenAILogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current text-purple-400" xmlns="http://www.w3.org/2000/svg">
-    <path d="M21.322 10.19a4.872 4.872 0 0 0-.416-2.228 4.93 4.93 0 0 0-1.637-1.921 4.908 4.908 0 0 0-1.255-.656 4.93 4.93 0 0 0-2.336-.089 4.896 4.896 0 0 0-2.036-1.5 4.954 4.954 0 0 0-3.328 0 4.896 4.896 0 0 0-2.036 1.5A4.93 4.93 0 0 0 5.94 5.385a4.908 4.908 0 0 0-1.255 $.656 4.93 4.93 0 0 0-1.637 1.92 4.872 4.872 0 0 0-.416 2.229 4.92 4.92 0 0 0 .157 2.261A4.93 4.93 0 0 0 4.43 14.37a4.908 4.908 0 0 0 1.255.656 4.93 4.93 0 0 0 2.336.089 4.896 4.896 0 0 0 2.036 1.5 4.954 4.954 0 0 0 3.328 0 4.896 4.896 0 0 0 2.036-1.5 4.93 4.93 0 0 0 2.338-.089 4.908 4.908 0 0 0 1.255-.656 4.93 4.93 0 0 0 1.637-1.92 4.872 4.872 0 0 0 .416-2.229 4.92 4.92 0 0 0-.157-2.261zm-10.46 8.53a2.91 2.91 0 0 1-1.32-.486l3.54-2.045a.516.516 0 0 0 .257-.447v-4.93l1.455.84a.042.042 0 0 1 .022.031v4.067a2.935 2.935 0 0 1-3.954 2.97zm-5.89-4.22a2.91 2.91 0 0 1-.225-1.39l3.54 2.044a.516.516 0 0 0 .513 0l4.27-2.464v1.68a.042.042 0 0 1-.013.036l-3.522 2.034a2.935 2.935 0 0 1-4.113-.94zm-.952-6.52a2.91 2.91 0 0 1 1.096-.904l.004 4.09a.516.516 0 0 0 .257.446l4.27 2.465-1.454.84a.042.042 0 0 1-.035.004l-3.522-2.034a2.935 2.935 0 0 1-.616-3.907zM11.66 4.41a2.91 2.91 0 0 1 1.32.486l-3.54 2.045a.516.516 0 0 0-.257.447v4.93l-1.455-.84a.042.042 0 0 1-.022-.031V7.38a2.935 2.935 0 0 1 3.954-2.97zm5.89 4.22a2.91 2.91 0 0 1 .225 1.39l-3.54-2.044a.516.516 0 0 0-.513 0L9.452 10.44V8.76a.042.042 0 0 1 .013-.036l3.522-2.034a2.935 2.935 0 0 1 4.113.94zm.952 6.52a2.91 2.91 0 0 1-1.096.904l-.004-4.09a.516.516 0 0 0-.257-.446l-4.27-2.465 1.455-.84a.042.042 0 0 1 .035-.004l3.522 2.034a2.935 2.935 0 0 1 .616 3.907zM12 13.064l-2.435-1.406V8.844L12 7.438l2.435 1.406v2.814L12 13.064z"/>
+    <path d="M21.322 10.19a4.872 4.872 0 0 0-.416-2.228 4.93 4.93 0 0 0-1.637-1.921 4.908 4.908 0 0 0-1.255-.656 4.93 4.93 0 0 0-2.336-.089 4.896 4.896 0 0 0-2.036-1.5 4.954 4.954 0 0 0-3.328 0 4.896 4.896 0 0 0-2.036 1.5A4.93 4.93 0 0 0 5.94 5.385a4.908 4.908 0 0 0-1.255-.656 4.93 4.93 0 0 0-1.637 1.92 4.872 4.872 0 0 0-.416 2.229 4.92 4.92 0 0 0 .157 2.261A4.93 4.93 0 0 0 4.43 14.37a4.908 4.908 0 0 0 1.255.656 4.93 4.93 0 0 0 2.336.089 4.896 4.896 0 0 0 2.036 1.5 4.954 4.954 0 0 0 3.328 0 4.896 4.896 0 0 0 2.036-1.5 4.93 4.93 0 0 0 2.338-.089 4.908 4.908 0 0 0 1.255-.656 4.93 4.93 0 0 0 1.637-1.92 4.872 4.872 0 0 0 .416-2.229 4.92 4.92 0 0 0-.157-2.261zm-10.46 8.53a2.91 2.91 0 0 1-1.32-.486l3.54-2.045a.516.516 0 0 0 .257-.447v-4.93l1.455.84a.042.042 0 0 1 .022.031v4.067a2.935 2.935 0 0 1-3.954 2.97zm-5.89-4.22a2.91 2.91 0 0 1-.225-1.39l3.54 2.044a.516.516 0 0 0 .513 0l4.27-2.464v1.68a.042.042 0 0 1-.013.036l-3.522 2.034a2.935 2.935 0 0 1-4.113-.94zm-.952-6.52a2.91 2.91 0 0 1 1.096-.904l.004 4.09a.516.516 0 0 0 .257.446l4.27 2.465-1.454.84a.042.042 0 0 1-.035.004l-3.522-2.034a2.935 2.935 0 0 1-.616-3.907zM11.66 4.41a2.91 2.91 0 0 1 1.32.486l-3.54 2.045a.516.516 0 0 0-.257.447v4.93l-1.455-.84a.042.042 0 0 1-.022-.031V7.38a2.935 2.935 0 0 1 3.954-2.97zm5.89 4.22a2.91 2.91 0 0 1 .225 1.39l-3.54-2.044a.516.516 0 0 0-.513 0L9.452 10.44V8.76a.042.042 0 0 1 .013-.036l3.522-2.034a2.935 2.935 0 0 1 4.113.94zm.952 6.52a2.91 2.91 0 0 1-1.096.904l-.004-4.09a.516.516 0 0 0-.257-.446l-4.27-2.465 1.455-.84a.042.042 0 0 1 .035-.004l3.522 2.034a2.935 2.935 0 0 1 .616 3.907zM12 13.064l-2.435-1.406V8.844L12 7.438l2.435 1.406v2.814L12 13.064z"/>
   </svg>
 );
 
@@ -19,15 +19,33 @@ export function SettingsView() {
   const { user, logout, authenticatedFetch } = useAuth();
   const [settingsTab, setSettingsTab] = useState<'account' | 'connections' | 'admin'>('account');
   
-  // Phase 2: User Profile Form Handlers
+  // User Profile Form Handlers
   const [username, setUsername] = useState(user?.username || '');
   const [newPassword, setNewPassword] = useState('');
   const [profileStatus, setProfileStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Phase 1: Credential Vault State Management
-  const [activeVaultProvider, setActiveVaultProvider] = useState<'spotify' | 'openai' | null>(null);
+  // Credential Vault State Management
+  const [activeVaultProvider, setActiveVaultProvider] = useState<'openai' | null>(null);
   const [vaultSecret, setVaultSecret] = useState('');
   const [vaultStatus, setVaultStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [connectedServices, setConnectedServices] = useState<{spotify: boolean, openai: boolean}>({ spotify: false, openai: false });
+
+  // Fetch integration status when opening the connections tab
+  useEffect(() => {
+    if (settingsTab === 'connections') {
+      fetchIntegrationStatus();
+    }
+  }, [settingsTab]);
+
+  const fetchIntegrationStatus = async () => {
+    try {
+      const res = await authenticatedFetch('/api/integrations/status');
+      const data = await res.json();
+      if (data) setConnectedServices(data);
+    } catch (err) {
+      console.error("Failed to fetch integration status", err);
+    }
+  };
   
   // Logout overlay tracking state
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -38,8 +56,77 @@ export function SettingsView() {
     }
   }, [user]);
 
+  // Check for Spotify OAuth callback on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    // If we detect a code, it means we just returned from Spotify
+    if (code) {
+      setSettingsTab('connections');
+      handleSpotifyCallback(code, state);
+    }
+  }, []); 
+
+  const handleSpotifyCallback = async (code: string, state: string | null) => {
+    setVaultStatus({ type: 'success', message: 'Connecting to Spotify...' });
+    
+    try {
+      const res = await authenticatedFetch('/api/integrations/spotify/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, state }),
+      });
+
+      if (res.ok) {
+        setVaultStatus({ type: 'success', message: 'Spotify linked successfully! Agent is ready to DJ.' });
+        // Clean up the URL so it doesn't try to re-authenticate on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        const data = await res.json();
+        setVaultStatus({ type: 'error', message: data.detail || 'Spotify linking failed.' });
+      }
+    } catch (err) {
+      setVaultStatus({ type: 'error', message: 'Network error during Spotify link.' });
+    }
+  };
+
+  const handleSpotifyLogin = async () => {
+    setVaultStatus({ type: 'success', message: 'Requesting secure link from Gateway...' });
+    try {
+      const res = await authenticatedFetch('/api/integrations/spotify/auth-url');
+      
+      // Check if using standard fetch or axios
+      const data = await res.json(); 
+      console.log("Spotify Auth Data:", data);
+
+      if (data && data.auth_url) {
+        window.location.href = data.auth_url; // This forces the browser to redirect
+      } else {
+        setVaultStatus({ type: 'error', message: 'Gateway did not return a valid auth_url.' });
+      }
+    } catch (err) {
+      console.error("Spotify Link Error:", err);
+      setVaultStatus({ type: 'error', message: 'Network error communicating with gateway.' });
+    }
+  };
+
+  const handleDisconnect = async (provider: string) => {
+    setVaultStatus({ type: 'success', message: `Disconnecting ${provider}...` });
+    try {
+      const res = await authenticatedFetch(`/api/integrations/${provider}`, { method: 'DELETE' });
+      if (res.ok || res.status === 200) {
+        setVaultStatus({ type: 'success', message: `${provider} successfully disconnected.` });
+        fetchIntegrationStatus(); // Refresh the UI state
+      }
+    } catch (err) {
+      setVaultStatus({ type: 'error', message: `Failed to disconnect ${provider}.` });
+    }
+  };
+
   // Phase 2: Profile Syncing & Sanitation Check
-  const handleSaveProfile = async (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setProfileStatus(null);
     
@@ -71,8 +158,8 @@ export function SettingsView() {
     }
   };
 
-  // Phase 1: Vault Token Execution Pipeline
-  const handleSaveVault = async (e: React.FormEvent) => {
+  // Phase 1: Vault Token Execution Pipeline (For manual keys like OpenAI)
+  const handleSaveVault = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!activeVaultProvider) return;
     setVaultStatus(null);
@@ -191,41 +278,87 @@ export function SettingsView() {
           <h2 className="text-base font-medium text-neutral-200">External Cloud Integration Secrets</h2>
           <p className="text-xs text-neutral-500 leading-relaxed">Securely establish identity links with external resource providers to empower your local agentic reasoning capabilities.</p>
           
+          {/* Status banner for Spotify redirects */}
+          {vaultStatus && (
+            <div className={`p-3 rounded-lg text-xs ${vaultStatus.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+              {vaultStatus.message}
+            </div>
+          )}
+
           <div className="space-y-3 pt-2">
+
+            {/* Spotify OAuth Flow */}
             <div className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800/80 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-neutral-900 flex items-center justify-center rounded-lg border border-neutral-800">
                   <SpotifyLogo />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-neutral-200">Spotify Music Link</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium text-neutral-200">Spotify Music Link</h3>
+                    {/* Render a green 'Connected' badge if true */}
+                    {connectedServices.spotify && (
+                      <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-md border border-green-400/20">
+                        <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> Linked
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-neutral-500">Allows your home helper agent to automatically command network media playback items.</p>
                 </div>
               </div>
-              <button 
-                onClick={() => { setActiveVaultProvider('spotify'); setVaultSecret(''); setVaultStatus(null); }}
-                className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
-              >
-                Configure Tokens
-              </button>
+              
+              {connectedServices.spotify ? (
+                <button 
+                  onClick={() => handleDisconnect('spotify')}
+                  className="text-xs px-3 py-1.5 bg-red-950/40 border border-red-900/50 hover:bg-red-900/40 text-red-400 rounded-lg font-medium transition-colors"
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <button 
+                  onClick={handleSpotifyLogin}
+                  className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
+                >
+                  Link Account
+                </button>
+              )}
             </div>
 
+            {/* OpenAI Standard Key Vault Flow */}
             <div className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800/80 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-neutral-900 flex items-center justify-center rounded-lg border border-neutral-800">
                   <OpenAILogo />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-neutral-200">OpenAI Credentials Vault</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium text-neutral-200">OpenAI Credentials Vault</h3>
+                    {connectedServices.openai && (
+                      <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-md border border-green-400/20">
+                        <div className="w-1.5 h-1.5 bg-green-400 rounded-full" /> Active
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-neutral-500">Links secure developer platform API tokens into your local chat orchestrator loop.</p>
                 </div>
               </div>
-              <button 
-                onClick={() => { setActiveVaultProvider('openai'); setVaultSecret(''); setVaultStatus(null); }}
-                className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
-              >
-                Configure Keys
-              </button>
+              
+              <div className="flex gap-2">
+                {connectedServices.openai && (
+                  <button 
+                    onClick={() => handleDisconnect('openai')}
+                    className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-red-900/40 hover:text-red-400 hover:border-red-900/50 text-neutral-400 rounded-lg font-medium transition-colors"
+                  >
+                    Delink
+                  </button>
+                )}
+                <button 
+                  onClick={() => { setActiveVaultProvider('openai'); setVaultSecret(''); setVaultStatus(null); }}
+                  className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
+                >
+                  {connectedServices.openai ? 'Update Key' : 'Configure Keys'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -243,7 +376,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* Slide-over Drawer Layer Panel */}
+      {/* Slide-over Drawer Layer Panel (Now only used for OpenAI) */}
       {activeVaultProvider && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" onClick={() => setActiveVaultProvider(null)} />
@@ -252,8 +385,8 @@ export function SettingsView() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
                   <h3 className="text-lg font-medium text-neutral-100 flex items-center gap-2.5">
-                    {activeVaultProvider === 'spotify' ? <SpotifyLogo /> : <OpenAILogo />}
-                    Configure {activeVaultProvider === 'spotify' ? 'Spotify Links' : 'OpenAI Keys'}
+                    <OpenAILogo />
+                    Configure OpenAI Keys
                   </h3>
                   <button onClick={() => setActiveVaultProvider(null)} className="text-neutral-500 hover:text-neutral-300 text-sm font-medium">✕</button>
                 </div>
@@ -261,13 +394,13 @@ export function SettingsView() {
                 <form onSubmit={handleSaveVault} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">
-                      {activeVaultProvider === 'spotify' ? 'Client Secret Token' : 'API Key String'}
+                      API Key String
                     </label>
                     <input 
                       type="password" 
                       value={vaultSecret}
                       onChange={(e) => setVaultSecret(e.target.value)}
-                      placeholder={activeVaultProvider === 'spotify' ? 'Enter encrypted Spotify token...' : 'sk-proj-••••••••'}
+                      placeholder="sk-proj-••••••••"
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-sm font-mono text-neutral-100 focus:outline-none focus:border-neutral-600 transition-colors"
                       required
                     />
