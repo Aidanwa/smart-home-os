@@ -40,7 +40,7 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
         },
         {
             "name": "update_user_profile",
-            "description": "Saves long-term memory, facts, or preferences about the user. Re-write the entire memory file incorporating the new facts alongside existing ones.",
+            "description": "Saves long-term memory, facts, or preferences about the user. Re-write the entire memory file incorporating the new facts alongside existing ones. Keep the text as concise and efficient as possible. Do not delete old information unless intentional.",
             "parameters": {
                 "type": "object",
                 "properties": {

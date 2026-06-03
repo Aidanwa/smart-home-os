@@ -1,16 +1,17 @@
+import uuid
 import logging
+from typing import Dict, Any, List
+from sqlalchemy.future import select
+from shared.database.core import AsyncSessionLocal
+from shared.database.models import UserPreference
+from datetime import datetime, timedelta
 import os
 import json
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
 class MemoryManager:
-    def __init__(self, profile_dir: str = "/app/data/profiles"):
-        self.profile_dir = profile_dir
-        os.makedirs(self.profile_dir, exist_ok=True)
-        
+    def __init__(self):
         # Structure: {"user_id": [{"timestamp": datetime, "message": {...}}]}
         self._short_term: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -42,6 +43,10 @@ class MemoryManager:
             "message": message
         })
 
+    def delete_history(self, user_id: str):
+        """Clears the user's short-term history."""
+        self._short_term[user_id] = []
+        return
 
     def pretty_print_history(self, user_id: str):
         """
@@ -91,22 +96,61 @@ class MemoryManager:
 
     # --- Long-Term Memory (Persistent Text File) ---
     
-    def get_user_profile(self, user_id: str) -> str:
-        """Reads the user's persistent memory file."""
-        file_path = os.path.join(self.profile_dir, f"{user_id}.txt")
-        if not os.path.exists(file_path):
-            return "No specific preferences or memories recorded yet."
-            
-        with open(file_path, "r") as f:
-            return f.read()
-
-    # NOTE: We make this async so it can be called as an LLM Tool!
-    async def update_user_profile(self, user_id: str, new_content: str) -> Dict[str, Any]:
-        """Tool: Overwrites the user's persistent memory file with new facts."""
-        file_path = os.path.join(self.profile_dir, f"{user_id}.txt")
+    async def get_user_profile(self, user_id: str) -> str:
+        """Reads the user's persistent memory entry from the database."""
         try:
-            with open(file_path, "w") as f:
-                f.write(new_content)
-            return {"status": "success", "message": "Memory successfully updated."}
+            # Ensure the user_id is a proper UUID object
+            uid = uuid.UUID(user_id)
+            
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(UserPreference).where(UserPreference.user_id == uid)
+                )
+                pref_record = result.scalar_one_or_none()
+                
+                if pref_record and pref_record.agent_settings:
+                    # Extract the memory string, defaulting to empty if not set
+                    return pref_record.agent_settings.get("user_memory", "")
+                
+                return ""
+        except ValueError:
+            logger.error(f"Invalid UUID format provided for user_id: {user_id}")
+            return ""
         except Exception as e:
-            return {"status": "error", "message": f"Failed to save memory: {str(e)}"}
+            logger.error(f"Failed to fetch user profile from database: {e}")
+            return ""
+
+    async def update_user_profile(self, user_id: str, new_content: str) -> Dict[str, Any]:
+        """Tool: Overwrites the user's persistent memory field with new facts."""
+        try:
+            uid = uuid.UUID(user_id)
+            
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(UserPreference).where(UserPreference.user_id == uid)
+                )
+                pref_record = result.scalar_one_or_none()
+
+                if pref_record:
+                    # IMPORTANT: Create a new dict from the existing one so SQLAlchemy 
+                    # detects the mutation and triggers the UPDATE statement for the JSONB column.
+                    current_settings = dict(pref_record.agent_settings) if pref_record.agent_settings else {}
+                    current_settings["user_memory"] = new_content
+                    pref_record.agent_settings = current_settings
+                else:
+                    # If the user has never saved a preference before, create the row
+                    new_pref = UserPreference(
+                        user_id=uid,
+                        ui_settings={},
+                        agent_settings={"user_memory": new_content}
+                    )
+                    session.add(new_pref)
+                
+                await session.commit()
+                return {"status": "success", "message": "Memory successfully securely saved to vault."}
+                
+        except ValueError:
+            return {"status": "error", "message": "Failed to save memory: Invalid User ID format."}
+        except Exception as e:
+            logger.error(f"Database error updating profile for {user_id}: {e}")
+            return {"status": "error", "message": f"Failed to save memory to database vault."}

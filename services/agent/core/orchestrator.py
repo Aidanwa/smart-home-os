@@ -71,7 +71,7 @@ class SmartHomeOrchestrator:
         else:
             current_spotify = cached_spotify
 
-        user_profile = self.memory.get_user_profile(user_id)
+        user_profile = await self.memory.get_user_profile(user_id)
         time_str = now.strftime('%A, %B %d, %Y at %I:%M %p %Z')
         
         # Build Instructions

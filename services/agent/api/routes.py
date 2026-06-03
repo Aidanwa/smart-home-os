@@ -103,6 +103,18 @@ async def get_user_chat_history(
         return {"user_id": user_id, "messages": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to pull historical timeline.")
+    
+@router.delete("/chat/history", response_model=HistoryResponse)
+async def delete_user_chat_history(
+    request: Request,
+    orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
+):
+    user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
+    try:
+        orchestrator.memory.delete_history(user_id)
+        return {"user_id": user_id, "messages": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to delete historical timeline.")
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_sync(

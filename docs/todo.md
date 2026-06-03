@@ -11,7 +11,7 @@ improve agentic ui
 
 ## Adding Accounts and user settings
 
-need to allow users to add openai keys and spotify keys.
+need to allow users to add openai keys.
 
 allow configuring different homes
 

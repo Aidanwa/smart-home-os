@@ -153,5 +153,21 @@ export function useAgentChat() {
     }
   }, []);
 
-  return { messages, isConnected, isStreaming, sendMessage };
+  const DeleteHistory = useCallback(async () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isStreaming) {
+      try {
+        const res = await authenticatedFetch(`/api/agent/chat/history`, { method: 'DELETE' });
+        if (res.ok) {
+          setMessages([]);
+        } else {
+          console.error("Failed to delete chat history:", res.statusText);
+        }
+      }
+      catch (err) {
+        console.error("Failed to safely delete chat history:", err);
+      }
+    }
+  }, []);
+
+  return { messages, isConnected, isStreaming, sendMessage, DeleteHistory };
 }

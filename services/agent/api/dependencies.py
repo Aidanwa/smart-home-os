@@ -1,6 +1,5 @@
 # src/api/dependencies.py
 import os
-from fastapi import Request
 from core.orchestrator import SmartHomeOrchestrator
 from providers.openai import OpenAIProvider
 from tools.spotify_service import SpotifyService
