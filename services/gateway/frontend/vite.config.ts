@@ -23,11 +23,16 @@ export default defineConfig({
         target: 'http://localhost:8000',
         ws: true, // This MUST be true
       },
+      '/api/agent/chat/stream': {
+        target: 'ws://localhost:8001', // Points locally to your running agent container port
+        ws: true,
+        changeOrigin: true,
+      },
       '/api/agent': {
         target: 'http://localhost:8001', // Point to the Agent container
         changeOrigin: true,
-        ws: true, // Enable WebSocket proxying for the chat stream
-      }
+      },
     }
   }
 })
+

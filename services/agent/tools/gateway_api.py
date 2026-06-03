@@ -1,11 +1,16 @@
+# services/agent/tools/gateway_api.py
 import logging
 import os
 import httpx
+import jwt
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-api_key = os.getenv("GATEWAY_API_KEY")
+# Import the identical shared secret utilized by the gateway and routes.py
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7b9d8df2ac3ce72b8d0093cf1b988fce899ea298b11119fcd5c95279da7311ef")
+ALGORITHM = "HS256"
 
 class GatewayClient:
     """
@@ -25,44 +30,54 @@ class GatewayClient:
         """Gracefully close the HTTP connection pool."""
         await self.client.aclose()
 
+    def _mint_user_context_cookie(self, user_id: str) -> Dict[str, str]:
+        """
+        Dynamically generates a short-lived cryptographic token for the target user.
+        This allows the Agent to 'impersonate' the user when hitting the Gateway,
+        ensuring the Gateway's native RBAC/identity middleware accepts the request.
+        """
+        expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+        payload = {
+            "sub": str(user_id),
+            "exp": expire
+        }
+        token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=ALGORITHM)
+        
+        # Return in the exact format httpx expects for cookie injection
+        return {"access_token": token}
+
     # ---------------------------------------------------------
     # Core Context Route
     # ---------------------------------------------------------
-    async def get_filtered_context(self, user_id: str) -> Dict[str, Any]:
+    async def get_filtered_context(self, user_id: str) -> str:
         """
-        Fetches the current state of the home. 
-        Note: Currently fetches the global state via /api/devices. 
-        RBAC filtering based on user_id will be implemented in the future.
-        Returns data in string format for easy injection into LLM prompts.
+        Fetches the current state of the home using an identity-bound request.
         """
         try:
-            # Hitting the existing Phase 1 route to get the full Digital Twin
-            response = await self.client.get("/api/devices", headers={"X-API-Key": api_key})
+            # FIX: Inject the forged identity cookie into the request
+            response = await self.client.get(
+                "/api/devices",
+                cookies=self._mint_user_context_cookie(user_id)
+            )
             response.raise_for_status()
             
-            # The Gateway returns {"count": X, "devices": {...}}. We just need the devices.
             data = response.json()
             devices = data.get("devices", {})
 
             formatted_lines = []
 
             for ieee, attributes in devices.items():
-                # Extract the friendly name
                 friendly_name = attributes.get('friendly_name', 'UnknownDevice')
                 
-                # Gather all other attributes, excluding 'ieee_address' and 'friendly_name'
                 attr_list = [
                     f"{k}: {v}" for k, v in attributes.items() 
                     if k not in ('ieee_address', 'linkquality', 'friendly_name')
                 ]
                 
-                # Join attributes with a comma and format the final string
                 attributes_string = ", ".join(attr_list)
                 formatted_lines.append(f"{friendly_name}: {attributes_string}")
 
-            # Join all lines with a newline character
             final_output = "\n".join(formatted_lines)
-
             return final_output
             
         except httpx.HTTPStatusError as e:
@@ -75,38 +90,36 @@ class GatewayClient:
     # ---------------------------------------------------------
     # LLM Tool Executions
     # ---------------------------------------------------------
-    # The names of these methods MUST match the tool names provided in the LLM's JSON schema!
-    
     async def set_device_state(self, user_id: str, device_id: str, state_changes: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Tool: Changes the state of a specific Zigbee device.
+        Tool: Changes the state of a specific Zigbee device on behalf of the user.
         """
-        logger.info(f"Agent attempting to set {device_id} to {state_changes}")
+        logger.info(f"Agent attempting to set {device_id} to {state_changes} for user {user_id}")
         
         try:
-            # The Gateway POST route you already built in Phase 1
+            # FIX: Attach the delegated user cookie to authorize the write operation
             response = await self.client.post(
                 f"/api/devices/{device_id}/set",
                 json=state_changes,
-                headers={"X-API-Key": api_key}
+                cookies=self._mint_user_context_cookie(user_id)
             )
             response.raise_for_status()
             return {"status": "success", "message": f"Successfully updated {device_id}.", "data": response.json()}
             
         except httpx.HTTPStatusError as e:
             return {"status": "error", "message": f"Gateway rejected the command: {e.response.text}"}
-            
         except Exception as e:
             return {"status": "error", "message": f"Network error communicating with the Gateway: {str(e)}"}
             
     async def rename_group(self, user_id: str, group_name: str, new_name: str) -> Dict[str, Any]:
         """
-        Tool: Renames a Zigbee group.
+        Tool: Renames a Zigbee group on behalf of the user.
         """
         try:
             response = await self.client.put(
                 f"/api/groups/{group_name}/rename",
-                params={"new_name": new_name}
+                params={"new_name": new_name},
+                cookies=self._mint_user_context_cookie(user_id)
             )
             response.raise_for_status()
             return {"status": "success", "message": f"Renamed group {group_name} to {new_name}."}

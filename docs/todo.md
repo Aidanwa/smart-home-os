@@ -11,9 +11,13 @@ improve agentic ui
 
 ## Adding Accounts and user settings
 
-start from scratch
+need to allow users to add openai keys and spotify keys.
 
-allow configuring different houses for saving home shapes
+allow configuring different homes
+
+adding home addresses, coords, etc
+
+saving home shapes
 
 ## adding routines/scheduling/automations
 
@@ -39,4 +43,5 @@ automatic hardware updates for devices, like actually a version updates for the 
 
 # KNOWN BUGS:
 
+brightness is inaccurate and updates wrong a lot
 

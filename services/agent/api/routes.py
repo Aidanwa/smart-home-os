@@ -14,17 +14,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent", tags=["Agentic Chat"])
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7b9d8df2ac3ce72b8d0093cf1b988fce899ea298b11119fcd5c95279da7311ef")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
 # Cryptographic Token Extraction Helper
 def extract_user_id_from_cookie(cookie_string: Optional[str]) -> str:
     if not cookie_string:
+        logger.warning("No cookie header found in request.")
         raise HTTPException(status_code=401, detail="Session token missing.")
     
     cookie = SimpleCookie()
     cookie.load(cookie_string)
     if "access_token" not in cookie:
+        logger.warning("Access token cookie not found in cookie header.")
         raise HTTPException(status_code=401, detail="Access authentication cookie absent.")
         
     token = cookie["access_token"].value
@@ -32,9 +34,12 @@ def extract_user_id_from_cookie(cookie_string: Optional[str]) -> str:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
+            logger.warning("Invalid session subject.")
             raise HTTPException(status_code=401, detail="Invalid session subject.")
+        logger.info(f"Authenticated user_id extracted from cookie: {user_id}")
         return user_id
     except jwt.PyJWTError:
+        logger.warning("Session context expired or signature mismatch.")
         raise HTTPException(status_code=401, detail="Session context expired or signature mismatch.")
 
 class ChatResponse(BaseModel):

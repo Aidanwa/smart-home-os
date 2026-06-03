@@ -25,10 +25,9 @@ export function useAgentChat() {
     let isMounted = true; 
 
     const initializeChat = async () => {
-      // 1. Fetch historical timelines using the global intercepting client wrapper.
-      // This routes directly through the unified gateway layer, allowing seamless cookie transmission.
+      // Fetch the conversation history directly from the Agent container
       try {
-        const res = await authenticatedFetch('/api/agent/chat/history');
+        const res = await authenticatedFetch(`/api/agent/chat/history`);
         if (res.ok) {
           const data = await res.json();
           const historicalMessages: ChatMessage[] = data.messages
@@ -50,7 +49,7 @@ export function useAgentChat() {
           if (isMounted) setMessages(historicalMessages);
         }
       } catch (err) {
-        console.error("Failed to safely sync agentic background layout history:", err);
+        console.error("Failed to safely load chat history:", err);
       }
 
       // 2. Open the WebSocket connection utilizing ambient cookie propagation
