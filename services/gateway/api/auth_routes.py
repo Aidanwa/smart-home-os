@@ -80,14 +80,15 @@ async def login_user(request: UserAuthRequest, response: Response, db: AsyncSess
         httponly=True,
         samesite="strict",
         secure=False,  # Set to True in production environment with managed SSL/TLS termination
-        max_age=60 * 24 * 30 * 60  # 30-day duration matching access token expiry configurations
+        max_age=60 * 24 * 30 * 60,  # 30-day duration matching access token expiry configurations
+        path="/",
     )
     logger.info(f"User '{user.username}' authenticated successfully. Access token issued.")
     return {"status": "success", "username": user.username}
 
 @auth_router.post("/logout")
 async def logout_user(response: Response):
-    response.delete_cookie(key="access_token", samesite="strict", httponly=True)
+    response.delete_cookie(key="access_token", samesite="strict", httponly=True, path="/")
     logger.info(f"User logged out successfully.")
 
     return {"status": "success", "message": "Active session cleared successfully."}
