@@ -1,5 +1,3 @@
-import os
-from datetime import datetime
 from typing import List, Dict, Any
 
 def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
@@ -7,17 +5,6 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
     Returns the dynamic list of tools available to the LLM agent.
     Conditionally injects Spotify tools if the user has linked their account.
     """
-    # Dynamically calculate local timezone for the weather tool schema
-    tz_env = os.getenv("TIMEZONE", "").strip()
-    if tz_env:
-        local_timezone = tz_env
-    else:
-        now = datetime.now().astimezone()
-        tz_name = now.tzname()
-        tz_offset = now.strftime("%z")
-        tz_offset_formatted = f"{tz_offset[:3]}:{tz_offset[3:]}"
-        local_timezone = f"{tz_name} (UTC{tz_offset_formatted})"
-
     # Base Tools (Always available)
     tools = [
         {
@@ -56,7 +43,6 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
             "name": "get_weather",
             "description": (
                 f"Get weather information from weather.gov with control over time. "
-                f"Your local timezone is {local_timezone}. "
                 f"ALWAYS use your local timezone in timestamps (e.g., '2025-11-12T18:00:00-05:00'), NEVER use UTC unless explicitly requested."
             ),
             "parameters": {
@@ -75,7 +61,7 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
                     },
                     "forecast_times_iso": {
                         "type": "string",
-                        "description": f"ISO-8601 timestamp in LOCAL TIMEZONE {local_timezone} with offset (e.g., '2025-11-12T18:00:00-05:00'). MUST include timezone offset. NEVER use UTC (e.g., '...Z') unless explicitly requested. For current weather, use 'now'.",
+                        "description": f"ISO-8601 timestamp in LOCAL TIMEZONE with offset (e.g., '2025-11-12T18:00:00-05:00'). MUST include timezone offset. NEVER use UTC (e.g., '...Z') unless explicitly requested. For current weather, use 'now'.",
                         "default": "now"
                     }
                 },

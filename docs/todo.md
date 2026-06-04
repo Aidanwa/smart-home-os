@@ -3,7 +3,7 @@
 
 ## Adding agent logic
 
-add more providers i.e. ollama, 
+add more providers i.e. ollama, gemini, claude
 
 ADD VOICE INPUT
 
@@ -19,15 +19,19 @@ need to allow users to add openai keys.
 
 saving home shapes
 
+Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
+
 ## adding routines/scheduling/automations
 
 This is a big necessary next step for smart home robustness
 
 add cool triggers such as sunrise/sunset
 
-## Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
+## Digital Wardrobe Management
 
-have ui that allows users to custom define room shapes
+create wardrobe table.
+
+add option to import csv with wardrobe to mass add rows to table, or add individually in UI.
 
 # SMALLER FEATURES:
 
