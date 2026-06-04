@@ -201,29 +201,29 @@ class WeatherService:
     async def get_weather(
         self, 
         user_id: str, 
-        granularity: str = "daily", 
-        forecast_times_iso: str = "now", 
-        location: str = "home"
+        type: str = "daily", 
+        time: str = "now", 
+        loc: str = "home"
     ) -> Dict[str, Any]:
         """
         Tool: Get weather information from weather.gov.
         """
         try:
             # 1. Validate and clean timestamp format
-            if forecast_times_iso.lower() != "now":
-                if not ('+' in forecast_times_iso or '-' in forecast_times_iso.split('T')[-1] or forecast_times_iso.endswith('Z')):
+            if time.lower() != "now":
+                if not ('+' in time or '-' in time.split('T')[-1] or time.endswith('Z')):
                     try:
-                        dt_naive = datetime.fromisoformat(forecast_times_iso)
+                        dt_naive = datetime.fromisoformat(time)
                         local_tz = datetime.now().astimezone().tzinfo
                         dt_aware = dt_naive.replace(tzinfo=local_tz)
                         forecast_times_iso = dt_aware.isoformat()
                         logger.warning(f"Timestamp was missing timezone, added local timezone: {forecast_times_iso}")
                     except Exception as e:
-                        return {"status": "error", "message": f"Timestamp must include timezone offset. Got: '{forecast_times_iso}'"}
+                        return {"status": "error", "message": f"Timestamp must include timezone offset. Got: '{time}'"}
 
             # 2. Resolve Database or Coordinate locations dynamically
             try:
-                lat, lon, grid = await self._resolve_location(location)
+                lat, lon, grid = await self._resolve_location(loc)
             except ValueError as ve:
                 return {"status": "error", "message": f"[System Observation: {str(ve)}]"}
 
@@ -243,15 +243,15 @@ class WeatherService:
                     raise Exception("NWS API did not return forecast endpoints for these coordinates.")
 
             # 4. Fetch and summarize based on requested granularity
-            if granularity == "hourly":
+            if type == "hourly":
                 hourly_data = await self._get_json(hourly_url)
-                summary_str = summarize_nws_hourly(hourly_data.get("periods", []), forecast_times_iso, units="F")
+                summary_str = summarize_nws_hourly(hourly_data.get("periods", []), time, units="F")
             else:  # "daily" (default)
                 daily_data = await self._get_json(forecast_url)
                 logger.debug(f"Raw daily forecast data: {daily_data}")
-                summary_str = summarize_nws_daily(daily_data.get("periods", []), forecast_times_iso, units="F")
+                summary_str = summarize_nws_daily(daily_data.get("periods", []), time, units="F")
 
-            logger.info(f"Weather forecast retrieved for location: {location}")
+            logger.info(f"Weather forecast retrieved for location: {loc}")
             return {"status": "success", "data": summary_str}
 
         except Exception as e:

@@ -256,23 +256,23 @@ class SpotifyService:
     # ---------------------------------------------------------
     # LLM Tool Executions (Names must match schema!)
     # ---------------------------------------------------------
-    async def spotify_play(self, user_id: str, market="US", device=None, position_ms=0, query_type="track", query=None, context_uri=None, uris=None, **kwargs) -> Dict[str, Any]:
+    async def spotify_play(self, user_id: str, market="US", dev=None, pos=0, q_type="track", q=None, ctx=None, uris=None, **kwargs) -> Dict[str, Any]:
         """Tool: Start/resume playback."""
         try:
-            device_id = await self._resolve_device_id(user_id, device)
-            if not uris and not context_uri and query:
-                item = await self._search_one(user_id, query, query_type, market)
+            device_id = await self._resolve_device_id(user_id, dev)
+            if not uris and not ctx and q:
+                item = await self._search_one(user_id, q, q_type, market)
                 if not item:
                     return {"status": "error", "message": "No search results found."}
-                if query_type == "track":
+                if q_type == "track":
                     uris = [item["uri"]]
                 else:
-                    context_uri = item["uri"]
+                    ctx = item["uri"]
                     
             body = {}
             if uris: body["uris"] = uris
-            if context_uri: body["context_uri"] = context_uri
-            if position_ms: body["position_ms"] = int(position_ms)
+            if ctx: body["context_uri"] = ctx
+            if pos: body["position_ms"] = int(pos)
 
             await self._request(
                 user_id, "PUT", "/me/player/play", 
@@ -285,54 +285,53 @@ class SpotifyService:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    async def spotify_controller(self, user_id: str, command: str, device: str = None, shuffle_state: bool = True, repeat_mode: str = "context", volume_percent: int = None, force_play: bool = True, **kwargs) -> Dict[str, Any]:
+    async def spotify_controller(self, user_id: str, cmd: str, dev: str = None, shuf: bool = True, rep: str = "context", vol: int = None, force_play: bool = True, **kwargs) -> Dict[str, Any]:
         """Tool: Unified transport, volume, and device controller for Spotify."""
         try:
-            device_id = await self._resolve_device_id(user_id, device)
+            device_id = await self._resolve_device_id(user_id, dev)
             params = {"device_id": device_id} if device_id else {}
             
-            command = command.lower()
+            cmd = cmd.lower()
             
-            if command == "pause":
+            if cmd == "pause":
                 await self._request(user_id, "PUT", "/me/player/pause", params=params)
                 message = "Playback paused."
                 
-            elif command == "next":
+            elif cmd == "next":
                 await self._request(user_id, "POST", "/me/player/next", params=params)
                 message = "Skipped to next track."
                 
-            elif command == "previous":
+            elif cmd == "previous":
                 await self._request(user_id, "POST", "/me/player/previous", params=params)
                 message = "Skipped to previous track."
                 
-            elif command == "shuffle":
-                params["state"] = "true" if shuffle_state else "false"
+            elif cmd == "shuffle":
+                params["state"] = "true" if shuf else "false"
                 await self._request(user_id, "PUT", "/me/player/shuffle", params=params)
-                message = f"Shuffle turned {'on' if shuffle_state else 'off'}."
+                message = f"Shuffle turned {'on' if shuf else 'off'}."
                 
-            elif command == "repeat":
-                if repeat_mode not in ["track", "context", "off"]:
-                    repeat_mode = "context"
-                params["state"] = repeat_mode
+            elif cmd == "repeat":
+                if rep not in ["track", "context", "off"]:
+                    rep = "context"
+                params["state"] = rep
                 await self._request(user_id, "PUT", "/me/player/repeat", params=params)
-                message = f"Repeat mode set to {repeat_mode}."
-                
-            elif command == "volume":
-                if volume_percent is None:
+                message = f"Repeat mode set to {rep}."
+            elif cmd == "volume":
+                if vol is None:
                     return {"status": "error", "message": "volume_percent is required for volume command."}
-                percent = max(0, min(100, int(volume_percent)))
+                percent = max(0, min(100, int(vol)))
                 params["volume_percent"] = percent
                 await self._request(user_id, "PUT", "/me/player/volume", params=params)
                 message = f"Volume set to {percent}%."
                 
-            elif command == "transfer":
+            elif cmd == "transfer":
                 if not device_id:
-                    return {"status": "error", "message": f"Device '{device}' not found. Please provide a valid device to transfer to."}
+                    return {"status": "error", "message": f"Device '{dev}' not found. Please provide a valid device to transfer to."}
                 await self._request(user_id, "PUT", "/me/player", json_data={"device_ids": [device_id], "play": force_play})
                 message = f"Playback transferred to selected device."
                 
             else:
-                return {"status": "error", "message": f"Unknown command: {command}"}
+                return {"status": "error", "message": f"Unknown command: {cmd}"}
 
             return {"status": "success", "message": message}
             
@@ -370,7 +369,7 @@ class SpotifyService:
         except Exception as e:
             return {"status": "error", "message": f"Failed to get advanced info: {str(e)}"}
 
-    async def spotify_search(self, user_id: str, query: str, types: list = None, limit: int = 3, market: str = "US", **kwargs) -> Dict[str, Any]:
+    async def spotify_search(self, user_id: str, q: str, types: list = None, limit: int = 3, market: str = "US", **kwargs) -> Dict[str, Any]:
         """Tool: Search Spotify catalog and return condensed, token-efficient results."""
         if not types:
             types = ["track"]
@@ -380,7 +379,7 @@ class SpotifyService:
         
         try:
             data = await self._request(user_id, "GET", "/search", params={
-                "q": query,
+                "q": q,
                 "type": type_str,
                 "limit": limit,
                 "market": market

@@ -11,11 +11,17 @@ allow changing the model
 
 improve prompting?
 
+one tool call to update multiple devices
+
+make user memory update tool diff based instead of a full rewrite
+
 improve spotify tool suite to include finding user playlists/library
 
 ## Adding Accounts and user settings
 
 need to allow users to add openai keys.
+
+delete account button
 
 saving home shapes
 

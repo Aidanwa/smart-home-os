@@ -51,20 +51,20 @@ Rules:
 
 TOOL_REGISTRY = {
     # Home Control
-    "set_device_state": gateway_client.set_device_state,
-    "rename_group": gateway_client.rename_group,
+    "set_state": gateway_client.set_device_state,
+    # "rename_group": gateway_client.rename_group,
     
     # Memory
-    "update_user_profile": memory_manager.update_user_profile,
+    "update_memory": memory_manager.update_user_profile,
 
     # Weather
     "get_weather": weather_service.get_weather,
 
     # spotify
-    "spotify_play": spotify_service.spotify_play,
-    "spotify_controller": spotify_service.spotify_controller,
-    "spotify_get_advanced_info": spotify_service.spotify_get_advanced_info,
-    "spotify_search": spotify_service.spotify_search,
+    "spot_play": spotify_service.spotify_play,
+    "spot_ctrl": spotify_service.spotify_controller,
+    "spot_info": spotify_service.spotify_get_advanced_info,
+    "spot_search": spotify_service.spotify_search,
 }
 
 orchestrator = SmartHomeOrchestrator(

@@ -120,7 +120,7 @@ class MemoryManager:
             logger.error(f"Failed to fetch user profile from database: {e}")
             return ""
 
-    async def update_user_profile(self, user_id: str, new_content: str) -> Dict[str, Any]:
+    async def update_user_profile(self, user_id: str, text: str) -> Dict[str, Any]:
         """Tool: Overwrites the user's persistent memory field with new facts."""
         try:
             uid = uuid.UUID(user_id)
@@ -135,14 +135,14 @@ class MemoryManager:
                     # IMPORTANT: Create a new dict from the existing one so SQLAlchemy 
                     # detects the mutation and triggers the UPDATE statement for the JSONB column.
                     current_settings = dict(pref_record.agent_settings) if pref_record.agent_settings else {}
-                    current_settings["user_memory"] = new_content
+                    current_settings["user_memory"] = text
                     pref_record.agent_settings = current_settings
                 else:
                     # If the user has never saved a preference before, create the row
                     new_pref = UserPreference(
                         user_id=uid,
                         ui_settings={},
-                        agent_settings={"user_memory": new_content}
+                        agent_settings={"user_memory": text}
                     )
                     session.add(new_pref)
                 

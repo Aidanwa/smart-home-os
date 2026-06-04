@@ -76,7 +76,7 @@ class SmartHomeOrchestrator:
                 (now - self._weather_last_fetched) > self._weather_cache_ttl):
                 
                 weather_response = await self.weather.get_weather(
-                    user_id=user_id, granularity="hourly", forecast_times_iso="now", location="home"
+                    user_id=user_id, type="hourly", time="now", loc="home"
                 )
                 if weather_response.get("status") == "success":
                     self._system_weather_cache = weather_response["data"]

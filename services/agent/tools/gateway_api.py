@@ -90,21 +90,21 @@ class GatewayClient:
     # ---------------------------------------------------------
     # LLM Tool Executions
     # ---------------------------------------------------------
-    async def set_device_state(self, user_id: str, device_id: str, state_changes: Dict[str, Any]) -> Dict[str, Any]:
+    async def set_device_state(self, user_id: str, id: str, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Tool: Changes the state of a specific Zigbee device on behalf of the user.
         """
-        logger.info(f"Agent attempting to set {device_id} to {state_changes} for user {user_id}")
+        logger.info(f"Agent attempting to set {id} to {state} for user {user_id}")
         
         try:
             # FIX: Attach the delegated user cookie to authorize the write operation
             response = await self.client.post(
-                f"/api/devices/{device_id}/set",
-                json=state_changes,
+                f"/api/devices/{id}/set",
+                json=state,
                 cookies=self._mint_user_context_cookie(user_id)
             )
             response.raise_for_status()
-            return {"status": "success", "message": f"Successfully updated {device_id}.", "data": response.json()}
+            return {"status": "success", "message": f"Successfully updated {id}.", "data": response.json()}
             
         except httpx.HTTPStatusError as e:
             return {"status": "error", "message": f"Gateway rejected the command: {e.response.text}"}
