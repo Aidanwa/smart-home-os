@@ -26,15 +26,12 @@ export const AgentChat: React.FC = () => {
 
   const handleDelete = (e: React.FormEvent) => {
     e.preventDefault();
-    // Removed !input.trim() so you can clear history without needing to type first
     if (isStreaming || !isConnected) return; 
     DeleteHistory();
   };
 
   return (
-    /* Changed h-[80vh] to h-full to eliminate the massive top/bottom gaps */
-    <div className="flex flex-col h-full bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden shadow-lg animate-in fade-in text-neutral-200">
-      
+    <div className="flex flex-col w-full h-[calc(100dvh-6rem)] md:h-[calc(100vh-8rem)] min-h-[400px] bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden shadow-lg animate-in fade-in text-neutral-200">      
       {/* Header */}
       <div className="p-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-950 shrink-0">
         <div className="flex items-center gap-2">
@@ -55,13 +52,11 @@ export const AgentChat: React.FC = () => {
       {/* Messages Viewport */}
       <div className="flex-1 overflow-y-auto p-4 bg-neutral-900 flex flex-col">
         {messages.length === 0 ? (
-          /* Empty state now uses flex-1 to center itself without overflowing the parent */
           <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 gap-3">
             <Bot size={48} className="opacity-20" />
             <p>How can I orchestrate your home today?</p>
           </div>
         ) : (
-          /* space-y-4 is moved HERE so it doesn't add margin to the ref when empty */
           <div className="space-y-4">
             {messages.map((msg) => {
               if (msg.sender === 'tool') {

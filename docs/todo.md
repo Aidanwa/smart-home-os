@@ -23,6 +23,8 @@ need to allow users to add openai keys.
 
 delete account button
 
+add admin account type with admin settings page that can edit all other users and permissions
+
 saving home shapes
 
 Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
@@ -53,9 +55,5 @@ automatic hardware updates for devices, like actually a version updates for the 
 
 # KNOWN BUGS:
 
-brightness is inaccurate and updates wrong a lot
-
 spotify linking calls back to old account token
-
-mobile agent chat is messed up, and agent chat scrolls weird
 
