@@ -68,6 +68,27 @@ class UserPreference(Base):
     # Link back to the User object
     user: Mapped["User"] = relationship(back_populates="preferences")
 
+class Home(Base):
+    """Global Home Configuration, Location & Weather Context (Singleton)"""
+    __tablename__ = "home_profile"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nickname: Mapped[str] = mapped_column(String(100), default="My Smart Home", nullable=False)
+    
+    # Location details
+    address: Mapped[str | None] = mapped_column(String(255))
+    timezone: Mapped[str] = mapped_column(String(50), default="UTC", nullable=False)
+    
+    # Spatial coordinates (Numeric 9,6 is standard for storing lat/lng with high precision)
+    latitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
+    
+    # Flexible JSONB storage for weather API grid requirements 
+    # (e.g., {"office": "OKX", "gridX": 33, "gridY": 35})
+    weather_grid: Mapped[dict | None] = mapped_column(JSONB, server_default='{}')
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 

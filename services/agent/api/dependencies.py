@@ -2,6 +2,7 @@
 import os
 from core.orchestrator import SmartHomeOrchestrator
 from providers.openai import OpenAIProvider
+from shared.database.core import AsyncSessionLocal
 from tools.spotify_service import SpotifyService
 from tools.gateway_api import GatewayClient
 from core.memory import MemoryManager
@@ -21,7 +22,7 @@ spotify_service = SpotifyService()
 
 # Base Persona
 SYSTEM_PROMPT = """
-You are a smart home brain.
+You are the AI Orchestrator for {homename}.
 Your job is to assist the user by manipulating the smart devices.
 Be very concise, responses will be read aloud and should be natural but efficient.
 Keep responses short and to the point, as they will be read aloud.

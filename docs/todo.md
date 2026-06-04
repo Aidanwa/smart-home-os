@@ -3,19 +3,19 @@
 
 ## Adding agent logic
 
-add more providers i.e. ollama, gemini
+add more providers i.e. ollama, 
+
+ADD VOICE INPUT
+
+allow changing the model
 
 improve prompting?
 
-improve agentic ui
+improve spotify tool suite to include finding user playlists/library
 
 ## Adding Accounts and user settings
 
 need to allow users to add openai keys.
-
-allow configuring different homes
-
-adding home addresses, coords, etc
 
 saving home shapes
 
@@ -44,4 +44,8 @@ automatic hardware updates for devices, like actually a version updates for the 
 # KNOWN BUGS:
 
 brightness is inaccurate and updates wrong a lot
+
+spotify linking calls back to old account token
+
+mobile agent chat is messed up, and agent chat scrolls weird
 

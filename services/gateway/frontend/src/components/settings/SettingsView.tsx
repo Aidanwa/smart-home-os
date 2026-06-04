@@ -1,6 +1,7 @@
 // services/gateway/frontend/src/components/settings/SettingsView.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { HomeSettingsCard } from './HomeSettings';
 
 // Premium minimalist custom brand iconography path definitions
 const SpotifyLogo = () => (
@@ -17,7 +18,7 @@ const OpenAILogo = () => (
 
 export function SettingsView() {
   const { user, logout, authenticatedFetch } = useAuth();
-  const [settingsTab, setSettingsTab] = useState<'account' | 'connections' | 'admin'>('account');
+  const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'connections' | 'admin'>('account');
   
   // User Profile Form Handlers
   const [username, setUsername] = useState(user?.username || '');
@@ -206,6 +207,12 @@ export function SettingsView() {
           Account Setup
         </button>
         <button 
+          onClick={() => setSettingsTab('home')} 
+          className={`pb-3 transition-colors relative ${settingsTab === 'home' ? 'text-blue-400 border-b-2 border-blue-400 font-semibold' : 'text-neutral-500 hover:text-neutral-300'}`}
+        >
+          Home Settings
+        </button>
+        <button 
           onClick={() => setSettingsTab('connections')} 
           className={`pb-3 transition-colors relative ${settingsTab === 'connections' ? 'text-blue-400 border-b-2 border-blue-400 font-semibold' : 'text-neutral-500 hover:text-neutral-300'}`}
         >
@@ -272,7 +279,10 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* Section 2: Premium External Vault Binding */}
+      {/* Section 2: Home Profile Initialization */}
+      {settingsTab === 'home' && <HomeSettingsCard />}
+
+      {/* Section 3: Premium External Vault Binding */}
       {settingsTab === 'connections' && (
         <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4 animate-in fade-in duration-200">
           <h2 className="text-base font-medium text-neutral-200">External Cloud Integration Secrets</h2>
@@ -364,7 +374,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* Section 3: Static Isolation Admin Console */}
+      {/* Section 4: Static Isolation Admin Console */}
       {settingsTab === 'admin' && (
         <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4 animate-in fade-in duration-200">
           <div className="flex items-center gap-2 border-b border-neutral-800 pb-3 mb-2">

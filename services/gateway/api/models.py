@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any, Literal
+import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 class DeviceState(BaseModel):
@@ -104,3 +105,24 @@ class RenameRequest(BaseModel):
     new_name: str
     
     model_config = ConfigDict(extra="ignore")
+
+class HomeBase(BaseModel):
+    nickname: str = Field(default="My Smart Home", max_length=100)
+    address: Optional[str] = None
+    timezone: str = Field(default="UTC", max_length=50)
+    # Make lat/lon optional so the user only has to provide the address!
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+class HomeCreate(HomeBase):
+    pass
+
+class HomeUpdate(HomeBase):
+    pass
+
+class HomeResponse(HomeBase):
+    id: uuid.UUID
+    weather_grid: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True

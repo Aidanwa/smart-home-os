@@ -8,6 +8,10 @@ from tools.spotify_service import SpotifyService
 from providers.base import BaseLLMProvider
 from datetime import datetime, timedelta
 from tools.schema import get_agent_tools
+from zoneinfo import ZoneInfo
+from shared.database.core import get_db
+from sqlalchemy.future import select
+from shared.database.models import Home
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,26 @@ class SmartHomeOrchestrator:
     ) -> Tuple[str, str, str]:
         
         home_context = await self.gateway.get_filtered_context(user_id)
-        now = datetime.now().astimezone()
+
+        # 1. Fetch Home Profile for Timezone and Nickname
+        tz_name = "UTC"
+        
+        # Fast local DB fetch
+        async for session in get_db():
+            home = await session.scalar(select(Home).limit(1))
+            if home:
+                home_nickname = home.nickname
+                tz_name = home.timezone
+            else:
+                home_nickname = "User has not configured their home profile. They can do this in Settings → Home Settings."
+            break
+
+        # 2. Calculate accurate local time based on Home timezone
+        try:
+            now = datetime.now(ZoneInfo(tz_name))
+        except Exception as e:
+            logger.warning(f"Invalid timezone '{tz_name}', falling back to system local: {e}")
+            now = datetime.now().astimezone()
         
         if cached_weather is None:
             if (self._system_weather_cache is None or 
@@ -76,6 +99,7 @@ class SmartHomeOrchestrator:
         
         # Build Instructions
         instructions = self.system_prompt_tmpl.format(
+            homename=home_nickname,
             homestate=home_context,
             userprofile=user_profile,
             weatherinfo=current_weather,
