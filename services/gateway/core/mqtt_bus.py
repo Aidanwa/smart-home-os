@@ -95,6 +95,14 @@ class AsyncMqttBus:
             await self.redis.set("gateway:groups", json.dumps(payload))
             if isinstance(payload, list):
                 self._known_groups = {g.get("friendly_name") for g in payload if isinstance(g, dict)}
+
+                # Broadcast Group Changes to the Frontend
+                group_msg = {"type": "groups_update", "groups": payload}
+                for q in list(self._subscribers):
+                    try:
+                        q.put_nowait(group_msg)
+                    except asyncio.QueueFull:
+                        pass
         
         # Catch the heavy info payload so we never have to RPC for it
         if topic == f"{self.z2m_base}/bridge/info":

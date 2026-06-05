@@ -257,41 +257,95 @@ async def create_group(request: GroupCreateRequest, bus=Depends(get_mqtt_bus)):
 async def add_group_member(group_name: str, request: GroupMemberRequest, bus=Depends(get_mqtt_bus)):
     """Add a single device to an existing group."""
     try:
-        # Translate device UUID (ieee_address) to friendly_name for Z2M
         raw_state_str = await bus.redis.hget("gateway:digital_twin", request.device)
         device_ref = request.device
+        ieee_address = request.device if request.device.startswith("0x") else ""
+        
         if raw_state_str:
             state_obj = json.loads(raw_state_str)
             device_ref = state_obj.get("friendly_name", request.device)
+            ieee_address = state_obj.get("ieee_address", ieee_address)
 
         res = await bus.rpc(
             "zigbee2mqtt/bridge/request/group/members/add", 
             {"group": group_name, "device": device_ref}
         )
+        
+        # Track if we need to force a manual sync because of the Z2M database glitch
+        should_manually_sync = False
+
         if res.get("status") != "ok":
-            raise HTTPException(status_code=400, detail=res.get("error", "Failed to add member"))
+            error_msg = res.get("error", "")
+            if "DatabaseEntry with ID" in error_msg and "does not exist" in error_msg:
+                should_manually_sync = True
+            else:
+                raise HTTPException(status_code=400, detail=error_msg or "Failed to add member")
+
+        # --- DIGITAL TWIN COHESION ENGINE ---
+        # Fetch what we currently have cached for groups
+        raw_groups = await bus.redis.get("gateway:groups")
+        if raw_groups:
+            groups_list = json.loads(raw_groups)
+            for group in groups_list:
+                if group.get("friendly_name") == group_name:
+                    # Check if the device is already in the list to avoid duplicates
+                    exists = any(m.get("ieee_address") == ieee_address or m.get("name") == device_ref for m in group.get("members", []))
+                    if not exists:
+                        group.setdefault("members", []).append({
+                            "ieee_address": ieee_address,
+                            "endpoint": 1,
+                            "name": device_ref
+                        })
             
+            # Save the updated group structure back to Redis
+            await bus.redis.set("gateway:groups", json.dumps(groups_list))
+            
+            # Instantly push the update down the WebSocket subscribers so the UI updates
+            await bus.broadcast_group_update(groups_list)
+
         return {"status": "success", "message": f"Added {device_ref} to {group_name}"}
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout.")
+
 
 @router.delete("/groups/{group_name}/members/{device_id}")
 async def remove_group_member(group_name: str, device_id: str, bus=Depends(get_mqtt_bus)):
     """Remove a single device from an existing group."""
     try:
-        # Translate device UUID (ieee_address) to friendly_name for Z2M
         raw_state_str = await bus.redis.hget("gateway:digital_twin", device_id)
         device_ref = device_id
+        ieee_address = device_id if device_id.startswith("0x") else ""
+        
         if raw_state_str:
             state_obj = json.loads(raw_state_str)
             device_ref = state_obj.get("friendly_name", device_id)
+            ieee_address = state_obj.get("ieee_address", ieee_address)
 
         res = await bus.rpc(
             "zigbee2mqtt/bridge/request/group/members/remove", 
             {"group": group_name, "device": device_ref}
         )
+        
         if res.get("status") != "ok":
-            raise HTTPException(status_code=400, detail=res.get("error", "Failed to remove member"))
+            error_msg = res.get("error", "")
+            if "DatabaseEntry with ID" in error_msg and "does not exist" in error_msg:
+                pass
+            else:
+                raise HTTPException(status_code=400, detail=error_msg or "Failed to remove member")
+
+        # --- DIGITAL TWIN COHESION ENGINE ---
+        raw_groups = await bus.redis.get("gateway:groups")
+        if raw_groups:
+            groups_list = json.loads(raw_groups)
+            for group in groups_list:
+                if group.get("friendly_name") == group_name:
+                    group["members"] = [
+                        m for m in group.get("members", [])
+                        if m.get("ieee_address") != ieee_address and m.get("name") != device_ref
+                    ]
+            
+            await bus.redis.set("gateway:groups", json.dumps(groups_list))
+            await bus.broadcast_group_update(groups_list)
             
         return {"status": "success", "message": f"Removed {device_ref} from {group_name}"}
     except TimeoutError:

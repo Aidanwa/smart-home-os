@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Settings2, X, Pencil, Check, AlertTriangle } from 'lucide-react';
 import { useGroups } from '../../hooks/useGroups';
 import type { GroupInfo } from '../../hooks/useGroups';
@@ -13,11 +13,10 @@ interface Props {
   deleteDevice: (name: string) => void;
 }
 
-// Polished Tooltip Wrapper utilizing Tailwind CSS group hovering
 const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
   <div className="relative flex items-center justify-center group/tooltip">
     {children}
-    <div className="absolute bottom-full mb-2 px-2 py-1 bg-neutral-800 text-neutral-200 text-xs rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[100] border border-neutral-700 shadow-xl">
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-neutral-800 text-neutral-200 text-xs rounded opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all whitespace-nowrap pointer-events-none z-[100] border border-neutral-700 shadow-xl">
       {text}
     </div>
   </div>
@@ -30,14 +29,18 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
   const [isCreating, setIsCreating] = useState(false);
   const [managingGroup, setManagingGroup] = useState<GroupInfo | null>(null);
 
-  // States for renaming
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [editNameDraft, setEditNameDraft] = useState('');
-
-  // State for delete confirmation panel
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
 
-  // Filter out default Zigbee2MQTT groups if any exist
+  // Keep modal accurate when background WebSocket changes trickle into useGroups()
+  useEffect(() => {
+    if (managingGroup) {
+      const updated = groups.find(g => g.friendly_name === managingGroup.friendly_name);
+      if (updated) setManagingGroup(updated);
+    }
+  }, [groups, managingGroup]);
+
   const visibleGroups = groups.filter(g => !g.friendly_name.includes('default_bind'));
 
   const handleCreateGroup = () => {
@@ -63,7 +66,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
+    <div className="space-y-10 animate-in fade-in duration-500 overflow-x-hidden max-w-full pb-10">
       
       {/* Header & Create Group */}
       <div className="flex justify-between items-center bg-neutral-900/50 p-4 rounded-2xl border border-neutral-800 shadow-sm">
@@ -75,9 +78,9 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
           <Tooltip text="Create a new room or group">
             <button 
               onClick={() => setIsCreating(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0"
             >
-              <Plus size={16} /> New Group
+              <Plus size={16} /> <span className="hidden sm:inline">New Group</span>
             </button>
           </Tooltip>
         ) : (
@@ -87,7 +90,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
               value={newGroupName}
               onChange={(e) => setNewGroupName(e.target.value)}
               placeholder="e.g. Living Room"
-              className="bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white"
+              className="bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white w-32 sm:w-auto"
               onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
             />
             <Tooltip text="Save new group">
@@ -102,19 +105,17 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
 
       {/* Group Sections */}
       {visibleGroups.map(group => {
-        // Cross-reference devices using the static IEEE Address to survive device renaming 
         const activeDevicesInGroup = Object.entries(devices).filter(([name, state]) => {
           if (state.ieee_address) {
             return group.members.some(m => m.ieee_address === state.ieee_address);
           }
-          // Fallback to name if IEEE hasn't populated yet
           return group.members.some(m => m.name === name);
         });
 
         return (
           <div key={group.id} className="space-y-4">
             {/* Group Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-neutral-800/50 group/header">
+            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 pb-2 border-b border-neutral-800/50 group/header">
               
               {/* Title & Rename Input */}
               <div className="flex items-center gap-2">
@@ -124,15 +125,15 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                       autoFocus
                       value={editNameDraft}
                       onChange={(e) => setEditNameDraft(e.target.value)}
-                      className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-xl font-medium tracking-tight focus:outline-none focus:border-blue-500 text-neutral-200 w-48"
+                      className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-xl font-medium tracking-tight focus:outline-none focus:border-blue-500 text-neutral-200 w-40 sm:w-48"
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRenameSubmit(group.friendly_name);
+                        if (e.key === 'Enter' && editingGroup) handleRenameSubmit(editingGroup);
                         if (e.key === 'Escape') setEditingGroup(null);
                       }}
                     />
                     <Tooltip text="Confirm rename">
                       <button 
-                        onClick={() => handleRenameSubmit(group.friendly_name)} 
+                        onClick={() => editingGroup && handleRenameSubmit(editingGroup)} 
                         className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10 transition-colors"
                       >
                         <Check size={18} />
@@ -156,7 +157,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                           setEditingGroup(group.friendly_name);
                           setEditNameDraft(group.friendly_name);
                         }}
-                        className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors opacity-0 md:group-hover/header:opacity-100"
+                        className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100"
                       >
                         <Pencil size={16} />
                       </button>
@@ -166,12 +167,12 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
               </div>
               
               {/* Group Controls */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Tooltip text={`Turn all ${group.friendly_name} devices ON`}>
                   <button onClick={() => sendGroupCommand(group.friendly_name, { state: 'ON' })} className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors">All On</button>
                 </Tooltip>
                 <Tooltip text={`Turn all ${group.friendly_name} devices OFF`}>
-                  <button onClick={() => sendGroupCommand(group.friendly_name, { state: 'OFF' })} className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors mr-2">All Off</button>
+                  <button onClick={() => sendGroupCommand(group.friendly_name, { state: 'OFF' })} className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors sm:mr-2">All Off</button>
                 </Tooltip>
                 <Tooltip text="Add or remove devices">
                   <button onClick={() => setManagingGroup(group)} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
@@ -205,22 +206,19 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
       {/* Manage Group Modal */}
       {managingGroup && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="flex justify-between items-center p-4 border-b border-neutral-800">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-neutral-800 rounded-t-2xl">
               <h3 className="font-medium text-lg text-white">Manage: {managingGroup.friendly_name}</h3>
               <Tooltip text="Close modal">
                 <button onClick={() => setManagingGroup(null)} className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-800 transition-colors"><X size={20} /></button>
               </Tooltip>
             </div>
             
-            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2">
+            <div className="p-4 max-h-[60vh] overflow-y-auto overflow-x-hidden space-y-2 rounded-b-2xl">
               {Object.entries(devices).map(([deviceName, state]) => {
                 const isInGroup = state.ieee_address 
                   ? managingGroup.members.some(m => m.ieee_address === state.ieee_address)
                   : managingGroup.members.some(m => m.name === deviceName);
-
-                // Pass the IEEE address as the true identifier if available
-                const identifier = state.ieee_address || deviceName;
 
                 return (
                   <div key={deviceName} className="flex items-center justify-between p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50">
@@ -228,17 +226,12 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                     <Tooltip text={isInGroup ? "Remove device from group" : "Add device to group"}>
                       <button
                         onClick={() => {
-                          if (isInGroup) removeDeviceFromGroup(managingGroup.friendly_name, identifier);
-                          else addDeviceToGroup(managingGroup.friendly_name, identifier);
-                          
-                          // Optimistically update local modal state
-                          setManagingGroup(prev => {
-                            if (!prev) return null;
-                            const newMembers = isInGroup 
-                              ? prev.members.filter(m => m.ieee_address !== state.ieee_address && m.name !== deviceName)
-                              : [...prev.members, { ieee_address: state.ieee_address || '', endpoint: 1, name: deviceName }];
-                            return { ...prev, members: newMembers };
-                          });
+                          const targetDevice = state.ieee_address || state.friendly_name;
+                          if (isInGroup) {
+                            removeDeviceFromGroup(managingGroup.friendly_name, targetDevice);
+                          } else {
+                            addDeviceToGroup(managingGroup.friendly_name, targetDevice);
+                          }
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           isInGroup ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
@@ -254,7 +247,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
           </div>
         </div>
       )}
-
+      
       {/* Delete Confirmation Panel */}
       {groupToDelete && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

@@ -31,6 +31,22 @@ export function useGroups() {
     fetchGroups();
   }, [fetchGroups]);
 
+  // Listen for real-time WebSocket updates from useDevices ---
+  useEffect(() => {
+    const handleGroupsSync = (event: CustomEvent) => {
+      // event.detail contains the data.groups payload we sent from useDevices
+      console.log("🎯 GROUP HOOK RECEIVED CUSTOM EVENT:", event.detail);
+      setGroups(event.detail);
+    };
+
+    window.addEventListener('onGroupsUpdate', handleGroupsSync as EventListener);
+    
+    // Cleanup the listener when the component unmounts
+    return () => {
+      window.removeEventListener('onGroupsUpdate', handleGroupsSync as EventListener);
+    };
+  }, []);
+
   const createGroup = async (friendly_name: string) => {
     await authenticatedFetch('/api/groups', {
       method: 'POST',

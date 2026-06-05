@@ -43,8 +43,6 @@ add option to import csv with wardrobe to mass add rows to table, or add individ
 
 # SMALLER FEATURES:
 
-Group page doesn't update info automatically, delete group sometimes doesnt work, device add/delete is broken, slider shows on add/delete modal
-
 Add zigbee binding devices options
 
 add scene integration options to groups/rooms
@@ -55,5 +53,4 @@ automatic hardware updates for devices, like actually a version updates for the 
 
 # KNOWN BUGS:
 
-spotify linking calls back to old account token
-
+group endpoints don't work, masked the bug for adding and removing devices but issue is still there when adding and deleting, as well as only masked for add/delete. Something about the group ID not existing in database, will be useful to look at zigbee logs which I can't right now. Preferably when I fix it, I go back and clean up the jerryrigging the routes and websockets for groups I did.

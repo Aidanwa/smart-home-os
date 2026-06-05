@@ -41,6 +41,12 @@ export function useDevices() {
           [data.device]: { ...prev[data.device], ...data.state }
         }));
       }
+      if (data.type === 'groups_update') {
+        console.log("📡 DEVICE HOOK CAUGHT GROUP UPDATE:", data.groups); // ADD THIS
+        window.dispatchEvent(new CustomEvent('onGroupsUpdate', { 
+          detail: data.groups 
+        }));
+      }
       if (data.type === 'device_delete') {
         setDevices(prev => {
           const newDevices = { ...prev };
