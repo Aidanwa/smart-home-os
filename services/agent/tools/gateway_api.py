@@ -4,7 +4,8 @@ import os
 import httpx
 import jwt
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Dict, Any, List
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -90,26 +91,60 @@ class GatewayClient:
     # ---------------------------------------------------------
     # LLM Tool Executions
     # ---------------------------------------------------------
-    async def set_device_state(self, user_id: str, id: str, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def set_device_state(self, user_id: str, commands: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Tool: Changes the state of a specific Zigbee device on behalf of the user.
+        Tool: Changes the state of multiple Zigbee devices concurrently with independent payloads.
+        Example input: [{"device": "Kitchen_Light", "state": {"state": "ON"}}, {"device": "Living_Room", "state": {"state": "OFF"}}]
         """
-        logger.info(f"Agent attempting to set {id} to {state} for user {user_id}")
+        logger.info(f"Agent batch updating {len(commands)} devices for user {user_id}")
         
-        try:
-            # FIX: Attach the delegated user cookie to authorize the write operation
-            response = await self.client.post(
-                f"/api/devices/{id}/set",
-                json=state,
-                cookies=self._mint_user_context_cookie(user_id)
-            )
-            response.raise_for_status()
-            return {"status": "success", "message": f"Successfully updated {id}.", "data": response.json()}
+        # Inner helper function to unpack the dict and handle a single device request
+        async def _update_single_device(cmd: Dict[str, Any]) -> Dict[str, Any]:
+            device_id = cmd.get("device")
+            state_payload = cmd.get("state")
             
-        except httpx.HTTPStatusError as e:
-            return {"status": "error", "message": f"Gateway rejected the command: {e.response.text}"}
-        except Exception as e:
-            return {"status": "error", "message": f"Network error communicating with the Gateway: {str(e)}"}
+            # Guard clause in case the LLM hallucinates the schema slightly
+            if not device_id or not state_payload:
+                return {"id": str(device_id), "status": "error", "message": "Missing 'device' or 'state' in command object."}
+                
+            try:
+                response = await self.client.post(
+                    f"/api/devices/{device_id}/set",
+                    json=state_payload,
+                    cookies=self._mint_user_context_cookie(user_id)
+                )
+                response.raise_for_status()
+                return {"id": device_id, "status": "success", "data": response.json()}
+            except httpx.HTTPStatusError as e:
+                return {"id": device_id, "status": "error", "message": f"Gateway rejected: {e.response.text}"}
+            except Exception as e:
+                return {"id": device_id, "status": "error", "message": f"Network error: {str(e)}"}
+
+        # Fire all commands concurrently
+        results = await asyncio.gather(*[_update_single_device(cmd) for cmd in commands])
+        
+        # Parse the results for actionable LLM feedback
+        errors = [r for r in results if r["status"] == "error"]
+        successes = [r for r in results if r["status"] == "success"]
+        
+        if errors and not successes:
+            return {
+                "status": "error", 
+                "message": "Failed to update any devices.", 
+                "details": errors
+            }
+        elif errors:
+            return {
+                "status": "partial_success", 
+                "message": f"Updated {len(successes)} devices, but {len(errors)} failed.", 
+                "details": results
+            }
+        
+        return {
+            "status": "success", 
+            "message": f"Successfully updated {len(successes)} devices.", 
+            "data": [r["data"] for r in successes]
+        }
             
     async def rename_group(self, user_id: str, group_name: str, new_name: str) -> Dict[str, Any]:
         """

@@ -51,7 +51,7 @@ Rules:
 
 TOOL_REGISTRY = {
     # Home Control
-    "set_state": gateway_client.set_device_state,
+    "set_device_state": gateway_client.set_device_state,
     # "rename_group": gateway_client.rename_group,
     
     # Memory

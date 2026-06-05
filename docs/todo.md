@@ -11,11 +11,11 @@ allow changing the model
 
 improve prompting?
 
-one tool call to update multiple devices
-
 make user memory update tool diff based instead of a full rewrite
 
 improve spotify tool suite to include finding user playlists/library
+
+add initialize endpoint to cache weather and home information when user navigates to agent page, so the first message of each convo doesn't take extra time.
 
 ## Adding Accounts and user settings
 

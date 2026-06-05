@@ -8,21 +8,31 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
     # Base Tools (Always available)
     tools = [
         {
-            "name": "set_state",
-            "description": "Changes the physical state of a smart home device (e.g., turning lights on/off, changing brightness or color).",
+            "name": "set_device_state",
+            "description": "Changes the physical state of one or multiple smart home devices simultaneously. Can apply different states to different devices in a single call.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "The exact friendly_name of the device from the context."
-                    },
-                    "state": {
-                        "type": "object",
-                        "description": "A dictionary of the properties to change. E.g., {'state': 'ON', 'brightness': 255}"
+                    "commands": {
+                        "type": "array",
+                        "description": "A list of device state changes to apply.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "device": {
+                                    "type": "string",
+                                    "description": "The exact friendly_name of the device from the context."
+                                },
+                                "state": {
+                                    "type": "object",
+                                    "description": "A dictionary of the properties to change. E.g., {'state': 'ON', 'brightness': 255}"
+                                }
+                            },
+                            "required": ["device", "state"]
+                        }
                     }
                 },
-                "required": ["id", "state"]
+                "required": ["commands"]
             }
         },
         {
