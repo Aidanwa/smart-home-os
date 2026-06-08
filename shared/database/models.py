@@ -26,7 +26,7 @@ class LogicalZone(Base):
     __tablename__ = "logical_zones"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), unique=False, nullable=False)
     zone_type: Mapped[str] = mapped_column(String(50), default="room")
     display_order: Mapped[int] = mapped_column(default=0)
 
