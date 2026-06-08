@@ -30,15 +30,37 @@ class LogicalZone(Base):
     zone_type: Mapped[str] = mapped_column(String(50), default="room")
     display_order: Mapped[int] = mapped_column(default=0)
 
+    # --- New Spatial Layout Fields ---
+    floor_level: Mapped[int] = mapped_column(default=1) # e.g., 0=Basement, 1=Main Floor, 2=Upstairs
+    shape_type: Mapped[str] = mapped_column(String(50), default="rectangle") # Ready for 'l-shape', etc. later
+    
+    # Dimensions (Relative grid units or meters, allows the UI to draw the room proportionally)
+    width: Mapped[float] = mapped_column(Numeric(6, 2), default=100.00)
+    height: Mapped[float] = mapped_column(Numeric(6, 2), default=100.00)
+    
+    # Position of this room on the Macro Floor Plan Canvas
+    pos_x: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
+    pos_y: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
+
+    # Relationship to placements
+    device_placements: Mapped[list["DevicePlacement"]] = relationship(back_populates="zone")
+
+
 class DevicePlacement(Base):
     """Maps physical Zigbee MAC addresses to Logical Zones and Spatial X/Y/Z Coordinates"""
     __tablename__ = "device_placements"
 
     ieee_address: Mapped[str] = mapped_column(String(30), primary_key=True)
     zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("logical_zones.id", ondelete="SET NULL"))
-    pos_x: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
-    pos_y: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
-    pos_z: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
+    
+    # Position of this device INSIDE the room (Micro Canvas). 
+    # STRICT RULE: These should be percentages (0.00 to 100.00) relative to the room's width/height!
+    pos_x: Mapped[float] = mapped_column(Numeric(6, 2), default=50.00) # Default to center of room
+    pos_y: Mapped[float] = mapped_column(Numeric(6, 2), default=50.00) # Default to center of room
+    pos_z: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)  # Reserved for elevation (ceiling light vs floor plug)
+
+    # Relationship back to the zone
+    zone: Mapped["LogicalZone"] = relationship(back_populates="device_placements")
 
 class UserSecret(Base):
     """The Vault: Storing encrypted integration credentials"""
