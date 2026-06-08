@@ -8,7 +8,7 @@ from typing import Optional
 from services.gateway.api.auth import get_current_user
 from shared.database.core import get_db
 from shared.database.models import Home
-from .models import HomeCreate, HomeUpdate, HomeResponse
+from .models import HomeUpdate, HomeResponse
 
 router = APIRouter(prefix="/api/home", tags=["Home Configuration"])
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def get_home(
 
 @router.post("", response_model=HomeResponse)
 async def create_home(
-    data: HomeCreate, 
+    data,
     session: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):
@@ -83,7 +83,9 @@ async def create_home(
         timezone=grid.get("timezone", data.timezone), # Prioritize NWS timezone if found
         latitude=lat,
         longitude=lon,
-        weather_grid=grid
+        weather_grid=grid,
+        bottom_floor=data.bottom_floor,
+        top_floor=data.top_floor,
     )
     session.add(new_home)
     await session.commit()
@@ -115,6 +117,8 @@ async def update_home(
 
     home.nickname = data.nickname
     home.address = full_address
+    home.bottom_floor = data.bottom_floor
+    home.top_floor = data.top_floor
     
     # Only override timezone manually if the user explicitly set it and NWS didn't overwrite it
     if data.timezone and not (home.weather_grid and home.weather_grid.get("timezone")):

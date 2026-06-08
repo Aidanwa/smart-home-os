@@ -107,14 +107,17 @@ function AuthenticatedDashboard() {
   }, [devices, sortMode]);
 
   return (
-    <div className="flex flex-col-reverse md:flex-row min-h-screen bg-neutral-950 text-neutral-100 font-sans">
+    <div className="flex flex-col-reverse md:flex-row min-h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
       
       {/* Decoupled High-Speed Modular Navigation System */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto w-full">
+      {/* CHANGED: Removed global padding and scroll, made it a strict h-screen flex column */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
+        
         {activeTab === 'home' && (
-          <div className="animate-in fade-in duration-500">
+          // CHANGED: Moved the padding and scroll into the specific home container
+          <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">
             <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <h1 className="text-2xl font-medium tracking-tight">Welcome back, {user?.username}</h1>
               <div className="flex items-center gap-2">
@@ -166,20 +169,11 @@ function AuthenticatedDashboard() {
 
         {activeTab === 'agent' && <AgentChat />}
 
-        {activeTab === 'rooms' && (
-          <div className="animate-in fade-in duration-500 h-full flex flex-col">
-            <header className="mb-6">
-              <h1 className="text-2xl font-medium tracking-tight">Spatial Layout</h1>
-              <p className="text-neutral-500 text-sm mt-1">Design your floorplan and assign devices to rooms.</p>
-            </header>
-            <div className="flex-1 bg-neutral-900/30 rounded-2xl border border-neutral-800 overflow-hidden relative">
-               <RoomsView devices={devices} />
-            </div>
-          </div>
-        )}
+        {/* RoomsView now naturally inherits the full height without padding blocking it! */}
+        {activeTab === 'rooms' && <RoomsView devices={devices} />}
 
         {activeTab === 'routines' && (
-          <div className="h-[80vh] flex items-center justify-center text-neutral-500">
+          <div className="h-full flex items-center justify-center text-neutral-500">
             <div className="text-center">
               <Workflow className="mx-auto mb-4 opacity-50" size={48} />
               <h2 className="text-xl font-medium text-neutral-300">Routine Orchestrator</h2>
@@ -188,8 +182,11 @@ function AuthenticatedDashboard() {
           </div>
         )}
 
-        {/* Overhauled Tabbed Control Panel Settings View */}
-        {activeTab === 'settings' && <SettingsView />}
+        {activeTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto p-6 md:p-10">
+             <SettingsView />
+          </div>
+        )}
         
       </main>
     </div>

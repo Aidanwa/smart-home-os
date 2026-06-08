@@ -42,6 +42,8 @@ async def rename_zone(zone_id: UUID, payload: ZoneRename, db: AsyncSession = Dep
 
     # Update the zone name
     zone.name = payload.name.strip()
+    if payload.color:
+        zone.color = payload.color.strip()
 
     await db.commit()
     await db.refresh(zone)

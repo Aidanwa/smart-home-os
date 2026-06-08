@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from uuid import UUID
 
 class DeviceState(BaseModel):
@@ -113,9 +113,14 @@ class HomeBase(BaseModel):
     # Make lat/lon optional so the user only has to provide the address!
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    bottom_floor: int = Field(default=1, description="Lowest floor number (e.g., -1 for basement)")
+    top_floor: int = Field(default=1, description="Highest floor number")
 
-class HomeCreate(HomeBase):
-    pass
+    @model_validator(mode="after")
+    def validate_floors(self) -> "HomeBase":
+        if self.bottom_floor > self.top_floor:
+            raise ValueError("bottom_floor cannot be greater than top_floor")
+        return self
 
 class HomeUpdate(HomeBase):
     pass
@@ -136,6 +141,7 @@ class ZoneBase(BaseModel):
     height: float = Field(default=100.00, description="Relative height of the room")
     pos_x: float = Field(default=0.00, description="Macro X position on floor plan")
     pos_y: float = Field(default=0.00, description="Macro Y position on floor plan")
+    color: Optional[str] = Field(default="#64748b", description="Hex color code for the room")
 
 class ZoneCreate(ZoneBase):
     pass
@@ -164,3 +170,4 @@ class BatchPlacementUpdate(BaseModel):
 
 class ZoneRename(BaseModel):
     name: str
+    color: Optional[str]

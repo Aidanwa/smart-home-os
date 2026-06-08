@@ -10,15 +10,22 @@ export const HomeSettingsCard = () => {
   const [saving, setSaving] = useState(false);
   const [exists, setExists] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [error, setError] = useState('');
   
-  // Backup state to allow canceling edits
+  // Keep the core state tied cleanly to the database structure
   const [originalData, setOriginalData] = useState({
     nickname: 'My Smart Home',
     address: '',
-    timezone: 'America/New_York'
+    timezone: 'America/New_York',
+    bottom_floor: 1,
+    top_floor: 1
   });
 
   const [form, setForm] = useState({ ...originalData });
+
+  // Compute presentation layer abstractions from the underlying floor numbers
+  const hasBasement = form.bottom_floor === 0;
+  const totalFloorsAboveGround = form.top_floor;
 
   useEffect(() => {
     fetch('/api/home')
@@ -29,13 +36,15 @@ export const HomeSettingsCard = () => {
           const fetchedData = {
             nickname: data.nickname || '',
             address: data.address || '',
-            timezone: data.timezone || 'America/New_York'
+            timezone: data.timezone || 'America/New_York',
+            bottom_floor: data.bottom_floor ?? 1,
+            top_floor: data.top_floor ?? 1
           };
           setOriginalData(fetchedData);
           setForm(fetchedData);
-          setIsEditing(false); // Default to read-only if data exists
+          setIsEditing(false);
         } else {
-          setIsEditing(true); // Force edit mode if no home is configured
+          setIsEditing(true);
         }
       })
       .catch(err => {
@@ -45,51 +54,53 @@ export const HomeSettingsCard = () => {
       .finally(() => setLoading(false));
   }, []);
 
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setSaving(true);
+    
     try {
       const method = exists ? 'PUT' : 'POST';
       const res = await fetch('/api/home', {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify(form) // State matches the expected backend DB contract perfectly
       });
       
       if (res.ok) {
         const data = await res.json();
         setExists(true);
-        const newData = { ...form };
         
-        // NWS might auto-correct timezone, so we sync it back
-        if (data.timezone) newData.timezone = data.timezone;
-
-        const res2 = await fetch('/api/home');
-        if (res2.ok) {
-          const updatedData = await res2.json();
-          if (updatedData && updatedData.id) {
-            const fetchedData = {
-              nickname: updatedData.nickname || newData.nickname,
-              address: updatedData.address || newData.address,
-              timezone: updatedData.timezone || newData.timezone
-            };
-            setOriginalData(fetchedData);
-            setForm(fetchedData);
-            setIsEditing(false); // Default to read-only if data exists
-          } else {
-            setIsEditing(true); // Force edit mode if no home is configured
-          }
-        }
+        const fetchedData = {
+          nickname: data.nickname || '',
+          address: data.address || '',
+          timezone: data.timezone || 'America/New_York',
+          bottom_floor: data.bottom_floor ?? 1,
+          top_floor: data.top_floor ?? 1
+        };
+        setOriginalData(fetchedData);
+        setForm(fetchedData);
+        setIsEditing(false);
+      } else {
+        const errData = await res.json();
+        setError(errData.detail || 'Failed to update context.');
       }
     } catch (err) {
       console.error("Failed to save home data", err);
+      setError('Network or system validation failure.');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleCancel = () => {
+    setForm(originalData);
+    setError('');
+    setIsEditing(false);
+  };
+
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete your home configuration? This will disable location-aware agent features.")) return;
+    if (!window.confirm("Are you sure you want to delete your home configuration? This will disable layout-aware spatial layers.")) return;
     
     setSaving(true);
     try {
@@ -99,22 +110,19 @@ const handleSubmit = async (e: React.FormEvent) => {
         const resetData = {
           nickname: 'My Smart Home',
           address: '',
-          timezone: 'America/New_York'
+          timezone: 'America/New_York',
+          bottom_floor: 1,
+          top_floor: 1
         };
         setForm(resetData);
         setOriginalData(resetData);
-        setIsEditing(true); // Drop back into edit mode so they can start over
+        setIsEditing(true);
       }
     } catch (err) {
       console.error("Failed to delete home", err);
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCancel = () => {
-    setForm(originalData); // Revert all unsaved typing
-    setIsEditing(false);
   };
 
   if (loading) return <div className="text-neutral-500 p-4">Loading configuration...</div>;
@@ -125,11 +133,10 @@ const handleSubmit = async (e: React.FormEvent) => {
         <div>
           <h2 className="text-xl font-semibold text-neutral-100">Home Profile</h2>
           <p className="text-sm text-neutral-400 mt-1">
-            Set your physical address to automatically generate localized weather tools and GPS coordinates.
+            Set your physical address and house limits to automatically generate localized micro-features.
           </p>
         </div>
         
-        {/* Only show Edit button if data exists and we aren't currently editing */}
         {exists && !isEditing && (
           <button
             type="button"
@@ -141,8 +148,9 @@ const handleSubmit = async (e: React.FormEvent) => {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
-        
+      <form onSubmit={handleSubmit} className="space-y-5 max-w-md">
+        {error && <div className="p-3 text-xs bg-red-950/50 border border-red-900 text-red-400 rounded-lg">{error}</div>}
+
         {/* Nickname Field */}
         <div>
           <label className="block text-xs font-medium text-neutral-400 mb-1">Home Nickname</label>
@@ -174,6 +182,49 @@ const handleSubmit = async (e: React.FormEvent) => {
           )}
         </div>
 
+        {/* Visual & Interactive Layout Configuration Options */}
+        <div className="bg-neutral-950/50 border border-neutral-800/80 rounded-xl p-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-neutral-400 mb-1.5">How many floors is your house? <span className="text-neutral-500">(Excluding basement)</span></label>
+            {isEditing ? (
+              <select
+                value={totalFloorsAboveGround}
+                onChange={e => {
+                  const targetTop = parseInt(e.target.value) || 1;
+                  setForm({ ...form, top_floor: targetTop });
+                }}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none text-neutral-200"
+              >
+                {[1, 2, 3, 4, 5].map(num => (
+                  <option key={num} value={num}>{num} {num === 1 ? 'Floor' : 'Floors'}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="text-sm text-neutral-200 py-1">{totalFloorsAboveGround} {totalFloorsAboveGround === 1 ? 'Floor' : 'Floors'}</div>
+            )}
+          </div>
+
+          <div className="flex items-center">
+            {isEditing ? (
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input 
+                  type="checkbox"
+                  checked={hasBasement}
+                  onChange={e => {
+                    setForm({ ...form, bottom_floor: e.target.checked ? 0 : 1 });
+                  }}
+                  className="w-4 h-4 rounded border-neutral-800 bg-neutral-950 text-blue-600 focus:ring-0 accent-blue-500 outline-none"
+                />
+                <span className="text-sm text-neutral-300">Is there a basement?</span>
+              </label>
+            ) : (
+              <div className="text-sm text-neutral-400">
+                Basement: <span className="text-neutral-200 font-medium ml-1">{hasBasement ? 'Yes' : 'No'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Timezone Field */}
         <div>
           <label className="block text-xs font-medium text-neutral-400 mb-1">Timezone</label>
@@ -181,7 +232,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             <select 
               value={form.timezone}
               onChange={e => setForm({...form, timezone: e.target.value})}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none text-neutral-200 appearance-none"
+              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none text-neutral-200"
             >
               {TIMEZONES.map(tz => (
                 <option key={tz} value={tz}>{tz.replace('_', ' ')}</option>
@@ -192,9 +243,9 @@ const handleSubmit = async (e: React.FormEvent) => {
           )}
         </div>
 
-        {/* Submit / Cancel Actions (Only visible in Edit Mode) */}
+        {/* Submit / Cancel Action Sections */}
         {isEditing && (
-          <div className="pt-4 flex items-center gap-3">
+          <div className="pt-2 flex items-center gap-3">
             <button 
               type="submit" 
               disabled={saving}
@@ -216,9 +267,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         )}
 
-        {/* Destructive Action (Only visible in Read-Only Mode to prevent accidental clicks while saving) */}
         {exists && !isEditing && (
-          <div className="pt-6 border-t border-neutral-800 mt-6">
+          <div className="pt-4 border-t border-neutral-800 mt-6">
             <button
               type="button"
               onClick={handleDelete}

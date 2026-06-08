@@ -1,7 +1,7 @@
 # SQLAlchemy Tables
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -41,6 +41,9 @@ class LogicalZone(Base):
     # Position of this room on the Macro Floor Plan Canvas
     pos_x: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
     pos_y: Mapped[float] = mapped_column(Numeric(6, 2), default=0.00)
+
+    # Color of room for frontend:
+    color: Mapped[str | None] = mapped_column(String(20), default="#64748b")
 
     # Relationship to placements
     device_placements: Mapped[list["DevicePlacement"]] = relationship(back_populates="zone")
@@ -100,6 +103,10 @@ class Home(Base):
     # Location details
     address: Mapped[str | None] = mapped_column(String(255))
     timezone: Mapped[str] = mapped_column(String(50), default="UTC", nullable=False)
+
+    # Floor boundary settings
+    bottom_floor: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    top_floor: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     
     # Spatial coordinates (Numeric 9,6 is standard for storing lat/lng with high precision)
     latitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
