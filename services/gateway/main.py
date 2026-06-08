@@ -17,6 +17,7 @@ from api.routes import router, ws_router
 from api.auth_routes import auth_router, platform_router
 from api.integration_routes import integrations_router
 from api.home_routes import router as home_router
+from api.zone_routes import router as zone_router
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(platform_router)
     app.include_router(integrations_router)
     app.include_router(home_router)
+    app.include_router(zone_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

@@ -14,13 +14,14 @@ import { AgentChat } from './components/agent/AgentChat';
 import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
+import { RoomsView } from './components/rooms/RoomsView';
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
   const { devices, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'home' | 'agent' | 'routines' | 'settings'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'agent' | 'rooms' | 'routines' | 'settings'>('home');
   const [dashboardView, setDashboardView] = useState<'devices' | 'groups'>('devices');
   const [isPairing, setIsPairing] = useState(false);
   const [sortMode, setSortMode] = useState<'type' | 'alphabetical'>('type');
@@ -164,6 +165,18 @@ function AuthenticatedDashboard() {
         )}
 
         {activeTab === 'agent' && <AgentChat />}
+
+        {activeTab === 'rooms' && (
+          <div className="animate-in fade-in duration-500 h-full flex flex-col">
+            <header className="mb-6">
+              <h1 className="text-2xl font-medium tracking-tight">Spatial Layout</h1>
+              <p className="text-neutral-500 text-sm mt-1">Design your floorplan and assign devices to rooms.</p>
+            </header>
+            <div className="flex-1 bg-neutral-900/30 rounded-2xl border border-neutral-800 overflow-hidden relative">
+               <RoomsView devices={devices} />
+            </div>
+          </div>
+        )}
 
         {activeTab === 'routines' && (
           <div className="h-[80vh] flex items-center justify-center text-neutral-500">

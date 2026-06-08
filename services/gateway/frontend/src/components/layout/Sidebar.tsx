@@ -2,13 +2,13 @@
 import { useState } from 'react';
 import { 
   Home, Sparkles, Workflow, Settings, 
-  PanelLeftClose, PanelLeft
+  PanelLeftClose, PanelLeft, Map,
 } from 'lucide-react';
 import { useSystemHealth } from '../../hooks/useSystemHealth';
 
 interface SidebarProps {
-  activeTab: 'home' | 'agent' | 'routines' | 'settings';
-  setActiveTab: (tab: 'home' | 'agent' | 'routines' | 'settings') => void;
+  activeTab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings';
+  setActiveTab: (tab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings') => void;
 }
 
 export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
@@ -18,6 +18,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const navItems = [
     { id: 'home', icon: Home, label: 'Home' },
     { id: 'agent', icon: Sparkles, label: 'Agent' },
+    { id: 'rooms', icon: Map, label: 'Rooms' },
     { id: 'routines', icon: Workflow, label: 'Routines' },
   ] as const;
 
@@ -88,11 +89,6 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              /* FIX Applied below: 
-                1. Removed transition-all duration-200 to swap color fields instantly.
-                2. Enforced constant solid borders (border-transparent vs border-neutral-800) to stop layout changes.
-                3. Appended outline-none and focus:outline-none definitions.
-              */
               className={`group relative flex items-center p-3 md:py-3 w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
                 isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 gap-3'
               } ${isActive ? 'bg-neutral-900 text-neutral-100 border-neutral-800' : 'bg-transparent text-text-neutral-500 border-transparent text-neutral-500 hover:bg-neutral-900/40 hover:text-neutral-300'}`}
@@ -119,7 +115,6 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
           return (
             <button
               onClick={() => setActiveTab('settings')}
-              /* FIX Applied: Mirroring stable border configurations and suppressing style flashes */
               className={`group relative flex items-center p-3 md:py-3 w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
                 isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 gap-3'
               } ${isActive ? 'bg-neutral-900 text-neutral-100 border-neutral-800' : 'bg-transparent text-text-neutral-500 border-transparent text-neutral-500 hover:bg-neutral-900/40 hover:text-neutral-300'}`}

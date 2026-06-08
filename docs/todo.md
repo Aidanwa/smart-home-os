@@ -19,6 +19,8 @@ token tracking table and cost analytics - not that important right now
 
 add pricing display for each model when selecting models.
 
+Resolve user IP address and provide current user location to model.
+
 ## Adding Accounts and user settings
 
 add admin account type with admin settings page that can edit all other users and permissions

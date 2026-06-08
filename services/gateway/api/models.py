@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any, Literal
-import uuid
 from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
 
 class DeviceState(BaseModel):
     """
@@ -121,8 +121,46 @@ class HomeUpdate(HomeBase):
     pass
 
 class HomeResponse(HomeBase):
-    id: uuid.UUID
+    id: UUID
     weather_grid: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
+
+class ZoneBase(BaseModel):
+    name: str
+    zone_type: str = "room"
+    floor_level: int = 1
+    shape_type: str = "rectangle"
+    width: float = Field(default=100.00, description="Relative width of the room")
+    height: float = Field(default=100.00, description="Relative height of the room")
+    pos_x: float = Field(default=0.00, description="Macro X position on floor plan")
+    pos_y: float = Field(default=0.00, description="Macro Y position on floor plan")
+
+class ZoneCreate(ZoneBase):
+    pass
+
+class ZoneUpdateLayout(BaseModel):
+    width: float
+    height: float
+    pos_x: float
+    pos_y: float
+
+class ZoneResponse(ZoneBase):
+    id: UUID
+    display_order: int
+    
+    class Config:
+        from_attributes = True
+
+class PlacementUpdate(BaseModel):
+    ieee_address: str
+    zone_id: Optional[UUID] = None
+    pos_x: float = Field(..., ge=0.0, le=100.0, description="Micro X percentage")
+    pos_y: float = Field(..., ge=0.0, le=100.0, description="Micro Y percentage")
+
+class BatchPlacementUpdate(BaseModel):
+    placements: List[PlacementUpdate]
+
+class ZoneRename(BaseModel):
+    name: str
