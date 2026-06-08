@@ -7,8 +7,6 @@ add more providers i.e. ollama, gemini, claude
 
 ADD VOICE INPUT
 
-allow changing the model
-
 improve prompting?
 
 make user memory update tool diff based instead of a full rewrite
@@ -22,10 +20,6 @@ token tracking table and cost analytics - not that important right now
 add pricing display for each model when selecting models.
 
 ## Adding Accounts and user settings
-
-need to allow users to add openai keys.
-
-delete account button
 
 add admin account type with admin settings page that can edit all other users and permissions
 
