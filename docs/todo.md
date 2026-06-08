@@ -41,8 +41,6 @@ add option to import csv with wardrobe to mass add rows to table, or add individ
 
 # SMALLER FEATURES:
 
-Add encryption to secrets
-
 Add zigbee binding devices options
 
 add scene integration options to groups/rooms

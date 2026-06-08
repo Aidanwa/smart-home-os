@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 from shared.database.models import UserPreference, UserSecret
 from providers.openai import OpenAIProvider
 from providers.base import BaseLLMProvider
+from shared.security import decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,7 @@ async def build_llm_provider(user_id: str, db: AsyncSession) -> BaseLLMProvider:
         )
         secret = secret_result.scalar_one_or_none()
         if secret:
-            # NOTE: If you add symmetric encryption later, decrypt here before assignment
-            api_key = secret.encrypted_credentials
+            api_key = decrypt_secret(secret.encrypted_credentials)
             
     # 3. Fallback to System Key
     if not api_key and use_system_key:

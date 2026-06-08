@@ -2,10 +2,10 @@ import os
 import httpx
 import uuid
 import json
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from shared.security import encrypt_secret
 from shared.database.models import UserSecret
 from shared.database.core import get_db
 from api.auth import get_current_user, User
@@ -75,7 +75,9 @@ async def spotify_auth_callback(
         "client_secret": SPOTIFY_CLIENT_SECRET,
         "refresh_token": refresh_token
     }
-    encrypted_payload = json.dumps(vault_payload) # Note: Add your encryption layer here if applicable
+    
+    # Import our shared symmetric encryption layer
+    encrypted_payload = encrypt_secret(json.dumps(vault_payload))
 
     # 3. Upsert into Postgres Vault
     result = await db.execute(

@@ -4,12 +4,13 @@ import time
 import json
 import asyncio
 import httpx
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from sqlalchemy.future import select
 
 # Access shared workspace persistence models natively
 from shared.database.core import AsyncSessionLocal
 from shared.database.models import UserSecret
+from shared.security import decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +60,11 @@ class SpotifyService:
             if not secret_record:
                 raise KeyError("Configuration payload missing from table context.")
             
-            raw_payload = secret_record.encrypted_credentials
+            raw_payload = decrypt_secret(secret_record.encrypted_credentials)
             return json.loads(raw_payload)
 
     async def _ensure_token(self, user_id: str) -> str:
-        # 1. ALWAYS query the database first (Sub-millisecond local check)
+        # 1. ALWAYS query the database first
         # We do this OUTSIDE the lock so fast-path reads aren't bottlenecked.
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -102,7 +103,7 @@ class SpotifyService:
                     return cache["access_token"]
 
             # 5. Extract Vault Credentials
-            creds = json.loads(secret_record.encrypted_credentials)
+            creds = json.loads(decrypt_secret(secret_record.encrypted_credentials))
             client_id = creds.get("client_id")
             client_secret = creds.get("client_secret")
             refresh_token = creds.get("refresh_token")

@@ -3,4 +3,5 @@ Name: shared
 Version: 0.1.0
 Requires-Dist: alembic>=1.18.4
 Requires-Dist: asyncpg>=0.31.0
+Requires-Dist: cryptography>=47.0.0
 Requires-Dist: sqlalchemy>=2.0.49
