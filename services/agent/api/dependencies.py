@@ -1,20 +1,21 @@
-# src/api/dependencies.py
+# services/agent/api/dependencies.py
 import os
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.orchestrator import SmartHomeOrchestrator
-from providers.openai import OpenAIProvider
-from shared.database.core import AsyncSessionLocal
 from tools.spotify_service import SpotifyService
 from tools.gateway_api import GatewayClient
 from core.memory import MemoryManager
 from tools.weather_service import WeatherService
+from shared.database.core import get_db
+from core.provider_factory import build_llm_provider
 
 # Configuration from environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8000")
 
 # Singleton instances
-# By instantiating these once here, we reuse the HTTP connection pools across all requests
-llm_provider = OpenAIProvider(api_key=OPENAI_API_KEY, model="gpt-5-mini")
+# These services do not hold user-specific state, so they are perfectly safe to keep as globals
 gateway_client = GatewayClient(base_url=GATEWAY_URL)
 memory_manager = MemoryManager()
 weather_service = WeatherService()
@@ -50,33 +51,38 @@ Rules:
 """
 
 TOOL_REGISTRY = {
-    # Home Control
+    # zigbee
     "set_device_state": gateway_client.set_device_state,
-    # "rename_group": gateway_client.rename_group,
-    
-    # Memory
+
+    # memory
     "update_memory": memory_manager.update_user_profile,
 
-    # Weather
+    #weather
     "get_weather": weather_service.get_weather,
 
-    # spotify
+    #spotify
     "spot_play": spotify_service.spotify_play,
     "spot_ctrl": spotify_service.spotify_controller,
     "spot_info": spotify_service.spotify_get_advanced_info,
     "spot_search": spotify_service.spotify_search,
 }
 
-orchestrator = SmartHomeOrchestrator(
-    llm_provider=llm_provider,
-    gateway_client=gateway_client,
-    memory_manager=memory_manager,
-    weather_service=weather_service,
-    spotify_service=spotify_service,
-    system_prompt_tmpl=SYSTEM_PROMPT,
-    tool_map=TOOL_REGISTRY
-)
-
-def get_orchestrator() -> SmartHomeOrchestrator:
-    """FastAPI Dependency for injecting the orchestrator into routes."""
-    return orchestrator
+async def get_orchestrator(db: AsyncSession = Depends(get_db)):
+    """
+    FastAPI Dependency returning a factory function.
+    This safely delays building the Orchestrator until the route has validated the user's cookie.
+    """
+    async def build(user_id: str) -> SmartHomeOrchestrator:
+        # Dynamically build the LLM provider for this specific user session
+        llm_provider = await build_llm_provider(user_id, db)
+        
+        return SmartHomeOrchestrator(
+            llm_provider=llm_provider,
+            gateway_client=gateway_client,
+            memory_manager=memory_manager,
+            weather_service=weather_service,
+            spotify_service=spotify_service,
+            system_prompt_tmpl=SYSTEM_PROMPT,
+            tool_map=TOOL_REGISTRY
+        )
+    return build

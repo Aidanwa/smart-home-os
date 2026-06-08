@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from httpcore import stream
 from openai import AsyncOpenAI
@@ -12,8 +13,9 @@ class OpenAIProvider(BaseLLMProvider):
     Implementation of the BaseLLMProvider using OpenAI's new Responses API.
     Supports native streaming, stateful storage, and agentic tool usage.
     """
-    def __init__(self, api_key: str, model: str = "gpt-5-mini"):
-        self.client = AsyncOpenAI(api_key=api_key)
+    def __init__(self, api_key: Optional[str], model: str = "gpt-5-mini"):
+        clean_api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.client = AsyncOpenAI(api_key=clean_api_key)
         self.model = model
 
     async def generate_stream(
@@ -64,6 +66,7 @@ class OpenAIProvider(BaseLLMProvider):
         if formatted_tools:
             kwargs["tools"] = formatted_tools
 
+        logger.debug(f"Initiating streaming response with model {self.model}.")
         try:
             # Execute the stream
             stream = await self.client.responses.create(**kwargs)

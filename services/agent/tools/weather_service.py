@@ -251,7 +251,7 @@ class WeatherService:
                 logger.debug(f"Raw daily forecast data: {daily_data}")
                 summary_str = summarize_nws_daily(daily_data.get("periods", []), time, units="F")
 
-            logger.info(f"Weather forecast retrieved for location: {loc}")
+            logger.debug(f"Weather forecast retrieved for location: {loc}")
             return {"status": "success", "data": summary_str}
 
         except Exception as e:

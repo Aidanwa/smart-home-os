@@ -1,9 +1,10 @@
+# services/agent/api/routes.py
 import logging
 import json
 import jwt
 import os
 from http.cookies import SimpleCookie
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, Cookie, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
@@ -36,7 +37,7 @@ def extract_user_id_from_cookie(cookie_string: Optional[str]) -> str:
         if not user_id:
             logger.warning("Invalid session subject.")
             raise HTTPException(status_code=401, detail="Invalid session subject.")
-        logger.info(f"Authenticated user_id extracted from cookie: {user_id}")
+        logger.debug(f"Authenticated user_id extracted from cookie: {user_id}")
         return user_id
     except jwt.PyJWTError:
         logger.warning("Session context expired or signature mismatch.")
@@ -52,7 +53,7 @@ class HistoryResponse(BaseModel):
 @router.websocket("/chat/stream")
 async def chat_stream(
     websocket: WebSocket, 
-    orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
+    orchestrator_factory = Depends(get_orchestrator)
 ):
     """
     Persistent WebSocket connection utilizing native cookie extraction 
@@ -64,12 +65,21 @@ async def chat_stream(
         # Extract cookie from raw headers to ensure multi-browser/proxy safety
         cookie_header = websocket.headers.get("cookie")
         user_id = extract_user_id_from_cookie(cookie_header)
+        
+        # Build the custom session orchestrator using DB preferences
+        orchestrator = await orchestrator_factory(user_id)
+        
     except HTTPException as e:
         await websocket.send_text(f"\n[Auth Error: {e.detail}]")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
+    except ValueError as e:
+        # Catches missing API Key scenarios cleanly
+        await websocket.send_text(f"\n[Configuration Error: {str(e)}]")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
 
-    logger.info(f"WebSocket agent loop initialized for verified profile: {user_id}")
+    logger.debug(f"WebSocket agent loop initialized for verified profile: {user_id}")
     
     try:
         while True:
@@ -95,10 +105,11 @@ async def chat_stream(
 @router.get("/chat/history", response_model=HistoryResponse)
 async def get_user_chat_history(
     request: Request,
-    orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
+    orchestrator_factory = Depends(get_orchestrator)
 ):
     user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
     try:
+        orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
         history = orchestrator.memory.get_history(user_id)
         return {"user_id": user_id, "messages": history}
     except Exception as e:
@@ -107,10 +118,11 @@ async def get_user_chat_history(
 @router.delete("/chat/history", response_model=HistoryResponse)
 async def delete_user_chat_history(
     request: Request,
-    orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
+    orchestrator_factory = Depends(get_orchestrator)
 ):
     user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
     try:
+        orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
         orchestrator.memory.delete_history(user_id)
         return {"user_id": user_id, "messages": []}
     except Exception as e:
@@ -120,13 +132,14 @@ async def delete_user_chat_history(
 async def chat_sync(
     request: Request,
     body: Dict[str, str],
-    orchestrator: SmartHomeOrchestrator = Depends(get_orchestrator)
+    orchestrator_factory = Depends(get_orchestrator)
 ):
     user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
     user_text = body.get("text", "")
     
     full_response = ""
     try:
+        orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
         async for chunk in orchestrator.process_intent_stream(user_id, user_text):
             if chunk["type"] == "text_chunk":
                 full_response += chunk["content"]

@@ -107,6 +107,34 @@ async def get_current_identity(current_user: User = Depends(get_current_user)):
         }
     }
 
+@auth_router.delete("/me")
+async def delete_account(
+    response: Response,
+    user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently deletes the user account.
+    SQLAlchemy cascades will wipe their preferences and secrets automatically.
+    """
+    try:
+        await db.delete(user)
+        await db.commit()
+        
+        # Clear the ambient auth cookie
+        response.delete_cookie(
+            key="access_token",
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=False # Set to True if using HTTPS
+        )
+        
+        return {"status": "success", "message": "Account permanently deleted."}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+
 # ====================================================================================
 # User Preferences & Cryptographic Vault Management
 # ====================================================================================

@@ -17,6 +17,10 @@ improve spotify tool suite to include finding user playlists/library
 
 add initialize endpoint to cache weather and home information when user navigates to agent page, so the first message of each convo doesn't take extra time.
 
+token tracking table and cost analytics - not that important right now
+
+add pricing display for each model when selecting models.
+
 ## Adding Accounts and user settings
 
 need to allow users to add openai keys.
@@ -42,6 +46,8 @@ create wardrobe table.
 add option to import csv with wardrobe to mass add rows to table, or add individually in UI.
 
 # SMALLER FEATURES:
+
+Add encryption to secrets
 
 Add zigbee binding devices options
 
