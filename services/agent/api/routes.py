@@ -146,3 +146,17 @@ async def chat_sync(
         return ChatResponse(response=full_response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chat/initialize")
+async def initialize_chat( 
+    request: Request,
+    orchestrator_factory= Depends(get_orchestrator)
+):
+    """Pre-fetches weather and home info to reduce first-message latency."""
+    user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
+    try:
+        orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
+        result = await orchestrator.initialize_session(user_id=user_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

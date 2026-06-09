@@ -137,7 +137,19 @@ export function useAgentChat() {
       };
     };
 
+    const initializeAgent = async () => {
+      try {
+        await authenticatedFetch('/api/agent/chat/initialize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error("Failed to initialize agent session:", error);
+      }
+    };
+
     initializeChat();
+    initializeAgent();
 
     return () => {
       isMounted = false;

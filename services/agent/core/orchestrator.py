@@ -108,6 +108,27 @@ class SmartHomeOrchestrator:
         )
         
         return instructions, current_weather, current_spotify
+    
+    async def initialize_session(self, user_id: str) -> dict:
+        """
+        Warms up the system-level caches (Weather, Home DB, Tools Schema) 
+        when the user navigates to the Agent page so the first message is instant.
+        """
+        logger.debug(f"Initializing agent session and warming caches for user: {user_id}")
+        
+        # 1. Calling this will naturally trigger the TTL cache check for weather 
+        #    and pre-warm the database connection for the Home profile.
+        await self._build_system_prompt(
+            user_id=user_id, 
+            cached_weather=None, 
+            cached_spotify=None
+        )
+
+        # 2. Pre-check Spotify credentials so the tools schema is ready instantly
+        has_spotify = await self.spotify.check_credentials(user_id)
+        self.tools_schema = get_agent_tools(has_spotify=has_spotify)
+        
+        return {"status": "success", "message": "Agent caches initialized."}
 
     async def process_intent_stream(self, user_id: str, user_text: str) -> AsyncGenerator[Dict[str, Any], None]:
         # 1. First Run: Pass None for caches to force a full fetch of all contexts
@@ -118,7 +139,9 @@ class SmartHomeOrchestrator:
         )
 
         # Conditionally build the tools schema based on the user's ID
-        self.tools_schema = get_agent_tools(has_spotify=await self.spotify.check_credentials(user_id))
+        # should already do this in initialize_session onconnect function
+        if not self.tools_schema:
+            self.tools_schema = get_agent_tools(has_spotify=await self.spotify.check_credentials(user_id))
         logger.debug(f"Tools schema for user {user_id}: {[tool['name'] for tool in self.tools_schema]}")
         # 2. Retrieve Pruned History
         history = self.memory.get_history(user_id)
