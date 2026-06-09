@@ -29,6 +29,8 @@ add admin account type with admin settings page that can edit all other users an
 
 add sorting by room to devices page.
 
+inform agent of device state by room organization
+
 ## adding routines/scheduling/automations
 
 This is a big necessary next step for smart home robustness
