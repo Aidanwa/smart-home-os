@@ -25,9 +25,9 @@ Resolve user IP address and provide current user location to model.
 
 add admin account type with admin settings page that can edit all other users and permissions
 
-saving home shapes
+## rooms
 
-Add the ability to have rooms saved for a household, and tag devices with rooms. this way we can organize by room.
+add sorting by room to devices page.
 
 ## adding routines/scheduling/automations
 
