@@ -171,3 +171,13 @@ class BatchPlacementUpdate(BaseModel):
 class ZoneRename(BaseModel):
     name: str
     color: Optional[str]
+
+class PlacementResponse(BaseModel):
+    ieee_address: str
+    zone_id: Optional[UUID]
+    pos_x: float
+    pos_y: float
+    pos_z: float
+
+    class Config:
+        from_attributes = True

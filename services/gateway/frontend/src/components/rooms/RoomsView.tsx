@@ -10,6 +10,9 @@ import {
 import { FloorStage } from './canvas/FloorStage';
 import { AddRoomModal } from './modals/AddRoomModal';
 import { DeleteRoomModal } from './modals/DeleteRoomModal';
+import { NoRoomSelectedModal } from './modals/NoRoomSelectedModal';
+import { RemoveDeviceModal } from './modals/RemoveDeviceModal';
+import { DevicePanel } from './sidebar/DevicePanel';
 
 import { FloorSwitcher } from './canvas/FloorSwitcher';
 import { InlineEditPopover } from './modals/InlineEditPopover';
@@ -36,6 +39,9 @@ export function RoomsView({
     zones,
     baseFloorZones,
 
+    placements,
+    updateDevicePlacement,
+
     isLoading,
     isDirty,
     isSaving,
@@ -50,17 +56,11 @@ export function RoomsView({
     handleTransformEnd,
   } = useRoomLayout();
 
-  //
-  // UI state only
-  //
-  const [selectedZoneId, setSelectedZoneId] =
-    useState<string | null>(null);
-
-  const [showAddModal, setShowAddModal] =
-    useState(false);
-
-  const [zoneToDelete, setZoneToDelete] =
-    useState<LogicalZone | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [zoneToDelete, setZoneToDelete] = useState<LogicalZone | null>(null);
+  const [deviceToRemove, setDeviceToRemove] = useState<{ ieee_address: string, name: string, room: string } | null>(null);
 
   const [editing, setEditing] = useState<{
     zone: LogicalZone;
@@ -73,8 +73,7 @@ export function RoomsView({
   //
   // Stage sizing
   //
-  const containerRef =
-    useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [stageSize, setStageSize] =
     useState({
@@ -113,6 +112,31 @@ export function RoomsView({
   const selectedZone = zones.find(
     (z) => z.id === selectedZoneId
   );
+
+  const handleDeviceClick = (ieee_address: string) => {
+    if (!selectedZoneId) {
+      setShowErrorModal(true); // Trigger our new modal!
+      return;
+    }
+    updateDevicePlacement(ieee_address, selectedZoneId, 50.00, 50.00);
+  };
+
+  const handleCanvasDeviceClick = (ieee_address: string) => {
+    const device = _devices[ieee_address];
+    const placement = placements.find(p => p.ieee_address === ieee_address);
+    const zone = zones.find(z => z.id === placement?.zone_id);
+    if (device && zone) {
+      setDeviceToRemove({ ieee_address, name: device.friendly_name, room: zone.name });
+    }
+  };
+
+  const confirmDeviceRemoval = () => {
+  if (deviceToRemove) {
+    // Setting zone_id to null throws it back to the sidebar!
+    updateDevicePlacement(deviceToRemove.ieee_address, null, 50, 50);
+    setDeviceToRemove(null);
+  }
+};
 
   const confirmDelete = async () => {
     if (!zoneToDelete) return;
@@ -153,9 +177,7 @@ export function RoomsView({
     );
   }
 
-  //
   // Missing home config
-  //
   if (!homeConfig) {
     return (
       <div className="w-full h-full bg-neutral-950 flex flex-col items-center justify-center gap-3 p-8 text-center">
@@ -177,91 +199,65 @@ export function RoomsView({
   }
 
   return (
-    <div className="w-full h-full bg-neutral-950 flex overflow-hidden">
-      <div className="flex-1 flex flex-col overflow-hidden relative border-r border-neutral-800">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 shrink-0 bg-neutral-950 z-10 shadow-sm">
-          <div className="flex flex-col">
-            <h1 className="text-neutral-100 font-medium tracking-tight leading-tight">
-              {formatFloorName(currentFloor)}
-            </h1>
-
-            <span className="text-neutral-500 text-xs leading-none">
-              {isLoading
-                ? 'Loading...'
-                : `${zones.length} room${
-                    zones.length !== 1
-                      ? 's'
-                      : ''
-                  }`}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {selectedZone && (
-              <button
-                onClick={() =>
-                  setZoneToDelete(
-                    selectedZone
-                  )
-                }
-                className="flex items-center gap-1.5 px-3 h-8 rounded text-red-400 hover:bg-red-950/40 hover:text-red-300 text-xs font-medium transition-colors border border-transparent hover:border-red-900/50"
-              >
-                <Trash2 size={14} />
-                Delete
-              </button>
-            )}
-
-            {isDirty && (
-              <button
-                onClick={saveAll}
-                disabled={isSaving}
-                className="flex items-center gap-1.5 px-3 h-8 rounded bg-emerald-600/20 text-emerald-400 text-xs font-medium disabled:opacity-50 transition-colors"
-              >
-                <Save size={14} />
-
-                {isSaving
-                  ? 'Saving…'
-                  : 'Autosaving soon...'}
-              </button>
-            )}
-
-            <button
-              onClick={() =>
-                setShowAddModal(true)
-              }
-              className="flex items-center gap-1.5 px-3 h-8 rounded bg-white text-neutral-900 text-xs font-medium hover:bg-neutral-200 transition-colors shadow-sm"
-            >
-              <Plus
-                size={14}
-                strokeWidth={2.5}
-              />
-              Add Room
-            </button>
-          </div>
+    // 1. Outer Container: flex-col (Toolbar on top, Content below)
+    <div className="w-full h-full bg-neutral-950 flex flex-col overflow-hidden">
+      
+      {/* 2. Toolbar (Full Width Across the Top) */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 shrink-0 bg-neutral-950 z-10 shadow-sm">
+        <div className="flex flex-col">
+          <h1 className="text-neutral-100 font-medium tracking-tight leading-tight">
+            {formatFloorName(currentFloor)}
+          </h1>
+          <span className="text-neutral-500 text-xs leading-none">
+            {isLoading
+              ? 'Loading...'
+              : `${zones.length} room${zones.length !== 1 ? 's' : ''}`}
+          </span>
         </div>
 
-        {/* Canvas */}
-        <div
-          ref={containerRef}
-          className="flex-1 relative overflow-hidden bg-neutral-950"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle, #262626 1px, transparent 1px)',
-            backgroundSize:
-              '20px 20px',
-            backgroundPosition:
-              '0 0',
-          }}
-        >
+        <div className="flex items-center gap-2">
+          {selectedZone && (
+            <button
+              onClick={() => setZoneToDelete(selectedZone)}
+              className="flex items-center gap-1.5 px-3 h-8 rounded text-red-400 hover:bg-red-950/40 hover:text-red-300 text-xs font-medium transition-colors border border-transparent hover:border-red-900/50"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          )}
+
+          {isDirty && (
+            <button
+              onClick={saveAll}
+              disabled={isSaving}
+              className="flex items-center gap-1.5 px-3 h-8 rounded bg-emerald-600/20 text-emerald-400 text-xs font-medium disabled:opacity-50 transition-colors"
+            >
+              <Save size={14} />
+              {isSaving ? 'Saving…' : 'Autosaving soon...'}
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 h-8 rounded bg-white text-neutral-900 text-xs font-medium hover:bg-neutral-200 transition-colors shadow-sm"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            Add Room
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Main Content Split: flex-row (Canvas Left, Sidebar Right) */}
+      <div className="flex-1 flex flex-row overflow-hidden relative">
+        
+        {/* Canvas Area */}
+        <div ref={containerRef} className="flex-1 relative overflow-hidden bg-neutral-950" 
+          style={{ backgroundImage: 'radial-gradient(circle, #262626 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+          
           <FloorSwitcher
             floor={currentFloor}
-            minFloor={
-              homeConfig.bottom_floor
-            }
-            maxFloor={
-              homeConfig.top_floor
-            }
+            minFloor={homeConfig.bottom_floor}
+            maxFloor={homeConfig.top_floor}
             onChange={setCurrentFloor}
           />
 
@@ -276,95 +272,54 @@ export function RoomsView({
               width={stageSize.width}
               height={stageSize.height}
               zones={zones}
-              baseFloorZones={
-                baseFloorZones
-              }
-              selectedZoneId={
-                selectedZoneId
-              }
-              onSelectZone={
-                setSelectedZoneId
-              }
-              onDragEnd={
-                handleDragEnd
-              }
-              onTransformEnd={
-                handleTransformEnd
-              }
-              onEditZone={(
-                zone,
-                pos
-              ) =>
-                setEditing({
-                  zone,
-                  anchorPos: pos,
-                })
-              }
+              baseFloorZones={baseFloorZones}
+              selectedZoneId={selectedZoneId}
+              onSelectZone={setSelectedZoneId}
+              onDragEnd={handleDragEnd}
+              onTransformEnd={handleTransformEnd}
+              onEditZone={(zone, pos) => setEditing({ zone, anchorPos: pos })}
+              devices={_devices}
+              placements={placements}
+              updateDevicePlacement={updateDevicePlacement}
+              onDeviceClick={handleCanvasDeviceClick}
             />
           )}
 
           {editing && (
             <InlineEditPopover
               zone={editing.zone}
-              anchorPos={
-                editing.anchorPos
-              }
-              onCommit={
-                handleEditCommit
-              }
-              onCancel={() =>
-                setEditing(null)
-              }
+              anchorPos={editing.anchorPos}
+              onCommit={handleEditCommit}
+              onCancel={() => setEditing(null)}
             />
           )}
 
-          {!isLoading &&
-            zones.length === 0 &&
-            baseFloorZones.length ===
-              0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
-                <div className="w-16 h-16 rounded-full border-2 border-dashed border-neutral-800 flex items-center justify-center text-neutral-700 bg-neutral-950/50">
-                  <Plus size={24} />
-                </div>
-
-                <span className="text-neutral-500 text-sm bg-neutral-950/50 px-2 rounded">
-                  No rooms plotted.
-                  Click "Add Room" to
-                  begin.
-                </span>
+          {!isLoading && zones.length === 0 && baseFloorZones.length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
+              <div className="w-16 h-16 rounded-full border-2 border-dashed border-neutral-800 flex items-center justify-center text-neutral-700 bg-neutral-950/50">
+                <Plus size={24} />
               </div>
-            )}
+              <span className="text-neutral-500 text-sm bg-neutral-950/50 px-2 rounded">
+                No rooms plotted. Click "Add Room" to begin.
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* Sidebar Area */}
+        <DevicePanel 
+          devices={_devices} 
+          placements={placements} 
+          zones={zones} 
+          onDeviceClick={handleDeviceClick} 
+        />
       </div>
 
-      {/* Future sidebar */}
-      {/* <UnmappedDevices /> */}
-
-      {showAddModal && (
-        <AddRoomModal
-          floorLevel={
-            currentFloor
-          }
-          onClose={() =>
-            setShowAddModal(false)
-          }
-          onCreate={createRoom}
-        />
-      )}
-
-      {zoneToDelete && (
-        <DeleteRoomModal
-          roomName={
-            zoneToDelete.name
-          }
-          onClose={() =>
-            setZoneToDelete(null)
-          }
-          onConfirm={
-            confirmDelete
-          }
-        />
-      )}
+      {/* Modals */}
+      {showAddModal && <AddRoomModal floorLevel={currentFloor} onClose={() => setShowAddModal(false)} onCreate={createRoom} />}
+      {zoneToDelete && <DeleteRoomModal roomName={zoneToDelete.name} onClose={() => setZoneToDelete(null)} onConfirm={confirmDelete} />}
+      {showErrorModal && <NoRoomSelectedModal onClose={() => setShowErrorModal(false)} />}
+      {deviceToRemove && (<RemoveDeviceModal deviceName={deviceToRemove.name} roomName={deviceToRemove.room} onClose={() => setDeviceToRemove(null)} onConfirm={confirmDeviceRemoval} />)}
     </div>
   );
 }

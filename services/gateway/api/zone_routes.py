@@ -6,7 +6,7 @@ from uuid import UUID
 # Adjust these imports based on your actual structure
 from shared.database.core import get_db
 from shared.database.models import LogicalZone, DevicePlacement
-from .models import ZoneCreate, ZoneRename, ZoneUpdateLayout, ZoneResponse, BatchPlacementUpdate
+from .models import ZoneCreate, ZoneRename, ZoneUpdateLayout, ZoneResponse, BatchPlacementUpdate, PlacementResponse
 
 router = APIRouter(prefix="/api/zones", tags=["Spatial Layout"])
 
@@ -96,6 +96,16 @@ async def batch_update_placements(batch: BatchPlacementUpdate, db: AsyncSession 
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Batch update failed: {str(e)}")
+    
+@router.get("/placements", response_model=list[PlacementResponse])
+async def get_all_placements(db: AsyncSession = Depends(get_db)):
+    """
+    Fetch all physical device spatial mappings.
+    The frontend uses this to cross-reference the Redis Digital Twin 
+    and determine which devices are unplaced vs. placed in specific rooms.
+    """
+    result = await db.execute(select(DevicePlacement))
+    return result.scalars().all()
     
 @router.delete("/{zone_id}")
 async def delete_zone(

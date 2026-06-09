@@ -3,7 +3,7 @@ import { Stage, Layer } from 'react-konva';
 import { GhostRoom } from './GhostRoom';
 import { ResizableRoom } from './ResizableRoom';
 
-import type { LogicalZone } from '../types';
+import type { LogicalZone, DevicePlacement } from '../types';
 
 interface FloorStageProps {
   width: number;
@@ -34,6 +34,11 @@ interface FloorStageProps {
     zone: LogicalZone,
     pos: { x: number; y: number }
   ) => void;
+
+  devices: Record<string, any>;
+  placements: DevicePlacement[];
+  updateDevicePlacement: (ieee_address: string, zone_id: string | null, pos_x: number, pos_y: number) => void;
+  onDeviceClick: (ieee_address: string) => void;
 }
 
 export function FloorStage({
@@ -46,6 +51,10 @@ export function FloorStage({
   onDragEnd,
   onTransformEnd,
   onEditZone,
+  devices,
+  placements,
+  updateDevicePlacement,
+  onDeviceClick,
 }: FloorStageProps) {
   return (
     <Stage
@@ -65,10 +74,16 @@ export function FloorStage({
           />
         ))}
 
-        {zones.map((zone) => (
-          <ResizableRoom
+        {zones.map((zone) => {
+
+          const roomPlacements = placements.filter(p => p.zone_id === zone.id);
+
+          return <ResizableRoom
             key={zone.id}
             zone={zone}
+            roomPlacements={roomPlacements}
+            devices={devices}
+            updateDevicePlacement={updateDevicePlacement}
             isSelected={zone.id === selectedZoneId}
             onSelect={() =>
               onSelectZone(
@@ -97,8 +112,10 @@ export function FloorStage({
             onDoubleClick={(z, pos) =>
               onEditZone(z, pos)
             }
+            onDeviceClick={onDeviceClick}
           />
-        ))}
+        }
+        )}
       </Layer>
     </Stage>
   );
