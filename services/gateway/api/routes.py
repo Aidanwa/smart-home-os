@@ -3,6 +3,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import Any, List
 import asyncio
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Assuming standard shared import convention for models and dependencies
+from shared.database.models import DevicePlacement
+from shared.database.core import get_db
 
 from core.mqtt_bus import AsyncMqttBus
 from api.dependencies import get_mqtt_bus
@@ -128,9 +134,13 @@ async def set_device_state(
         )
 
 @router.delete("/devices/{device_id}")
-async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
+async def delete_device(
+    device_id: str, 
+    bus: AsyncMqttBus = Depends(get_mqtt_bus),
+    db: AsyncSession = Depends(get_db)
+):
     try:
-        # TRANSLATION STEP
+        # TRANSLATION STEP (Map friendly_name -> IEEE address if needed)
         target_ieee = bus._device_registry.get(device_id, device_id)
 
         # 1. Fetch the state from Redis using target_ieee
@@ -160,10 +170,18 @@ async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=res.get("error", "Bridge failed to remove device.")
             )
-        
-        # delete the device from digital twin and broadcast the deletion to all subscribers
+
+        # 3. Clean up the Relational DB Schema (Spatial UI placement data)
+        # Using SQLAlchemy 2.0 1-step execution expression
+        await db.execute(
+            delete(DevicePlacement).where(DevicePlacement.ieee_address == target_ieee)
+        )
+        await db.commit()
+
+        # 4. Wipe the device from digital twin and broadcast the deletion to subscribers
         await bus.redis.hdel("gateway:digital_twin", target_ieee)
-        update_msg = {"type": "device_delete", "device": target_ieee} # sends ieee address to subscribers
+        
+        update_msg = {"type": "device_delete", "device": target_ieee}
         for q in list(bus._subscribers):
             try:
                 q.put_nowait(update_msg)
@@ -172,7 +190,7 @@ async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus
 
         return {
             "status": "success", 
-            "message": f"Device '{friendly_name}' ({device_id}) successfully removed from network."
+            "message": f"Device '{friendly_name}' ({device_id}) successfully purged from network and spatial configuration."
         }
 
     except TimeoutError:
@@ -181,8 +199,11 @@ async def delete_device(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus
             detail="Bridge timeout while attempting to remove device."
         )
     except HTTPException:
+        # Re-raise explicit HTTP exceptions to bypass generic handling
         raise
     except Exception as e:
+        # Roll back relational state if an unexpected crash occurs after DB operation
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred during device deletion: {str(e)}"
