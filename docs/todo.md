@@ -5,8 +5,6 @@
 
 add more providers i.e. ollama, gemini, claude
 
-ADD VOICE INPUT
-
 improve prompting?
 
 token tracking table and cost analytics - not that important right now
