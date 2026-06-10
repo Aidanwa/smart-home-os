@@ -11,8 +11,6 @@ improve prompting?
 
 make user memory update tool diff based instead of a full rewrite
 
-improve spotify tool suite to include finding user playlists/library
-
 token tracking table and cost analytics - not that important right now
 
 add pricing display for each model when selecting models.
