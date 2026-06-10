@@ -21,11 +21,11 @@ class GatewayClient:
     def __init__(self, base_url: str):
         """
         Initialize with the internal Docker network URL of the Gateway.
-        e.g., "http://gateway:8000"
+        e.g., "https://gateway:8000"
         """
         self.base_url = base_url.rstrip("/")
         # We use a single AsyncClient session for connection pooling and speed
-        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=10.0)
+        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=10.0, verify=False)
 
     async def close(self):
         """Gracefully close the HTTP connection pool."""

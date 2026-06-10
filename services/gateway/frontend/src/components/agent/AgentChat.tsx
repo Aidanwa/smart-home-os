@@ -1,12 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, AlertCircle, Trash } from 'lucide-react';
+import { Send, Bot, User, AlertCircle, Trash, Mic, Loader2 } from 'lucide-react';
 import { useAgentChat } from '../../hooks/useAgentChat';
 import { ToolCallChip } from './ToolCallChip';
+import { useVoiceInput } from '../../hooks/useVoiceInput';
 
 export const AgentChat: React.FC = () => {
   const { messages, isConnected, isStreaming, sendMessage, DeleteHistory } = useAgentChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Voice Hook
+  const { isListening, isProcessing, startListening, stopRecording } = useVoiceInput({
+    onTranscription: (transcribedText) => {
+      // Instantly send the transcribed text down the websocket!
+      sendMessage(transcribedText); 
+    }
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,6 +37,14 @@ export const AgentChat: React.FC = () => {
     e.preventDefault();
     if (isStreaming || !isConnected) return; 
     DeleteHistory();
+  };
+
+  const toggleMic = () => {
+    if (isListening) {
+      stopRecording();
+    } else {
+      startListening();
+    }
   };
 
   return (
@@ -100,42 +117,51 @@ export const AgentChat: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-neutral-950 border-t border-neutral-800 shrink-0">
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
+      <form onSubmit={handleSubmit} className="p-4 border-t border-neutral-800 bg-neutral-900/50 flex gap-2 items-center">
+
+        {/* Input Bar */}
+        <div className="relative flex-1 flex items-center">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={isListening ? "Listening... (Speak now)" : isProcessing ? "Transcribing..." : isConnected ? "Message your home agent..." : "Reconnecting..."}
+            disabled={!isConnected || isStreaming || isListening || isProcessing}
+            className={`w-full bg-neutral-800 border ${isListening ? 'border-red-500/50' : 'border-transparent'} focus:border-neutral-700 rounded-full pl-5 pr-24 py-3 text-sm focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50 transition-all text-neutral-100 placeholder:text-neutral-500`}
+          />
           
-          {/* Input & Inner Send Button Wrapper */}
-          <div className="relative flex-1 flex items-center">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={isConnected ? "Message your home agent..." : "Reconnecting..."}
-              disabled={!isConnected || isStreaming}
-              className="w-full bg-neutral-800 border border-transparent focus:border-neutral-700 rounded-full pl-5 pr-12 py-3 text-sm focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50 transition-all text-neutral-100 placeholder:text-neutral-500"
-            />
+          {/* Action Buttons Container */}
+          <div className="absolute right-2 flex items-center gap-1">
+            
+            {/* Mic Button */}
+            <button 
+              type="button" 
+              onClick={toggleMic}
+              disabled={!isConnected || isStreaming || isProcessing}
+              className={`p-2 rounded-full transition-all ${
+                isListening 
+                  ? 'bg-red-500/20 text-red-500 animate-pulse' 
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-700'
+              } disabled:opacity-50`}
+            >
+              {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
+            </button>
+
+            {/* Send Text Button */}
             <button 
               type="submit" 
               disabled={!input.trim() || !isConnected || isStreaming}
-              className="absolute right-2 p-2 rounded-full bg-blue-600 text-white disabled:opacity-50 disabled:bg-neutral-700 hover:bg-blue-500 transition-colors"
+              className="p-2 rounded-full bg-blue-600 text-white disabled:opacity-50 disabled:bg-neutral-700 hover:bg-blue-500 transition-colors"
             >
               <Send size={16} />
             </button>
           </div>
-
-          {/* Outer Delete Button */}
-          <button 
-            type="button" 
-            onClick={handleDelete}
-            disabled={!isConnected || isStreaming}
-            className="shrink-0 p-3 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:bg-red-950/30 hover:border-red-900/50 disabled:opacity-50 transition-colors"
-            title="Clear Chat"
-          >
-            <Trash size={18} />
-          </button>
-          
-        </form>
-      </div>
-      
+        </div>
+        {/* Delete History Button */}
+        <button type="button" onClick={handleDelete} disabled={!isConnected || isStreaming} className="shrink-0 p-3 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:bg-red-950/30 transition-colors">
+          <Trash size={18} />
+        </button>
+      </form>
     </div>
   );
-};
+}

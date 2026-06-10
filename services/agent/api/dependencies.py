@@ -10,6 +10,10 @@ from core.memory import MemoryManager
 from tools.weather_service import WeatherService
 from shared.database.core import get_db
 from core.provider_factory import build_llm_provider
+from faster_whisper import WhisperModel
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8000")
@@ -20,6 +24,15 @@ gateway_client = GatewayClient(base_url=GATEWAY_URL)
 memory_manager = MemoryManager()
 weather_service = WeatherService()
 spotify_service = SpotifyService()
+
+# Voice Services
+try:
+    # use compute_type="int8" for CPU efficiency on Raspberry Pi
+    stt_model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+    logger.info("Local Whisper STT model loaded.")
+except ImportError:
+    stt_model = None
+    logger.warning("faster_whisper not installed. Voice input will fail.")
 
 # Base Persona
 SYSTEM_PROMPT = """

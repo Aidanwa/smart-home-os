@@ -28,6 +28,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./certs:/app/certs:ro
+    command: >
+      uv run uvicorn main:app 
+      --host 0.0.0.0 
+      --port 8000 
+      --ssl-keyfile=/app/certs/awapc.tail1752d3.ts.net.key
+      --ssl-certfile=/app/certs/awapc.tail1752d3.ts.net.crt
 
   # ----------------------------------------
   # 2. LLM Agent Logic

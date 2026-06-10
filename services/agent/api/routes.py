@@ -6,12 +6,14 @@ import os
 from http.cookies import SimpleCookie
 from fastapi import (
     APIRouter, WebSocket, WebSocketDisconnect, Depends, 
-    HTTPException, Request, status, BackgroundTasks
+    HTTPException, Request, status, BackgroundTasks,
+    UploadFile, File
 )
 from typing import Dict, Optional
 from api.models import ChatResponse, HistoryResponse
+import tempfile
 
-from api.dependencies import get_orchestrator
+from api.dependencies import get_orchestrator, stt_model
 from core.orchestrator import SmartHomeOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -159,3 +161,39 @@ async def initialize_chat(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/voice")
+async def process_voice_command(
+    request: Request,
+    audio_file: UploadFile = File(...),
+):
+    """Receives a browser audio blob, transcribes it locally, and returns text."""
+    user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
+    
+    if not stt_model:
+        raise HTTPException(status_code=500, detail="STT Model not configured on backend.")
+
+    # Save the uploaded webm/mp4 blob to a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+        content = await audio_file.read()
+        temp_audio.write(content)
+        temp_audio_path = temp_audio.name
+
+    try:
+        # Faster-Whisper automatically handles ffmpeg conversion from webm to 16khz pcm!
+        # beam_size=1 makes it faster for real-time edge devices
+        segments, info = stt_model.transcribe(temp_audio_path, beam_size=1)
+        
+        transcription = " ".join([segment.text for segment in segments]).strip()
+        
+        logger.info(f"User {user_id} voice transcribed: '{transcription}'")
+        
+        return {"status": "success", "text": transcription}
+        
+    except Exception as e:
+        logger.error(f"Voice processing failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process audio")
+    finally:
+        # Always clean up the temp file
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)

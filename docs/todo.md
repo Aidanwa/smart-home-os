@@ -21,6 +21,12 @@ Web search tool
 
 Create headless sink spotify connection container to run on pi for constant spotify connection.
 
+## Voice input
+
+Need to create edge node containers for wakeword listening and tts stt responses.
+
+improve ui voice input to websocket instead of rest for faster processing.
+
 ## Adding Accounts and user settings
 
 add admin account type with admin settings page that can edit all other users and permissions
@@ -36,6 +42,14 @@ inform agent of device state by room organization
 This is a big necessary next step for smart home robustness
 
 add cool triggers such as sunrise/sunset
+
+## FE improvements
+
+Chat doesn't expand to full screen, margin at bottom.
+
+Bottom bar doesn't show on mobile, need to scroll to see it.
+
+Rooms canvas is unusable on mobile. 
 
 ## Digital Wardrobe Management
 
