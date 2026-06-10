@@ -9,8 +9,6 @@ ADD VOICE INPUT
 
 improve prompting?
 
-make user memory update tool diff based instead of a full rewrite
-
 token tracking table and cost analytics - not that important right now
 
 add pricing display for each model when selecting models.
@@ -18,6 +16,10 @@ add pricing display for each model when selecting models.
 Resolve user IP address and provide current user location to model.
 
 Web search tool
+
+## Spotify improvement
+
+Create headless sink spotify connection container to run on pi for constant spotify connection.
 
 ## Adding Accounts and user settings
 

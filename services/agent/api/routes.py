@@ -8,8 +8,8 @@ from fastapi import (
     APIRouter, WebSocket, WebSocketDisconnect, Depends, 
     HTTPException, Request, status, BackgroundTasks
 )
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import Dict, Optional
+from api.models import ChatResponse, HistoryResponse
 
 from api.dependencies import get_orchestrator
 from core.orchestrator import SmartHomeOrchestrator
@@ -45,13 +45,6 @@ def extract_user_id_from_cookie(cookie_string: Optional[str]) -> str:
     except jwt.PyJWTError:
         logger.warning("Session context expired or signature mismatch.")
         raise HTTPException(status_code=401, detail="Session context expired or signature mismatch.")
-
-class ChatResponse(BaseModel):
-    response: str
-
-class HistoryResponse(BaseModel):
-    user_id: str
-    messages: List[Dict[str, Any]]
 
 @router.websocket("/chat/stream")
 async def chat_stream(

@@ -96,10 +96,9 @@ class MemoryManager:
 
     # --- Long-Term Memory (Persistent Text File) ---
     
-    async def get_user_profile(self, user_id: str) -> str:
-        """Reads the user's persistent memory entry from the database."""
+    async def get_user_memory_facts(self, user_id: str) -> list[str]:
+        """Reads the user's persistent memory facts from the database."""
         try:
-            # Ensure the user_id is a proper UUID object
             uid = uuid.UUID(user_id)
             
             async with AsyncSessionLocal() as session:
@@ -109,19 +108,25 @@ class MemoryManager:
                 pref_record = result.scalar_one_or_none()
                 
                 if pref_record and pref_record.agent_settings:
-                    # Extract the memory string, defaulting to empty if not set
-                    return pref_record.agent_settings.get("user_memory", "")
+                    memory_data = pref_record.agent_settings.get("user_memory", [])
+                    
+                    # BACKWARDS COMPATIBILITY: If the existing memory is the old string format,
+                    # convert it to a list containing that single string.
+                    if isinstance(memory_data, str):
+                        return [memory_data] if memory_data else []
+                        
+                    return memory_data
                 
-                return ""
+                return []
         except ValueError:
             logger.error(f"Invalid UUID format provided for user_id: {user_id}")
-            return ""
+            return []
         except Exception as e:
             logger.error(f"Failed to fetch user profile from database: {e}")
-            return ""
+            return []
 
-    async def update_user_profile(self, user_id: str, text: str) -> Dict[str, Any]:
-        """Tool: Overwrites the user's persistent memory field with new facts."""
+    async def update_user_memory(self, user_id: str, operations: list[dict]) -> Dict[str, Any]:
+        """Tool: Applies targeted diff operations (add/update/remove) to the user's memory array."""
         try:
             uid = uuid.UUID(user_id)
             
@@ -131,26 +136,62 @@ class MemoryManager:
                 )
                 pref_record = result.scalar_one_or_none()
 
-                if pref_record:
-                    # IMPORTANT: Create a new dict from the existing one so SQLAlchemy 
-                    # detects the mutation and triggers the UPDATE statement for the JSONB column.
-                    current_settings = dict(pref_record.agent_settings) if pref_record.agent_settings else {}
-                    current_settings["user_memory"] = text
-                    pref_record.agent_settings = current_settings
-                else:
-                    # If the user has never saved a preference before, create the row
-                    new_pref = UserPreference(
-                        user_id=uid,
-                        ui_settings={},
-                        agent_settings={"user_memory": text}
-                    )
-                    session.add(new_pref)
+                # 1. Fetch current facts (safely handling legacy strings)
+                current_settings = {}
+                current_facts = []
                 
-                await session.commit()
-                return {"status": "success", "message": "Memory successfully securely saved to vault."}
+                if pref_record:
+                    # Create a new dict to trigger SQLAlchemy JSONB mutation tracking
+                    current_settings = dict(pref_record.agent_settings) if pref_record.agent_settings else {}
+                    raw_memory = current_settings.get("user_memory", [])
+                    current_facts = [raw_memory] if isinstance(raw_memory, str) and raw_memory else (raw_memory if isinstance(raw_memory, list) else [])
+
+                # 2. Process Operations sequentially (sorting removals from high to low index)
+                modified = False
+                sorted_ops = sorted(
+                    operations, 
+                    key=lambda x: x.get("fact_id") if x.get("fact_id") is not None else -1, 
+                    reverse=True
+                )
+
+                for op_data in sorted_ops:
+                    op = op_data.get("op")
+                    fact_id = op_data.get("fact_id")
+                    content = op_data.get("content")
+
+                    if op == "add" and content:
+                        current_facts.append(content)
+                        modified = True
+                    elif op == "update" and fact_id is not None and content:
+                        if 0 <= fact_id < len(current_facts):
+                            current_facts[fact_id] = content
+                            modified = True
+                    elif op == "remove" and fact_id is not None:
+                        if 0 <= fact_id < len(current_facts):
+                            current_facts.pop(fact_id)
+                            modified = True
+
+                # 3. Save back to DB if changes occurred
+                if modified:
+                    current_settings["user_memory"] = current_facts
+                    
+                    if pref_record:
+                        pref_record.agent_settings = current_settings
+                    else:
+                        new_pref = UserPreference(
+                            user_id=uid,
+                            ui_settings={},
+                            agent_settings=current_settings
+                        )
+                        session.add(new_pref)
+                    
+                    await session.commit()
+                    return {"status": "success", "message": "Memory successfully updated via diff patch."}
+                
+                return {"status": "success", "message": "No memory changes were required."}
                 
         except ValueError:
-            return {"status": "error", "message": "Failed to save memory: Invalid User ID format."}
+            return {"status": "error", "message": "Failed to patch memory: Invalid User ID format."}
         except Exception as e:
-            logger.error(f"Database error updating profile for {user_id}: {e}")
-            return {"status": "error", "message": f"Failed to save memory to database vault."}
+            logger.error(f"Database error patching memory for {user_id}: {e}")
+            return {"status": "error", "message": "Failed to patch memory in database vault."}

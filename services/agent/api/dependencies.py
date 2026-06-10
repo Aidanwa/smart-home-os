@@ -55,7 +55,7 @@ TOOL_REGISTRY = {
     "set_device_state": gateway_client.set_device_state,
 
     # memory
-    "update_memory": memory_manager.update_user_profile,
+    "update_memory": memory_manager.update_user_memory,
 
     #weather
     "get_weather": weather_service.get_weather,

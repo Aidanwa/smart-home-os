@@ -94,14 +94,21 @@ class SmartHomeOrchestrator:
         else:
             current_spotify = cached_spotify
 
-        user_profile = await self.memory.get_user_profile(user_id)
+        facts = await self.memory.get_user_memory_facts(user_id) or []
+
+        if facts:
+            memory_context = ""
+            for idx, fact in enumerate(facts):
+                memory_context += f"[{idx}] {fact}\n"
+        else:
+            memory_context = "No long-term memories recorded yet."
         time_str = now.strftime('%A, %B %d, %Y at %I:%M %p %Z')
         
         # Build Instructions
         instructions = self.system_prompt_tmpl.format(
             homename=home_nickname,
             homestate=home_context,
-            userprofile=user_profile,
+            userprofile=memory_context,
             weatherinfo=current_weather,
             spotifyinfo=current_spotify,
             timeinfo=time_str,

@@ -37,16 +37,35 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
         },
         {
             "name": "update_memory",
-            "description": "Saves long-term memory, facts, or preferences about the user. Re-write the entire memory file incorporating the new facts alongside existing ones. Keep the text concise. Do not delete old information unless intentional.",
+            "description": "Applies targeted diff operations to the user's long-term memory array. Allows adding new facts, updating inaccurate facts, or removing stale facts.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "The complete, updated text to save in the user's profile file."
+                    "operations": {
+                        "type": "array",
+                        "description": "A list of targeted updates to apply to the user's long-term profile.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {
+                                    "type": "string",
+                                    "enum": ["add", "update", "remove"],
+                                    "description": "The type of operation to perform: 'add', 'update', or 'remove'."
+                                },
+                                "fact_id": {
+                                    "type": ["integer", "null"],
+                                    "description": "The index/ID of the fact being modified or removed. Leave null when adding a new fact."
+                                },
+                                "content": {
+                                    "type": ["string", "null"],
+                                    "description": "The textual content of the preference or fact. Leave null when removing."
+                                }
+                            },
+                            "required": ["op"]
+                        }
                     }
                 },
-                "required": ["text"]
+                "required": ["operations"]
             }
         },
         {
