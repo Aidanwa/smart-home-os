@@ -4,7 +4,10 @@ import json
 import jwt
 import os
 from http.cookies import SimpleCookie
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter, WebSocket, WebSocketDisconnect, Depends, 
+    HTTPException, Request, status, BackgroundTasks
+)
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
@@ -150,13 +153,16 @@ async def chat_sync(
 @router.post("/chat/initialize")
 async def initialize_chat( 
     request: Request,
-    orchestrator_factory= Depends(get_orchestrator)
+    background_tasks: BackgroundTasks,
+    orchestrator_factory = Depends(get_orchestrator)
 ):
     """Pre-fetches weather and home info to reduce first-message latency."""
     user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
     try:
         orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
-        result = await orchestrator.initialize_session(user_id=user_id)
-        return result
+        background_tasks.add_task(orchestrator.spotify.cache_user_playlists, user_id=user_id)
+        background_tasks.add_task(orchestrator.initialize_session,user_id=user_id)
+        return
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

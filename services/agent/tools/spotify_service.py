@@ -6,6 +6,9 @@ import asyncio
 import httpx
 from typing import Dict, Any, Optional
 from sqlalchemy.future import select
+import difflib
+import redis.asyncio as redis
+import os
 
 # Access shared workspace persistence models natively
 from shared.database.core import AsyncSessionLocal
@@ -31,6 +34,8 @@ class SpotifyService:
         
         # Per-User Token Cache: user_id -> {"access_token": str}
         self._token_cache: Dict[str, Dict[str, Any]] = {}
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.redis = redis.from_url(redis_url, decode_responses=True)
 
     async def close(self):
         """Gracefully close the HTTP connection pool."""
@@ -231,6 +236,47 @@ class SpotifyService:
                 return str(e)
             logger.error(f"Failed to fetch Spotify context: {e}")
             return "[SPOTIFY]: API Error or Not Authenticated."
+        
+    async def cache_user_playlists(self, user_id: str) -> None:
+        """Background task: Paginate all Spotify playlists and cache them in Redis."""
+        offset = 0
+        limit = 50
+        all_playlists = {}
+
+        cache_key = f"user:{user_id}:spotify_playlists"
+        
+        # Skip the heavy API pagination if the cache already exists
+        if await self.redis.exists(cache_key):
+            logger.info(f"Playlists already cached for user {user_id}, skipping retrieval.")
+            return
+        
+        try:
+            while True:
+                response = await self._request(user_id, "GET", f"/me/playlists?limit={limit}&offset={offset}")
+                
+                if not response or "items" not in response:
+                    break
+                    
+                for p in response["items"]:
+                    if p and p.get("name") and p.get("uri"):
+                        all_playlists[p["name"]] = p["uri"]
+                
+                if not response.get("next"):
+                    break
+                
+                offset += limit
+
+            if all_playlists:
+                
+                # Overwrite old cache and set a 24-hour TTL
+                await self.redis.delete(cache_key)
+                await self.redis.hset(cache_key, mapping=all_playlists)
+                await self.redis.expire(cache_key, 86400)
+                
+                logger.info(f"Successfully cached {len(all_playlists)} playlists for user {user_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to cache playlists for user {user_id}: {e}")
 
     # ---------------------------------------------------------
     # Helpers
@@ -427,3 +473,85 @@ class SpotifyService:
         except Exception as e:
             logger.error(f"Error queuing track: {e}")
             return {"status": "error", "message": f"Failed to queue track: {str(e)}. Make sure a device is currently active."}
+        
+    async def spotify_search_playlist(self, query: str, force_reload: bool = False, **kwargs) -> Dict[str, Any]:
+        """Tool: Fuzzy search for a specific playlist from the user's cached library."""
+        try:
+            user_id = kwargs.get("user_id")
+            if not user_id:
+                return {"status": "error", "message": "User ID missing for cache lookup."}
+                
+            cache_key = f"user:{user_id}:spotify_playlists"
+            
+            # Trigger pagination rebuild if missing or explicitly requested
+            if force_reload or not await self.redis.exists(cache_key):
+                await self.cache_user_playlists(user_id=user_id)
+                
+            cached_playlists = await self.redis.hgetall(cache_key)
+            
+            if not cached_playlists:
+                return {"status": "success", "data": [], "message": "No playlists found in library."}
+            
+            # 1. Sanitize the query (users often say "play my jazz playlist")
+            clean_query = query.lower().replace("playlist", "").replace("my", "").strip()
+            
+            # Map lowercase names to original names for case-insensitive matching
+            lower_to_original = {name.lower(): name for name in cached_playlists.keys()}
+            playlist_names = list(lower_to_original.keys())
+            
+            matched_names = []
+            seen = set()
+            
+            # Helper function to append unique matches
+            def add_matches(new_matches):
+                for m in new_matches:
+                    if m not in seen:
+                        seen.add(m)
+                        matched_names.append(m)
+
+            if clean_query:
+                # Tier 1: Substring Match (e.g., query "jazz" is inside "background jazz")
+                t1_matches = [name for name in playlist_names if clean_query in name]
+                add_matches(t1_matches)
+                
+                # Tier 2: Token Intersection (e.g., query "chill vibes" matches "vibes and chill")
+                query_tokens = set(clean_query.split())
+                t2_matches = []
+                for name in playlist_names:
+                    name_tokens = set(name.split())
+                    if query_tokens & name_tokens:  # If any words overlap
+                        t2_matches.append(name)
+                add_matches(t2_matches)
+                
+                # Tier 3: Fuzzy Match Fallback (Only run if we have less than 5 results)
+                needed = 5 - len(matched_names)
+                if needed > 0:
+                    # Only search through playlists we haven't already matched
+                    remaining_names = [name for name in playlist_names if name not in seen]
+                    t3_matches = difflib.get_close_matches(
+                        clean_query, 
+                        remaining_names, 
+                        n=needed, 
+                        cutoff=0.001
+                    )
+                    add_matches(t3_matches)
+            
+            # Enforce exactly top 5 max (in case Tier 1 or 2 found more than 5 on their own)
+            # If the user literally just passed "my playlist" and clean_query is empty, just return the first 5
+            top_matches = matched_names[:5] if clean_query else playlist_names[:5]
+            
+            # Re-map the matched lowercase strings back to the original names and URIs
+            results = [
+                {
+                    "name": lower_to_original[match], 
+                    "uri": cached_playlists[lower_to_original[match]]
+                } 
+                for match in top_matches
+            ]
+            
+            return {"status": "success", "data": results}
+        
+        except Exception as e:
+            logger.error(f"Error searching playlists: {e}")
+            return {"status": "error", "message": f"Failed to search playlists: {str(e)}."}
+        
