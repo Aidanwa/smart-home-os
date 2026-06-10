@@ -25,7 +25,7 @@ async def get_spotify_auth_url(user = Depends(get_current_user)):
     state = uuid.uuid4().hex
     # Optional: You could save this `state` in Redis keyed to the user_id for strict CSRF validation later.
     
-    scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+    scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative"
     
     auth_url = (
         f"https://accounts.spotify.com/authorize?response_type=code"

@@ -205,7 +205,8 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
                 "name": "spot_search_playlist",
                 "description": "Search the user's saved Spotify playlists by name to get the exact 'uri' to play. ALWAYS use this before playing a user's playlist. "
                 "This method does substring matching, token intersection, and fuzz similarity on the query term to find results. It returns the top 5 or less closest matches."
-                "This is the only way to find playlists that are private to the user.",
+                "This is the only way to find playlists that are private to the user. "
+                "Prioritize searching with this tool when the user requests a playlist. only use lowercase, normalizes all names to lowercase.",
                 "parameters": {
                     "type": "object",
                     "properties": {

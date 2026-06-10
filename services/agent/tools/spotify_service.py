@@ -237,43 +237,43 @@ class SpotifyService:
             logger.error(f"Failed to fetch Spotify context: {e}")
             return "[SPOTIFY]: API Error or Not Authenticated."
         
-    async def cache_user_playlists(self, user_id: str) -> None:
+    async def cache_user_playlists(self, user_id: str, force=False) -> None:
         """Background task: Paginate all Spotify playlists and cache them in Redis."""
         offset = 0
         limit = 50
         all_playlists = {}
 
         cache_key = f"user:{user_id}:spotify_playlists"
-        
-        # Skip the heavy API pagination if the cache already exists
-        if await self.redis.exists(cache_key):
-            logger.info(f"Playlists already cached for user {user_id}, skipping retrieval.")
+        if not force and await self.redis.exists(cache_key):
+            logger.debug(f"Playlists already cached for user {user_id}, skipping retrieval.")
             return
         
         try:
             while True:
                 response = await self._request(user_id, "GET", f"/me/playlists?limit={limit}&offset={offset}")
                 
-                if not response or "items" not in response:
+                # Check for invalid response or an empty items list
+                if not response or not response.get("items"):
                     break
                     
                 for p in response["items"]:
                     if p and p.get("name") and p.get("uri"):
-                        all_playlists[p["name"]] = p["uri"]
+                        # Fixed: Using URI as the unique key
+                        all_playlists[p["uri"]] = p["name"]
                 
-                if not response.get("next"):
-                    break
-                
+                # Bulletproof Pagination: Compare offset to the total available items
+                total_items = response.get("total", 0)
                 offset += limit
+                
+                if offset >= total_items:
+                    break  # We've fetched all available playlists
 
             if all_playlists:
-                
-                # Overwrite old cache and set a 24-hour TTL
                 await self.redis.delete(cache_key)
                 await self.redis.hset(cache_key, mapping=all_playlists)
                 await self.redis.expire(cache_key, 86400)
                 
-                logger.info(f"Successfully cached {len(all_playlists)} playlists for user {user_id}")
+                logger.debug(f"Successfully cached {len(all_playlists)} playlists for user {user_id}")
                 
         except Exception as e:
             logger.error(f"Failed to cache playlists for user {user_id}: {e}")
@@ -485,66 +485,81 @@ class SpotifyService:
             
             # Trigger pagination rebuild if missing or explicitly requested
             if force_reload or not await self.redis.exists(cache_key):
-                await self.cache_user_playlists(user_id=user_id)
+                await self.cache_user_playlists(user_id=user_id, force=force_reload)
                 
             cached_playlists = await self.redis.hgetall(cache_key)
             
             if not cached_playlists:
                 return {"status": "success", "data": [], "message": "No playlists found in library."}
             
-            # 1. Sanitize the query (users often say "play my jazz playlist")
+            # 1. Sanitize the query
             clean_query = query.lower().replace("playlist", "").replace("my", "").strip()
+            logger.debug(f"Clean query: '{clean_query}'")
             
-            # Map lowercase names to original names for case-insensitive matching
-            lower_to_original = {name.lower(): name for name in cached_playlists.keys()}
-            playlist_names = list(lower_to_original.keys())
+            # Build a pool of dictionaries to keep URIs and Names locked together.
+            # This safely handles multiple playlists with the exact same name.
+            playlist_pool = [
+                {"uri": uri, "name": name, "lower_name": name.lower()} 
+                for uri, name in cached_playlists.items()
+            ]
             
-            matched_names = []
-            seen = set()
+            matched_playlists = []
+            seen_uris = set()
             
-            # Helper function to append unique matches
+            # Helper function to append unique matches based on URI
             def add_matches(new_matches):
-                for m in new_matches:
-                    if m not in seen:
-                        seen.add(m)
-                        matched_names.append(m)
+                for p in new_matches:
+                    if p["uri"] not in seen_uris:
+                        seen_uris.add(p["uri"])
+                        matched_playlists.append(p)
 
             if clean_query:
-                # Tier 1: Substring Match (e.g., query "jazz" is inside "background jazz")
-                t1_matches = [name for name in playlist_names if clean_query in name]
+                # Tier 1: Substring Match
+                t1_matches = [p for p in playlist_pool if clean_query in p["lower_name"]]
                 add_matches(t1_matches)
                 
-                # Tier 2: Token Intersection (e.g., query "chill vibes" matches "vibes and chill")
+                # Tier 2: Token Intersection
                 query_tokens = set(clean_query.split())
                 t2_matches = []
-                for name in playlist_names:
-                    name_tokens = set(name.split())
+                for p in playlist_pool:
+                    name_tokens = set(p["lower_name"].split())
                     if query_tokens & name_tokens:  # If any words overlap
-                        t2_matches.append(name)
+                        t2_matches.append(p)
                 add_matches(t2_matches)
                 
                 # Tier 3: Fuzzy Match Fallback (Only run if we have less than 5 results)
-                needed = 5 - len(matched_names)
+                needed = 5 - len(matched_playlists)
                 if needed > 0:
-                    # Only search through playlists we haven't already matched
-                    remaining_names = [name for name in playlist_names if name not in seen]
-                    t3_matches = difflib.get_close_matches(
+                    # Filter out playlists we've already matched
+                    remaining_pool = [p for p in playlist_pool if p["uri"] not in seen_uris]
+                    remaining_names = [p["lower_name"] for p in remaining_pool]
+                    
+                    t3_string_matches = difflib.get_close_matches(
                         clean_query, 
                         remaining_names, 
                         n=needed, 
                         cutoff=0.001
                     )
+                    
+                    # Map the raw string matches back to their dictionary objects
+                    t3_matches = []
+                    for match_str in t3_string_matches:
+                        for p in remaining_pool:
+                            if p["lower_name"] == match_str and p["uri"] not in seen_uris:
+                                t3_matches.append(p)
+                                seen_uris.add(p["uri"]) # Prevent claiming a duplicate named playlist twice
+                                break
+                                
                     add_matches(t3_matches)
             
-            # Enforce exactly top 5 max (in case Tier 1 or 2 found more than 5 on their own)
-            # If the user literally just passed "my playlist" and clean_query is empty, just return the first 5
-            top_matches = matched_names[:5] if clean_query else playlist_names[:5]
+            # Enforce exactly top 5 max
+            top_matches = matched_playlists if clean_query else playlist_pool[:5]
             
-            # Re-map the matched lowercase strings back to the original names and URIs
+            # Format the final results, safely extracting the original name and URI
             results = [
                 {
-                    "name": lower_to_original[match], 
-                    "uri": cached_playlists[lower_to_original[match]]
+                    "name": match["name"],
+                    "uri": match["uri"]
                 } 
                 for match in top_matches
             ]
