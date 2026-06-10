@@ -13,13 +13,13 @@ make user memory update tool diff based instead of a full rewrite
 
 improve spotify tool suite to include finding user playlists/library
 
-add initialize endpoint to cache weather and home information when user navigates to agent page, so the first message of each convo doesn't take extra time.
-
 token tracking table and cost analytics - not that important right now
 
 add pricing display for each model when selecting models.
 
 Resolve user IP address and provide current user location to model.
+
+Web search tool
 
 ## Adding Accounts and user settings
 

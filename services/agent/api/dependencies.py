@@ -65,6 +65,7 @@ TOOL_REGISTRY = {
     "spot_ctrl": spotify_service.spotify_controller,
     "spot_info": spotify_service.spotify_get_advanced_info,
     "spot_search": spotify_service.spotify_search,
+    "spot_queue": spotify_service.spotify_queue_track,
 }
 
 async def get_orchestrator(db: AsyncSession = Depends(get_db)):

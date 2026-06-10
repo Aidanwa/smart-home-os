@@ -186,7 +186,21 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
                     },
                     "required": ["q"]
                 }
-            }
+            },
+            {
+                "name": "spot_queue",
+                "description": "Add a specific track, album, or playlist to the user's upcoming playback queue. Does NOT interrupt the currently playing music. Requires a valid Spotify URI.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "uri": {
+                            "type": "string", 
+                            "description": "The exact Spotify URI of the item to queue (e.g., 'spotify:track:123456...')."
+                        }
+                    },
+                    "required": ["uri"]
+                }
+            },
         ]
         tools.extend(spotify_tools)
 

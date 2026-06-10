@@ -414,3 +414,16 @@ class SpotifyService:
             return {"status": "error", "message": f"Spotify API rejected search: {e.response.text}"}
         except Exception as e:
             return {"status": "error", "message": f"Search failed: {str(e)}"}
+        
+    async def spotify_queue_track(self, user_id, uri: str, **kwargs) -> Dict[str, Any]:
+        """Tool: Add a specific URI to the active playback queue."""
+        try:
+            # POST to /me/player/queue with the URI. 
+            # By omitting device_id, Spotify automatically queues to the currently active device.
+            await self._request(user_id, "POST", f"/me/player/queue?uri={uri}")
+            
+            return {"status": "success", "message": f"Successfully added {uri} to the queue."}
+            
+        except Exception as e:
+            logger.error(f"Error queuing track: {e}")
+            return {"status": "error", "message": f"Failed to queue track: {str(e)}. Make sure a device is currently active."}
