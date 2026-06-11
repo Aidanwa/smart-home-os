@@ -107,13 +107,12 @@ function AuthenticatedDashboard() {
   }, [devices, sortMode]);
 
   return (
-    <div className="flex flex-col-reverse md:flex-row min-h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
+    <div className="flex flex-col-reverse md:flex-row min-h-[100dvh] bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
       
       {/* Decoupled High-Speed Modular Navigation System */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* CHANGED: Removed global padding and scroll, made it a strict h-screen flex column */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
+      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden w-full relative">
         
         {activeTab === 'home' && (
           // CHANGED: Moved the padding and scroll into the specific home container

@@ -48,7 +48,7 @@ export const AgentChat: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col w-full h-[calc(100dvh-6rem)] md:h-[calc(100vh-8rem)] min-h-[400px] bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden shadow-lg animate-in fade-in text-neutral-200">      
+    <div className="flex flex-col w-full h-full flex-1 bg-neutral-900 border-0 md:border border-neutral-800 rounded-none md:rounded-xl overflow-hidden shadow-lg ...">      
       {/* Header */}
       <div className="p-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-950 shrink-0">
         <div className="flex items-center gap-2">

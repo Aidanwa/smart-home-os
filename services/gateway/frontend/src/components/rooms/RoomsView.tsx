@@ -248,7 +248,7 @@ export function RoomsView({
       </div>
 
       {/* 3. Main Content Split: flex-row (Canvas Left, Sidebar Right) */}
-      <div className="flex-1 flex flex-row overflow-hidden relative">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* Canvas Area */}
         <div ref={containerRef} className="flex-1 relative overflow-hidden bg-neutral-950" 

@@ -67,4 +67,5 @@ automatic hardware updates for devices, like actually a version updates for the 
 
 # KNOWN BUGS:
 
-group endpoints don't work, masked the bug for adding and removing devices but issue is still there when adding and deleting, as well as only masked for add/delete. Something about the group ID not existing in database, will be useful to look at zigbee logs which I can't right now. Preferably when I fix it, I go back and clean up the jerryrigging the routes and websockets for groups I did.
+there is some issue with the group endpoints, it tries to remove the wrong group id, instead of using the actual id?
+I tried to fix this but now it's sometimes crashing mqtt. Not really sure. it works well enough though to be a real issue, and can be addressed later. the functionality works for the user and my application handles the logic fine. it's just the mqtt that throws some error.
