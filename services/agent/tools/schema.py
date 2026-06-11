@@ -25,7 +25,7 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
                                 },
                                 "state": {
                                     "type": "object",
-                                    "description": "A dictionary of the properties to change. E.g., {'state': 'ON', 'brightness': 255}"
+                                    "description": "A dictionary of the properties to change. E.g., {'state': 'ON', 'brightness': 254}"
                                 }
                             },
                             "required": ["device", "state"]
