@@ -35,7 +35,6 @@ export function useGroups() {
   useEffect(() => {
     const handleGroupsSync = (event: CustomEvent) => {
       // event.detail contains the data.groups payload we sent from useDevices
-      console.log("🎯 GROUP HOOK RECEIVED CUSTOM EVENT:", event.detail);
       setGroups(event.detail);
     };
 

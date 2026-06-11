@@ -42,7 +42,6 @@ export function useDevices() {
         }));
       }
       if (data.type === 'groups_update') {
-        console.log("📡 DEVICE HOOK CAUGHT GROUP UPDATE:", data.groups); // ADD THIS
         window.dispatchEvent(new CustomEvent('onGroupsUpdate', { 
           detail: data.groups 
         }));
