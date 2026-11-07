@@ -17,5 +17,9 @@ In /services/agent/pyproject.toml, you simply add:
 Ini, TOML
 [tool.uv.sources]
 shared = { workspace = true }
-Now, in your Agent code, you can just do from shared.models import User. uv handles the "linking" automatically.
+Now, in your Agent code, you can do `from shared.database.models import User`.
+
+Caveat: `shared/pyproject.toml` installs top-level packages `database` and `alembic`, not `shared`.
+`shared.*` imports actually resolve as a namespace package because the repo root is on `sys.path`
+(Dockerfiles set `PYTHONPATH=/app/services/<svc>:/app`; locally, run from the repo root).
 

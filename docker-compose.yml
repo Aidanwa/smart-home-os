@@ -30,12 +30,17 @@ services:
         condition: service_healthy
     volumes:
       - ./certs:/app/certs:ro
+    # Lets MQTT_HOST=host.docker.internal reach a broker running on this same machine
+    # (the Pi). Harmless on Docker Desktop.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # TLS_HOST (in .env) selects which Tailscale cert pair in ./certs to serve.
     command: >
-      uv run uvicorn main:app 
-      --host 0.0.0.0 
-      --port 8000 
-      --ssl-keyfile=/app/certs/awapc.tail1752d3.ts.net.key
-      --ssl-certfile=/app/certs/awapc.tail1752d3.ts.net.crt
+      uv run uvicorn main:app
+      --host 0.0.0.0
+      --port 8000
+      --ssl-keyfile=/app/certs/${TLS_HOST:-awapc.tail1752d3.ts.net}.key
+      --ssl-certfile=/app/certs/${TLS_HOST:-awapc.tail1752d3.ts.net}.crt
 
   # ----------------------------------------
   # 2. LLM Agent Logic
@@ -106,7 +111,8 @@ services:
       - ./volumes/postgres_data:/var/lib/postgresql/data
       - ./services/database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      # Loopback only: host-side Alembic still works, but the DB isn't exposed to the LAN.
+      - "127.0.0.1:5432:5432"
     networks:
       - smarthome_net
     logging:

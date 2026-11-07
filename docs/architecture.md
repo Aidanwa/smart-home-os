@@ -14,29 +14,31 @@ flowchart TD
 
     %% Gateway Service
     subgraph GatewayContainer["Gateway Container"]
-        Gateway["Gateway Service<br/>(API, MqttBus, RBAC Logic)"]
+        Gateway["Gateway Service<br/>(API, MqttBus, Auth, SPA host)"]
     end
 
     %% Data & Infra
     subgraph Infrastructure["Data & Infrastructure"]
         Postgres[("PostgreSQL<br/>(Users, Roles, Config)")]
         Redis[("Redis<br/>(Digital Twin)")]
-        MQTT["MQTT Broker<br/>(Mosquitto / Z2M)"]
+        MQTT["MQTT Broker + Z2M<br/>(on Pi 'zigbee-hub', outside compose)"]
         Hardware["Zigbee Hardware<br/>(Lights, Sensors)"]
     end
 
-    %% Flow: Edge/UI to Agent
-    Edge -- "JSON: {user_id, text}" --> Agent
-    UI -- "REST / WS" --> Agent
-    UI -- "WebSockets (State)" --> Gateway
+    %% Flow: Edge/UI to Agent (edge node is planned, not built yet)
+    Edge -. "planned" .-> Agent
+    UI -- "REST + WS (HTTPS, cookie JWT)" --> Gateway
+    Gateway -- "Proxies /api/agent/* (REST + WS)" --> Agent
 
-    %% Flow: Agent to Gateway (The Correction)
-    Agent -- "1. GET /api/context (State + RBAC)" --> Gateway
-    Agent -- "2. POST /api/devices/{name}/set" --> Gateway
+    %% Flow: Agent to Gateway (agent mints a short-lived JWT for the user)
+    Agent -- "1. GET /api/devices (home state)" --> Gateway
+    Agent -- "2. POST /api/devices/{id}/set" --> Gateway
+    Agent -- "Prefs, secrets, memory, home profile" --> Postgres
+    Agent -- "Spotify playlist cache" --> Redis
 
     %% Flow: Gateway to Data
-    Gateway -- "Read / Write Auth" --> Postgres
-    Gateway -- "Read / Write State" --> Redis
+    Gateway -- "Users, prefs, secrets, rooms, home" --> Postgres
+    Gateway -- "Digital twin (state by IEEE address)" --> Redis
 
     %% Flow: Gateway to Hardware
     Gateway -- "Publish RPC Command" --> MQTT

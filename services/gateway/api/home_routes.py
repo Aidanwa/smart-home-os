@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Optional
 
-from services.gateway.api.auth import get_current_user
+from api.auth import get_current_user
 from shared.database.core import get_db
 from shared.database.models import Home
 from .models import HomeUpdate, HomeResponse
@@ -13,9 +13,12 @@ from .models import HomeUpdate, HomeResponse
 router = APIRouter(prefix="/api/home", tags=["Home Configuration"])
 logger = logging.getLogger(__name__)
 
-async def resolve_spatial_data(address: str, lat: Optional[float], lon: Optional[float]) -> tuple[Optional[float], Optional[float], dict]:
-    """Geocodes an address via OpenStreetMap and fetches the NWS Weather Grid."""
+async def resolve_spatial_data(address: Optional[str], lat: Optional[float], lon: Optional[float]) -> tuple[Optional[float], Optional[float], dict, Optional[str]]:
+    """Geocodes an address via OpenStreetMap and fetches the NWS Weather Grid.
+    Returns (lat, lon, weather_grid, address); address is Nominatim's display_name when geocoded."""
     weather_grid = {}
+    # Keep the caller's address unless geocoding succeeds (previously unbound if skipped/failed)
+    new_address = address
     
     # Add follow_redirects=True so httpx handles any 301/302 responses automatically
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -24,7 +27,8 @@ async def resolve_spatial_data(address: str, lat: Optional[float], lon: Optional
             try:
                 headers = {"User-Agent": "SmartHomeOS_Aidanwa/1.0 (https://github.com/aidanwa/smart-home-os)"}
                 res = await client.get(
-                    f"https://nominatim.openstreetmap.org/search?q={address}&format=json&limit=1",
+                    "https://nominatim.openstreetmap.org/search",
+                    params={"q": address, "format": "json", "limit": 1},
                     headers=headers,
                     timeout=5.0
                 )
@@ -66,7 +70,7 @@ async def get_home(
 
 @router.post("", response_model=HomeResponse)
 async def create_home(
-    data,
+    data: HomeUpdate,
     session: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):

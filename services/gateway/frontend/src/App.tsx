@@ -168,7 +168,6 @@ function AuthenticatedDashboard() {
 
         {activeTab === 'agent' && <AgentChat />}
 
-        {/* RoomsView now naturally inherits the full height without padding blocking it! */}
         {activeTab === 'rooms' && <RoomsView devices={devices} />}
 
         {activeTab === 'routines' && (
@@ -181,11 +180,7 @@ function AuthenticatedDashboard() {
           </div>
         )}
 
-        {activeTab === 'settings' && (
-          <div className="flex-1 overflow-y-auto p-6 md:p-10">
-             <SettingsView />
-          </div>
-        )}
+        {activeTab === 'settings' && <SettingsView />}
         
       </main>
     </div>

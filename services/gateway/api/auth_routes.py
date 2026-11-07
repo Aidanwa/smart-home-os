@@ -10,6 +10,7 @@ from shared.database.core import get_db
 from shared.database.models import User, UserPreference, UserSecret, LogicalZone, DevicePlacement
 from api.auth import get_current_user
 from core.security import hash_password, verify_password, create_access_token
+from shared.security import encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,10 @@ platform_router = APIRouter(prefix="/api/platform", tags=["Platform Config"])
 class UserAuthRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=8)
+
+class UserUpdateRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str | None = Field(default=None, min_length=8)
 
 class PreferenceUpdateRequest(BaseModel):
     ui_settings: dict | None = None
@@ -107,6 +112,34 @@ async def get_current_identity(current_user: User = Depends(get_current_user)):
         }
     }
 
+@auth_router.put("/me")
+async def update_current_identity(
+    request: UserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update the signed-in user's username and/or password.
+    The session JWT is keyed on user id, so the current session stays valid."""
+    new_username = request.username.strip()
+    if len(new_username) < 3:
+        raise HTTPException(status_code=422, detail="Username must be at least 3 characters.")
+
+    if new_username != current_user.username:
+        result = await db.execute(select(User).where(User.username == new_username, User.id != current_user.id))
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="That username is already taken.")
+        current_user.username = new_username
+
+    if request.password:
+        current_user.hashed_password = hash_password(request.password)
+
+    await db.commit()
+    logger.info(f"User {current_user.id} updated account details.")
+    return {
+        "status": "success",
+        "user": {"id": str(current_user.id), "username": current_user.username}
+    }
+
 @auth_router.delete("/me")
 async def delete_account(
     response: Response,
@@ -164,8 +197,8 @@ async def save_integration_secret(request: SecretSaveRequest, current_user: User
     result = await db.execute(select(UserSecret).where(UserSecret.user_id == current_user.id, UserSecret.provider == request.provider))
     existing_secret = result.scalar_one_or_none()
     
-    # NOTE: Add your symmetric fernet or AES application encryption logic on credentials here before DB save
-    encrypted_payload = request.credentials 
+    # Agent's provider_factory calls decrypt_secret() on this value, so it must be Fernet-encrypted
+    encrypted_payload = encrypt_secret(request.credentials)
 
     if existing_secret:
         existing_secret.encrypted_credentials = encrypted_payload

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export function AccountSettings() {
-  const { user, logout, authenticatedFetch } = useAuth();
+  const { user, logout, authenticatedFetch, refreshUser } = useAuth();
   
   // Profile State
   const [username, setUsername] = useState(user?.username || '');
@@ -30,7 +30,7 @@ export function AccountSettings() {
     }
 
     try {
-      const res = await authenticatedFetch('/api/users/me', { // Or '/api/auth/me' depending on your PUT route
+      const res = await authenticatedFetch('/api/auth/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,10 +43,15 @@ export function AccountSettings() {
         setProfileStatus({ type: 'success', message: 'Identity modifications pushed correctly.' });
         setNewPassword('');
         setIsEditing(false); // Drop back to static view on success
+        await refreshUser(); // Pull the new username into AuthContext (header, settings view)
         setTimeout(() => setProfileStatus(null), 4000);
       } else {
         const data = await res.json();
-        setProfileStatus({ type: 'error', message: data.detail || 'Identity update rejected by validator.' });
+        // FastAPI validation errors (422) return detail as an array of {msg, ...}
+        const detail = Array.isArray(data.detail)
+          ? data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(' ')
+          : data.detail;
+        setProfileStatus({ type: 'error', message: detail || 'Identity update rejected by validator.' });
       }
     } catch {
       setProfileStatus({ type: 'error', message: 'Failed to sync identity updates with database context.' });
