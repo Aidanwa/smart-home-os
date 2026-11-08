@@ -16,6 +16,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
 import { RoomsView } from './components/rooms/RoomsView';
 import { RoutinesView } from './components/routines/RoutinesView';
+import { useRoutineAlerts } from './hooks/useRoutines';
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
@@ -23,6 +24,7 @@ function AuthenticatedDashboard() {
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'home' | 'agent' | 'rooms' | 'routines' | 'settings'>('home');
+  const routineAlerts = useRoutineAlerts(activeTab === 'routines');
   const [dashboardView, setDashboardView] = useState<'devices' | 'groups'>('devices');
   const [isPairing, setIsPairing] = useState(false);
   const [sortMode, setSortMode] = useState<'type' | 'alphabetical'>('type');
@@ -111,7 +113,7 @@ function AuthenticatedDashboard() {
     <div className="flex flex-col-reverse md:flex-row min-h-[100dvh] bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
       
       {/* Decoupled High-Speed Modular Navigation System */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} />
 
       <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden w-full relative">
         

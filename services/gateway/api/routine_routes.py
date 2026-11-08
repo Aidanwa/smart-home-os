@@ -5,19 +5,21 @@ run-as owner (whose Spotify/LLM credentials later action types will use).
 """
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database.core import get_db
-from shared.database.models import Routine, RoutineRun, User
+from shared.database.models import Routine, RoutineRun, User, UserPreference
 from api.auth import get_current_user
 from scheduler.engine import Scheduler
-from scheduler.schema import DeviceAction, GroupAction, RoutineSpec
+from scheduler.schema import DeviceAction, DeviceCondition, DeviceTrigger, GroupAction, RoutineSpec
 from scheduler.timing import upcoming
+
+ALERT_STATUSES = ("failed", "partial", "missed", "interrupted")
 
 router = APIRouter(prefix="/api/routines", tags=["Routines"])
 
@@ -61,6 +63,11 @@ def _apply(r: Routine, spec: RoutineSpec):
         setattr(r, field, data[field])
 
 
+def _require_location_for_sun(spec: RoutineSpec, sched: Scheduler):
+    if spec.uses_sun() and sched.active and sched.loc is None:
+        raise HTTPException(status_code=422, detail="Sunrise/sunset needs the home location: set your address in Settings → Home first.")
+
+
 async def _get_or_404(db: AsyncSession, routine_id: uuid.UUID) -> Routine:
     r = await db.get(Routine, routine_id)
     if not r:
@@ -84,6 +91,7 @@ async def list_routines(db: AsyncSession = Depends(get_db), user=Depends(get_cur
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_routine(spec: RoutineSpec, db: AsyncSession = Depends(get_db),
                          user: User = Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
+    _require_location_for_sun(spec, sched)
     r = Routine(owner_user_id=user.id)
     _apply(r, spec)
     db.add(r)
@@ -101,17 +109,80 @@ async def preview_routine(spec: RoutineSpec, request: Request, user=Depends(get_
     warnings = []
     raw_groups = await bus.redis.get("gateway:groups")
     group_ids = {g.get("id") for g in json.loads(raw_groups)} if raw_groups else set()
+    twin = {k: json.loads(v) for k, v in (await bus.redis.hgetall("gateway:digital_twin")).items()}
     for a in spec.actions:
-        if isinstance(a, DeviceAction) and not await bus.redis.hexists("gateway:digital_twin", a.device):
+        if isinstance(a, DeviceAction) and a.device not in twin:
             warnings.append(f"Action {a.id}: device {a.device} isn't on the network")
         if isinstance(a, GroupAction) and a.group not in group_ids:
             warnings.append(f"Action {a.id}: group {a.group} doesn't exist")
+    watched = [(f"Trigger {t.id}", t) for t in spec.triggers if isinstance(t, DeviceTrigger)]
+    watched += [(f"Condition {i}", c) for i, c in enumerate(spec.conditions, 1) if isinstance(c, DeviceCondition)]
+    for label, item in watched:
+        if item.device not in twin:
+            warnings.append(f"{label}: device {item.device} isn't on the network")
+        elif item.attribute not in twin[item.device]:
+            name = twin[item.device].get("friendly_name", item.device)
+            warnings.append(f"{label}: {name} hasn't reported '{item.attribute}' yet")
+    if spec.uses_sun() and sched.loc is None:
+        warnings.append("Sunrise/sunset needs the home location (Settings → Home)")
     if not spec.triggers:
         warnings.append("No triggers: this routine only runs when you press Run now")
     if not sched.active:
         warnings.append("The scheduler isn't running on this gateway; see the gateway logs")
-    fires = upcoming(spec.triggers, datetime.now(timezone.utc), sched.tz) if spec.enabled else []
+    fires = upcoming(spec.triggers, datetime.now(timezone.utc), sched.tz, sched.loc) if spec.enabled else []
     return {"timezone": sched.tz.key, "next_fires": [_iso(t) for t in fires], "warnings": warnings}
+
+
+@router.get("/attributes")
+async def device_attributes(request: Request, user=Depends(get_current_user)):
+    """What each device reports, for the trigger/condition pickers: Z2M's exposes metadata where
+    known (type, unit, allowed values), else guessed from the device's current reading."""
+    bus = request.app.state.bus
+    raw = await bus.redis.get("gateway:device_exposes")
+    exposes = json.loads(raw) if raw else {}
+    twin = {k: json.loads(v) for k, v in (await bus.redis.hgetall("gateway:digital_twin")).items()}
+    skip = {"ieee_address", "friendly_name", "linkquality", "last_seen", "update"}
+    out = {}
+    for ieee, state in twin.items():
+        props = exposes.get(ieee)
+        if props is None:
+            props = []
+            for k, v in state.items():
+                if k in skip or isinstance(v, (dict, list)):
+                    continue
+                if isinstance(v, bool):
+                    props.append({"property": k, "type": "binary", "value_on": True, "value_off": False})
+                elif isinstance(v, (int, float)):
+                    props.append({"property": k, "type": "numeric"})
+                else:
+                    props.append({"property": k, "type": "text"})
+        out[ieee] = {"friendly_name": state.get("friendly_name", ieee), "properties": props,
+                     "current": {p["property"]: state.get(p["property"]) for p in props}}
+    return out
+
+
+@router.get("/alerts")
+async def alerts(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Failed/partial/missed/interrupted runs since this user last opened the Routines tab."""
+    prefs = await db.get(UserPreference, user.id)
+    seen = (prefs.ui_settings or {}).get("routines_seen_at") if prefs else None
+    since = datetime.fromisoformat(seen) if seen else datetime.now(timezone.utc) - timedelta(days=7)
+    count = await db.scalar(
+        select(func.count()).select_from(RoutineRun)
+        .where(RoutineRun.status.in_(ALERT_STATUSES), RoutineRun.started_at > since)
+    )
+    return {"count": count or 0, "since": since.isoformat()}
+
+
+@router.post("/alerts/seen")
+async def alerts_seen(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    prefs = await db.get(UserPreference, user.id)
+    if prefs is None:
+        prefs = UserPreference(user_id=user.id, ui_settings={}, agent_settings={})
+        db.add(prefs)
+    prefs.ui_settings = {**(prefs.ui_settings or {}), "routines_seen_at": datetime.now(timezone.utc).isoformat()}
+    await db.commit()
+    return {"count": 0}
 
 
 @router.get("/{routine_id}")
@@ -124,6 +195,7 @@ async def get_routine(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 async def update_routine(routine_id: uuid.UUID, spec: RoutineSpec, db: AsyncSession = Depends(get_db),
                          user=Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
     r = await _get_or_404(db, routine_id)
+    _require_location_for_sun(spec, sched)
     _apply(r, spec)
     await db.commit()
     await db.refresh(r)

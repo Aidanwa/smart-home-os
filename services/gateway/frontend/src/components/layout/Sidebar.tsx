@@ -9,9 +9,10 @@ import { useSystemHealth } from '../../hooks/useSystemHealth';
 interface SidebarProps {
   activeTab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings';
   setActiveTab: (tab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings') => void;
+  badges?: Partial<Record<'home' | 'agent' | 'rooms' | 'routines', number>>;
 }
 
-export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const healthStatus = useSystemHealth();
 
@@ -93,7 +94,15 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
                 isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 gap-3'
               } ${isActive ? 'bg-neutral-900 text-neutral-100 border-neutral-800' : 'bg-transparent text-text-neutral-500 border-transparent text-neutral-500 hover:bg-neutral-900/40 hover:text-neutral-300'}`}
             >
-              <Icon size={20} className={isActive ? 'text-blue-400' : ''} />
+              <span className="relative">
+                <Icon size={20} className={isActive ? 'text-blue-400' : ''} />
+                {!!badges[id] && (
+                  <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-4 text-center"
+                    aria-label={`${badges[id]} routine problem${badges[id] === 1 ? '' : 's'}`}>
+                    {badges[id]! > 9 ? '9+' : badges[id]}
+                  </span>
+                )}
+              </span>
               <span className={`text-[10px] md:text-sm font-medium ${isSidebarCollapsed ? 'hidden md:hidden' : 'block'}`}>
                 {label}
               </span>

@@ -1,18 +1,35 @@
 """Database access for the scheduler. Each call uses its own short session."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 
 from shared.database.core import AsyncSessionLocal
 from shared.database.models import Home, Routine, RoutineRun
 
 
-async def load_timezone() -> str:
+async def load_home() -> tuple[str, tuple[float, float] | None]:
+    """(timezone name, (lat, lon) or None)."""
     async with AsyncSessionLocal() as s:
         home = await s.scalar(select(Home).limit(1))
-        return home.timezone if home and home.timezone else "UTC"
+    if not home:
+        return "UTC", None
+    loc = None
+    if home.latitude is not None and home.longitude is not None:
+        loc = (float(home.latitude), float(home.longitude))
+    return home.timezone or "UTC", loc
+
+
+async def prune_runs(now: datetime) -> int:
+    """Skipped runs are kept 2 days, everything else 30 days."""
+    async with AsyncSessionLocal() as s:
+        a = await s.execute(delete(RoutineRun).where(
+            RoutineRun.status == "skipped", RoutineRun.started_at < now - timedelta(days=2)))
+        b = await s.execute(delete(RoutineRun).where(
+            RoutineRun.status != "running", RoutineRun.started_at < now - timedelta(days=30)))
+        await s.commit()
+        return (a.rowcount or 0) + (b.rowcount or 0)
 
 
 async def load_routines() -> list[Routine]:

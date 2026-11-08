@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Routine, RoutineRun, RoutineSpec } from '../components/routines/types';
+import type { AttributeMap, Routine, RoutineRun, RoutineSpec, TempUnit } from '../components/routines/types';
 import { formatApiError } from '../components/routines/types';
 
 export interface PreviewResult {
@@ -85,4 +85,44 @@ export function useRoutines() {
   };
 
   return { routines, timezone, schedulerActive, loading, error, refresh, save, remove, setEnabled, runNow, fetchRuns, preview };
+}
+
+/** What every device reports (types, units, allowed values), for trigger/condition pickers. */
+export function useDeviceAttributes() {
+  const [attributes, setAttributes] = useState<AttributeMap>({});
+  useEffect(() => {
+    call('/api/routines/attributes').then(res => res.ok && setAttributes(res.data as AttributeMap));
+  }, []);
+  return attributes;
+}
+
+/** Per-user °F/°C preference for temperature thresholds (stored in ui_settings.temp_unit). */
+export function useTempUnit(): [TempUnit, (u: TempUnit) => void] {
+  const [unit, setUnit] = useState<TempUnit>('F');
+  useEffect(() => {
+    call('/api/platform/preferences').then(res => {
+      const saved = (res.data as { ui_settings?: { temp_unit?: TempUnit } } | null)?.ui_settings?.temp_unit;
+      if (saved === 'C' || saved === 'F') setUnit(saved);
+    });
+  }, []);
+  const save = (u: TempUnit) => {
+    setUnit(u);
+    call('/api/platform/preferences', { method: 'PUT', body: JSON.stringify({ ui_settings: { temp_unit: u } }) });
+  };
+  return [unit, save];
+}
+
+/** Count of failed/partial/missed/interrupted runs since this user last looked at Routines.
+ *  While the tab is open, everything counts as seen. */
+export function useRoutineAlerts(onRoutinesTab: boolean) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const sync = () =>
+      call(onRoutinesTab ? '/api/routines/alerts/seen' : '/api/routines/alerts', onRoutinesTab ? { method: 'POST' } : undefined)
+        .then(res => res.ok && setCount((res.data as { count: number }).count));
+    sync();
+    window.addEventListener('onRoutineRun', sync);
+    return () => window.removeEventListener('onRoutineRun', sync);
+  }, [onRoutinesTab]);
+  return count;
 }

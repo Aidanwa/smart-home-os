@@ -9,7 +9,7 @@ interface Props {
   fetchRuns: (id: string) => Promise<RoutineRun[]>;
 }
 
-const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', manual: 'Run now' };
+const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', manual: 'Run now' };
 
 export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
@@ -50,6 +50,12 @@ export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
               <div className="px-3 pb-3 space-y-2 text-xs">
                 {run.late_seconds ? <p className="text-amber-400">Started {run.late_seconds}s late.</p> : null}
                 {typeof run.trigger_detail?.reason === 'string' && <p className="text-neutral-400">{run.trigger_detail.reason}</p>}
+                {typeof run.trigger_detail?.attribute === 'string' && (
+                  <p className="text-neutral-400">
+                    Triggered by {String(run.trigger_detail.device)} {String(run.trigger_detail.attribute)} = {String(run.trigger_detail.value)}
+                    {typeof run.trigger_detail.held_s === 'number' ? ` (held ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
+                  </p>
+                )}
                 {run.error && <p className="text-red-400 whitespace-pre-line">{run.error}</p>}
                 {run.steps.map((s, i) => <StepRow key={`${s.id}-${i}`} step={s} />)}
               </div>
@@ -62,7 +68,7 @@ export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
 }
 
 const STEP_STYLE: Record<RunStep['status'], string> = {
-  ok: 'text-green-400', failed: 'text-red-400', skipped: 'text-neutral-500', cancelled: 'text-neutral-500',
+  ok: 'text-green-400', partial: 'text-amber-400', failed: 'text-red-400', skipped: 'text-neutral-500', cancelled: 'text-neutral-500',
 };
 
 function StepRow({ step }: { step: RunStep }) {
@@ -78,6 +84,7 @@ function StepRow({ step }: { step: RunStep }) {
         <p className="text-neutral-300 break-words">{step.id}: {what}</p>
         {step.error && <p className="text-red-400 break-words">{step.error}</p>}
         {typeof d.reason === 'string' && <p className="text-neutral-500">{d.reason}</p>}
+        {Array.isArray(d.did_not_follow) && <p className="text-amber-400 break-words">Didn't follow: {d.did_not_follow.join(', ')}</p>}
         {step.ms != null && step.type !== 'delay' && <p className="text-neutral-600">{step.ms} ms</p>}
       </div>
     </div>

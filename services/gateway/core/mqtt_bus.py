@@ -8,6 +8,30 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+_EXPOSE_KEYS = ("property", "type", "unit", "values", "value_on", "value_off", "value_min", "value_max")
+
+
+def summarize_exposes(devices: list) -> dict:
+    """{ieee: [{property, type, unit, values, ...}]} for the properties each device publishes.
+    Composite/list exposes (e.g. colour x/y) are skipped: their values are objects, not scalars."""
+    def flat(exposes):
+        for e in exposes:
+            if not isinstance(e, dict) or e.get("type") in ("composite", "list"):
+                continue
+            if e.get("features"):
+                yield from flat(e["features"])
+            elif e.get("property") and e.get("access", 1) & 1 and e["property"] != "linkquality":
+                yield {k: e[k] for k in _EXPOSE_KEYS if k in e}
+
+    out = {}
+    for d in devices:
+        if isinstance(d, dict) and d.get("ieee_address") and d.get("type") != "Coordinator":
+            props = list(flat((d.get("definition") or {}).get("exposes") or []))
+            if props:
+                out[d["ieee_address"]] = props
+    return out
+
+
 class AsyncMqttBus:
     def __init__(self, mqtt_host: str, mqtt_port: int, mqtt_username: str | None, 
                  mqtt_password: str | None, redis_url: str, z2m_base: str = "zigbee2mqtt"):
@@ -144,6 +168,9 @@ class AsyncMqttBus:
             
             # Update our fast in-memory registry
             self._device_registry = new_registry
+
+            # Property metadata (type, unit, allowed values) for the routine editor's pickers
+            await self.redis.set("gateway:device_exposes", json.dumps(summarize_exposes(payload)))
             
             # The Diff Engine: Sync Redis Topology
             current_twin = await self.redis.hgetall("gateway:digital_twin")

@@ -12,6 +12,53 @@ export interface TimeTrigger {
   days: Day[] | null;  // null = every day
 }
 
+export interface SunTrigger {
+  id: string;
+  type: 'sun';
+  event: 'sunrise' | 'sunset';
+  offset_min: number;  // negative = before
+  days: Day[] | null;
+}
+
+export type Scalar = boolean | number | string;
+export type TriggerOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'changes';
+export type ConditionOp = Exclude<TriggerOp, 'changes'>;
+export const NUMERIC_OPS: TriggerOp[] = ['gt', 'gte', 'lt', 'lte'];
+export const EVENT_ATTRIBUTES = ['action'];  // remote buttons: every report counts
+
+export interface DeviceTrigger {
+  id: string;
+  type: 'device';
+  device: string;      // IEEE
+  attribute: string;
+  op: TriggerOp;
+  value: Scalar | null;    // device-native units (°C for temperature)
+  rearm: number | null;    // hysteresis margin, numeric ops only
+  for_s: number | null;
+  cooldown_s: number;
+}
+
+export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger;
+
+export type Condition =
+  | { type: 'time_window'; after: string; before: string }
+  | { type: 'days'; days: Day[] }
+  | { type: 'device'; device: string; attribute: string; op: ConditionOp; value: Scalar }
+  | { type: 'sun'; state: 'up' | 'down' };
+
+/** What a device reports (from /api/routines/attributes): Z2M exposes metadata. */
+export interface AttributeInfo {
+  property: string;
+  type: 'binary' | 'numeric' | 'enum' | 'text' | string;
+  unit?: string;
+  values?: string[];
+  value_on?: Scalar;
+  value_off?: Scalar;
+  value_min?: number;
+  value_max?: number;
+}
+export type AttributeMap = Record<string, { friendly_name: string; properties: AttributeInfo[]; current: Record<string, unknown> }>;
+
 export interface SetPayload {
   state?: 'ON' | 'OFF' | 'TOGGLE' | null;
   brightness?: number | null;  // 0-254
@@ -30,8 +77,8 @@ export interface RoutineSpec {
   enabled: boolean;
   mode: 'single' | 'restart';
   grace_minutes: number;
-  triggers: TimeTrigger[];
-  conditions: unknown[];
+  triggers: Trigger[];
+  conditions: Condition[];
   actions: Action[];
 }
 
@@ -53,7 +100,7 @@ export type RunStatus =
 export interface RunStep {
   id: string;
   type: string;
-  status: 'ok' | 'failed' | 'skipped' | 'cancelled';
+  status: 'ok' | 'partial' | 'failed' | 'skipped' | 'cancelled';
   started_at?: string;
   ms?: number;
   detail?: Record<string, unknown>;
@@ -113,11 +160,67 @@ export function describeDays(days: Day[] | null): string {
   return days.map(d => d[0].toUpperCase() + d.slice(1)).join(', ');
 }
 
-export function summarizeRoutine(r: RoutineSpec): string {
-  const when = r.triggers.length
-    ? r.triggers.map(t => `${describeDays(t.days)} ${t.at}`).join(' · ')
-    : 'Manual only';
-  return `${when} · ${r.actions.length} action${r.actions.length === 1 ? '' : 's'}`;
+// ---------------------------------------------------------------- temperature units
+// Z2M always reports °C. With the °F preference, the editor shows/accepts °F and stores °C.
+
+export type TempUnit = 'F' | 'C';
+const isCelsius = (unit?: string) => unit === '°C';
+const round = (v: number, dp: number) => Math.round(v * 10 ** dp) / 10 ** dp;
+
+export const displayUnit = (unit: string | undefined, pref: TempUnit) =>
+  isCelsius(unit) && pref === 'F' ? '°F' : unit ?? '';
+export const toDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
+  isCelsius(unit) && pref === 'F' ? round(v * 9 / 5 + 32, 1) : v;
+export const fromDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
+  isCelsius(unit) && pref === 'F' ? round((v - 32) * 5 / 9, 2) : v;
+// Margins are differences, so no 32° offset.
+export const deltaToDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
+  isCelsius(unit) && pref === 'F' ? round(v * 9 / 5, 1) : v;
+export const deltaFromDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
+  isCelsius(unit) && pref === 'F' ? round(v * 5 / 9, 2) : v;
+
+// ---------------------------------------------------------------- summaries
+
+export const OP_TEXT: Record<TriggerOp, string> = {
+  eq: 'is', ne: 'is not', gt: 'above', gte: 'at least', lt: 'below', lte: 'at most', changes: 'changes',
+};
+
+export interface DescribeCtx {
+  attributes: AttributeMap;
+  tempUnit: TempUnit;
+}
+
+export function formatValue(value: Scalar | null, unit: string | undefined, pref: TempUnit): string {
+  if (value === null) return '';
+  if (typeof value === 'number') return `${toDisplay(value, unit, pref)}${displayUnit(unit, pref) ? ' ' + displayUnit(unit, pref) : ''}`;
+  return String(value);
+}
+
+function describeDeviceRef(device: string, attribute: string, op: TriggerOp, value: Scalar | null, ctx?: DescribeCtx) {
+  const dev = ctx?.attributes[device];
+  const name = dev?.friendly_name ?? device;
+  const unit = dev?.properties.find(p => p.property === attribute)?.unit;
+  if (EVENT_ATTRIBUTES.includes(attribute)) {
+    return op === 'changes' ? `${name} button pressed` : `${name} ${String(value)}`;
+  }
+  return `${name} ${attribute} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, unit, ctx?.tempUnit ?? 'F')}`;
+}
+
+export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {
+  if (t.type === 'time') return `${describeDays(t.days)} ${t.at}`;
+  if (t.type === 'sun') {
+    const off = t.offset_min ? ` ${t.offset_min > 0 ? '+' : '−'}${Math.abs(t.offset_min)}m` : '';
+    const days = t.days ? ` (${describeDays(t.days)})` : '';
+    return `${t.event === 'sunrise' ? 'Sunrise' : 'Sunset'}${off}${days}`;
+  }
+  const held = t.for_s ? ` for ${t.for_s % 60 === 0 ? `${t.for_s / 60} min` : `${t.for_s}s`}` : '';
+  return `When ${describeDeviceRef(t.device, t.attribute, t.op, t.value, ctx)}${held}`;
+}
+
+export function summarizeRoutine(r: RoutineSpec, ctx?: DescribeCtx): string {
+  const when = r.triggers.length ? r.triggers.map(t => describeTrigger(t, ctx)).join(' · ') : 'Manual only';
+  const ifs = r.conditions.length ? ` · ${r.conditions.length} condition${r.conditions.length === 1 ? '' : 's'}` : '';
+  return `${when}${ifs} · ${r.actions.length} action${r.actions.length === 1 ? '' : 's'}`;
 }
 
 export function formatInTz(iso: string | null, tz: string, withDate = true): string {

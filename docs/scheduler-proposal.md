@@ -1,6 +1,6 @@
 # Proposal: routines / scheduler
 
-Status: **design agreed 2026-11-08. Slices 0 and 1 implemented 2026-11-08; slice 2 next.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
+Status: **design agreed 2026-11-08. Slices 0–2 implemented 2026-11-08; slice 3 (Spotify, fades) next.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
 
 ## 1. Corrections to the handoff doc
 
@@ -97,16 +97,20 @@ Every trigger and action gets a short `id` (e.g. `"t1"`, `"a3"`) so run logs and
 {"id":"t1","type":"time","at":"07:00","days":["mon","tue","wed","thu","fri"]}
 {"id":"t2","type":"sun","event":"sunset","offset_min":30,"days":null}
 {"id":"t3","type":"device","device":"0x00158d0001a2b3c4","attribute":"contact",
- "op":"eq","value":false,"for_s":null,"cooldown_s":0}
+ "op":"eq","value":false,"rearm":null,"for_s":null,"cooldown_s":0}
+{"id":"t4","type":"device","device":"0x…","attribute":"temperature","op":"lt","value":18,"rearm":1.5}
+{"id":"t5","type":"device","device":"0x…","attribute":"action","op":"eq","value":"on_press"}
 ```
-Device trigger `op` is one of `eq | ne | gt | gte | lt | lte | changes`.
+- Device trigger `op` is one of `eq | ne | gt | gte | lt | lte | changes`. Values are device-native (temperature is always °C; the editor converts to °F per user, `ui_settings.temp_unit`).
+- `rearm` (numeric ops only) is a hysteresis margin: `lt 18, rearm 1.5` fires at 17.9 and not again until the reading has risen to 19.5 or above. Added 2026-11-08 for noisy sensors and heater-style routines.
+- `action` (remote buttons) is an event attribute: every matching report fires, since the twin keeps the last value. `changes` on it means "any press". `for_s` isn't allowed on it.
 
 **Conditions** (all must pass)
 ```json
 {"type":"time_window","after":"22:00","before":"06:00"}
 {"type":"days","days":["sat","sun"]}
 {"type":"device","device":"0x…","attribute":"state","op":"eq","value":"ON"}
-{"type":"sun","is":"down"}
+{"type":"sun","state":"down"}
 ```
 A `time_window` may wrap past midnight.
 

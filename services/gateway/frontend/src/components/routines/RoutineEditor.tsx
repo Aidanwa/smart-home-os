@@ -3,20 +3,20 @@ import { ArrowDown, ArrowUp, Clock, Plus, Trash2 } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
-import type { Action, Day, RoutineSpec, SetPayload, TimeTrigger } from './types';
-import { DAYS, WEEKDAYS, WEEKEND, describeDays, formatInTz, nextId } from './types';
-
-const input = 'w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none text-neutral-200';
-const label = 'block text-xs font-medium text-neutral-400 mb-1';
-const card = 'bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-3';
-const chip = (on: boolean) =>
-  `px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-blue-500/15 border-blue-500/40 text-blue-300' : 'bg-neutral-950 border-neutral-800 text-neutral-500'}`;
+import type { Action, AttributeMap, Condition, RoutineSpec, SetPayload, TempUnit, Trigger } from './types';
+import { formatInTz, nextId } from './types';
+import { TriggerRow } from './TriggerFields';
+import { ConditionRow } from './ConditionFields';
+import { newCondition, newTrigger } from './fieldLogic';
+import { card, chip, iconBtn, input, label } from './styles';
 
 interface Props {
   initial: RoutineSpec;
   isNew: boolean;
   devices: Record<string, DeviceState>;
   groups: GroupInfo[];
+  attributes: AttributeMap;
+  tempUnit: TempUnit;
   timezone: string;
   preview: (spec: RoutineSpec) => Promise<{ result: PreviewResult | null; error: string | null }>;
   onSave: (spec: RoutineSpec) => Promise<string | null>;
@@ -24,7 +24,9 @@ interface Props {
   onCancel: () => void;
 }
 
-export function RoutineEditor({ initial, isNew, devices, groups, timezone, preview, onSave, onDelete, onCancel }: Props) {
+const addBtn = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
+
+export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, onSave, onDelete, onCancel }: Props) {
   const [spec, setSpec] = useState<RoutineSpec>(initial);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -49,8 +51,8 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
   }, [spec]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p: Partial<RoutineSpec>) => setSpec(s => ({ ...s, ...p }));
-  const setTrigger = (i: number, t: TimeTrigger) => patch({ triggers: spec.triggers.map((x, j) => (j === i ? t : x)) });
-  const setAction = (i: number, a: Action) => patch({ actions: spec.actions.map((x, j) => (j === i ? a : x)) });
+  const setAt = <T,>(list: T[], i: number, v: T) => list.map((x, j) => (j === i ? v : x));
+  const without = <T,>(list: T[], i: number) => list.filter((_, j) => j !== i);
   const moveAction = (i: number, dir: -1 | 1) => {
     const next = [...spec.actions];
     [next[i], next[i + dir]] = [next[i + dir], next[i]];
@@ -72,7 +74,8 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
     setSaving(false);
   };
 
-  const canSave = spec.name.trim().length > 0 && spec.actions.length > 0 && !saving;
+  const canSave = previewable && !saving;
+  const ctx = { attributes, tempUnit };
 
   return (
     <div className="flex flex-col gap-6 pb-6">
@@ -84,18 +87,47 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
 
       {/* WHEN */}
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-neutral-200">When</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-200">When</h3>
+          {spec.triggers.length > 1 && <p className="text-xs text-neutral-500">Any one of these starts it.</p>}
+        </div>
         {spec.triggers.map((t, i) => (
-          <TriggerRow key={t.id} trigger={t} onChange={nt => setTrigger(i, nt)}
-            onRemove={() => patch({ triggers: spec.triggers.filter((_, j) => j !== i) })} />
+          <TriggerRow key={t.id} trigger={t} ctx={ctx}
+            onChange={nt => patch({ triggers: setAt<Trigger>(spec.triggers, i, nt) })}
+            onRemove={() => patch({ triggers: without(spec.triggers, i) })} />
         ))}
         {spec.triggers.length === 0 && (
-          <p className="text-xs text-neutral-500">No schedule: this routine only runs when you press Run now.</p>
+          <p className="text-xs text-neutral-500">Nothing starts it automatically: it only runs when you press Run now.</p>
         )}
-        <button type="button" className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300"
-          onClick={() => patch({ triggers: [...spec.triggers, { id: nextId('t', spec.triggers), type: 'time', at: '07:00', days: null }] })}>
-          <Plus size={16} /> Add a time
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {([['time', 'Time'], ['sun', 'Sunrise/sunset'], ['device', 'Device or sensor']] as const).map(([type, text]) => (
+            <button key={type} type="button" className={addBtn}
+              onClick={() => patch({ triggers: [...spec.triggers, newTrigger(type, nextId('t', spec.triggers), attributes)] })}>
+              <Plus size={14} /> {text}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ONLY IF */}
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-200">Only if</h3>
+          <p className="text-xs text-neutral-500">{spec.conditions.length ? 'All of these must be true when it starts.' : 'Optional. Checked each time it starts (Run now skips them).'}</p>
+        </div>
+        {spec.conditions.map((c, i) => (
+          <ConditionRow key={i} condition={c} attributes={attributes} tempUnit={tempUnit}
+            onChange={nc => patch({ conditions: setAt<Condition>(spec.conditions, i, nc) })}
+            onRemove={() => patch({ conditions: without(spec.conditions, i) })} />
+        ))}
+        <div className="flex flex-wrap gap-2">
+          {([['time_window', 'Between times'], ['days', 'Days'], ['sun', 'Dark / light'], ['device', 'Device reading']] as const).map(([type, text]) => (
+            <button key={type} type="button" className={addBtn}
+              onClick={() => patch({ conditions: [...spec.conditions, newCondition(type, attributes)] })}>
+              <Plus size={14} /> {text}
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* DO */}
@@ -107,19 +139,18 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
               <span className="text-xs uppercase tracking-wider text-neutral-500">
                 {i + 1}. {a.type === 'device' ? 'Device' : a.type === 'group' ? 'Group' : 'Wait'}
               </span>
-              <div className="flex items-center gap-1 text-neutral-500">
-                <button type="button" className="p-1.5 hover:text-neutral-200 disabled:opacity-30" disabled={i === 0} onClick={() => moveAction(i, -1)} aria-label="Move up"><ArrowUp size={16} /></button>
-                <button type="button" className="p-1.5 hover:text-neutral-200 disabled:opacity-30" disabled={i === spec.actions.length - 1} onClick={() => moveAction(i, 1)} aria-label="Move down"><ArrowDown size={16} /></button>
-                <button type="button" className="p-1.5 hover:text-red-400" onClick={() => patch({ actions: spec.actions.filter((_, j) => j !== i) })} aria-label="Remove"><Trash2 size={16} /></button>
+              <div className="flex items-center gap-1">
+                <button type="button" className={iconBtn} disabled={i === 0} onClick={() => moveAction(i, -1)} aria-label="Move up"><ArrowUp size={16} /></button>
+                <button type="button" className={iconBtn} disabled={i === spec.actions.length - 1} onClick={() => moveAction(i, 1)} aria-label="Move down"><ArrowDown size={16} /></button>
+                <button type="button" className={`${iconBtn} hover:text-red-400`} onClick={() => patch({ actions: without(spec.actions, i) })} aria-label="Remove"><Trash2 size={16} /></button>
               </div>
             </div>
-            <ActionFields action={a} onChange={na => setAction(i, na)} deviceOptions={deviceOptions} groups={groups} />
+            <ActionFields action={a} onChange={na => patch({ actions: setAt<Action>(spec.actions, i, na) })} deviceOptions={deviceOptions} groups={groups} />
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
           {(['device', 'group', 'delay'] as const).map(t => (
-            <button key={t} type="button" onClick={() => addAction(t)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600">
+            <button key={t} type="button" onClick={() => addAction(t)} className={addBtn}>
               <Plus size={14} /> {t === 'device' ? 'Device' : t === 'group' ? 'Group' : 'Wait'}
             </button>
           ))}
@@ -127,7 +158,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
       </section>
 
       {/* ADVANCED */}
-      <details className="group">
+      <details>
         <summary className="text-sm text-neutral-400 cursor-pointer select-none">Advanced</summary>
         <div className="mt-3 space-y-4">
           <div>
@@ -136,12 +167,13 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
               <option value="single">Ignore the new trigger (single)</option>
               <option value="restart">Cancel and start over (restart)</option>
             </select>
+            <p className="text-xs text-neutral-500 mt-1">Restart suits motion lights: each new trigger restarts the "wait, then off" timer.</p>
           </div>
           <div>
             <label className={label}>Catch-up window (minutes)</label>
             <input type="number" min={0} max={1440} className={input} value={spec.grace_minutes}
               onChange={e => patch({ grace_minutes: Math.max(0, Math.min(1440, parseInt(e.target.value) || 0)) })} />
-            <p className="text-xs text-neutral-500 mt-1">If the hub was down at the scheduled time, still run when it's back, up to this late. Runs up to 30 seconds late always go ahead, even at 0.</p>
+            <p className="text-xs text-neutral-500 mt-1">If the hub was down at a scheduled time, still run when it's back, up to this late. Runs up to 30 seconds late always go ahead, even at 0.</p>
           </div>
         </div>
       </details>
@@ -157,7 +189,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
             <p className="text-neutral-400 flex items-center gap-1.5"><Clock size={13} />
               {pv.result.next_fires.length
                 ? <>Next: {pv.result.next_fires.slice(0, 3).map(f => formatInTz(f, timezone)).join(' · ')}</>
-                : spec.enabled ? 'No scheduled runs' : 'Disabled: no scheduled runs'}
+                : !spec.enabled ? 'Disabled: no scheduled runs'
+                : spec.triggers.some(t => t.type === 'device') ? 'Runs when the device reading matches'
+                : 'No scheduled runs'}
             </p>
             {pv.result.warnings.map(w => <p key={w} className="text-amber-400">{w}</p>)}
           </>
@@ -184,39 +218,6 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
   );
 }
 
-function TriggerRow({ trigger, onChange, onRemove }: { trigger: TimeTrigger; onChange: (t: TimeTrigger) => void; onRemove: () => void }) {
-  const days = trigger.days ?? DAYS;
-  const toggleDay = (d: Day) => {
-    const next = days.includes(d) ? days.filter(x => x !== d) : DAYS.filter(x => x === d || days.includes(x));
-    if (next.length === 0) return;  // at least one day
-    onChange({ ...trigger, days: next.length === 7 ? null : next });
-  };
-  const preset = (p: Day[] | null) => onChange({ ...trigger, days: p });
-
-  return (
-    <div className={card}>
-      <div className="flex items-center gap-2">
-        <input type="time" className={`${input} w-32`} value={trigger.at} required
-          onChange={e => e.target.value && onChange({ ...trigger, at: e.target.value.slice(0, 5) })} />
-        <span className="text-xs text-neutral-500 flex-1">{describeDays(trigger.days)}</span>
-        <button type="button" className="p-1.5 text-neutral-500 hover:text-red-400" onClick={onRemove} aria-label="Remove time"><Trash2 size={16} /></button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {DAYS.map(d => (
-          <button key={d} type="button" className={chip(days.includes(d))} onClick={() => toggleDay(d)}>
-            {d[0].toUpperCase() + d.slice(1, 3)}
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-3 text-xs text-neutral-500">
-        <button type="button" className="hover:text-neutral-300" onClick={() => preset(null)}>Every day</button>
-        <button type="button" className="hover:text-neutral-300" onClick={() => preset(WEEKDAYS)}>Weekdays</button>
-        <button type="button" className="hover:text-neutral-300" onClick={() => preset(WEEKEND)}>Weekends</button>
-      </div>
-    </div>
-  );
-}
-
 interface ActionFieldsProps {
   action: Action;
   onChange: (a: Action) => void;
@@ -225,28 +226,19 @@ interface ActionFieldsProps {
 }
 
 function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsProps) {
-  const stopToggle = (
-    <label className="flex items-center gap-2 text-xs text-neutral-500">
-      <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
-      Stop the routine if this fails
-    </label>
-  );
-
   if (action.type === 'delay') {
     const unit = action.seconds % 3600 === 0 ? 3600 : action.seconds % 60 === 0 ? 60 : 1;
     return (
-      <>
-        <div className="flex gap-2">
-          <input type="number" min={1} className={input} value={action.seconds / unit}
-            onChange={e => onChange({ ...action, seconds: Math.max(1, Math.min(43200, (parseFloat(e.target.value) || 1) * unit)) })} />
-          <select className={`${input} w-32`} value={unit}
-            onChange={e => onChange({ ...action, seconds: Math.min(43200, (action.seconds / unit) * parseInt(e.target.value)) })}>
-            <option value={1}>seconds</option>
-            <option value={60}>minutes</option>
-            <option value={3600}>hours</option>
-          </select>
-        </div>
-      </>
+      <div className="flex gap-2">
+        <input type="number" min={1} className={input} value={action.seconds / unit}
+          onChange={e => onChange({ ...action, seconds: Math.max(1, Math.min(43200, (parseFloat(e.target.value) || 1) * unit)) })} />
+        <select className={`${input} w-32`} value={unit}
+          onChange={e => onChange({ ...action, seconds: Math.min(43200, (action.seconds / unit) * parseInt(e.target.value)) })}>
+          <option value={1}>seconds</option>
+          <option value={60}>minutes</option>
+          <option value={3600}>hours</option>
+        </select>
+      </div>
     );
   }
 
@@ -267,7 +259,10 @@ function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsP
         </select>
       )}
       <PayloadFields value={action.set} showColorTemp={showColorTemp} onChange={set => onChange({ ...action, set })} />
-      {stopToggle}
+      <label className="flex items-center gap-2 text-xs text-neutral-500">
+        <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+        Stop the routine if this fails
+      </label>
     </>
   );
 }
