@@ -1,17 +1,17 @@
 import { Trash2 } from 'lucide-react';
-import type { AttributeMap, Condition, ConditionOp, TempUnit } from './types';
+import type { AttributeMap, ConditionOp, LeafCondition, TempUnit } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, opsFor } from './fieldLogic';
 import { DayChips } from './TriggerFields';
 import { card, chip, iconBtn, input } from './styles';
 
-const TITLES: Record<Condition['type'], string> = {
+const TITLES: Record<LeafCondition['type'], string> = {
   time_window: 'Between times', days: 'On days', device: 'Device reading', sun: 'Sun',
 };
 
 export function ConditionRow({ condition, onChange, onRemove, attributes, tempUnit }: {
-  condition: Condition;
-  onChange: (c: Condition) => void;
+  condition: LeafCondition;
+  onChange: (c: LeafCondition) => void;
   onRemove: () => void;
   attributes: AttributeMap;
   tempUnit: TempUnit;
@@ -27,7 +27,7 @@ export function ConditionRow({ condition, onChange, onRemove, attributes, tempUn
   );
 }
 
-function Fields({ condition: c, onChange, attributes, tempUnit }: { condition: Condition; onChange: (c: Condition) => void; attributes: AttributeMap; tempUnit: TempUnit }) {
+function Fields({ condition: c, onChange, attributes, tempUnit }: { condition: LeafCondition; onChange: (c: LeafCondition) => void; attributes: AttributeMap; tempUnit: TempUnit }) {
   if (c.type === 'time_window') {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-400">

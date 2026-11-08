@@ -16,7 +16,7 @@ from shared.database.core import get_db
 from shared.database.models import Routine, RoutineRun, User, UserPreference
 from api.auth import get_current_user
 from scheduler.engine import Scheduler
-from scheduler.schema import DeviceAction, DeviceCondition, DeviceTrigger, GroupAction, RoutineSpec
+from scheduler.schema import DeviceAction, DeviceCondition, DeviceTrigger, GroupAction, RoutineSpec, leaf_conditions
 from scheduler.timing import upcoming
 
 ALERT_STATUSES = ("failed", "partial", "missed", "interrupted")
@@ -116,7 +116,7 @@ async def preview_routine(spec: RoutineSpec, request: Request, user=Depends(get_
         if isinstance(a, GroupAction) and a.group not in group_ids:
             warnings.append(f"Action {a.id}: group {a.group} doesn't exist")
     watched = [(f"Trigger {t.id}", t) for t in spec.triggers if isinstance(t, DeviceTrigger)]
-    watched += [(f"Condition {i}", c) for i, c in enumerate(spec.conditions, 1) if isinstance(c, DeviceCondition)]
+    watched += [(f"Condition {i}", c) for i, c in enumerate(leaf_conditions(spec.conditions), 1) if isinstance(c, DeviceCondition)]
     for label, item in watched:
         if item.device not in twin:
             warnings.append(f"{label}: device {item.device} isn't on the network")

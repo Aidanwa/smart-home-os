@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.mqtt_bus import AsyncMqttBus
-from scheduler.schema import DAYS, DaysCondition, DeviceCondition, SunCondition, TimeWindowCondition
+from scheduler.schema import DAYS, AnyCondition, DaysCondition, DeviceCondition, SunCondition, TimeWindowCondition
 from scheduler.timing import Location, local_hhmm, sun_is_up
 
 
@@ -53,6 +53,14 @@ async def failing_condition(conditions: list, bus: AsyncMqttBus, now: datetime, 
 
 
 async def _check(c, bus, now, tz, loc) -> str | None:
+    if isinstance(c, AnyCondition):
+        reasons = []
+        for sub in c.conditions:
+            reason = await _check(sub, bus, now, tz, loc)
+            if reason is None:
+                return None
+            reasons.append(reason)
+        return "none of these were true: " + "; ".join(reasons)
     if isinstance(c, TimeWindowCondition):
         t = local_hhmm(now, tz)
         inside = c.after <= t < c.before if c.after < c.before else (t >= c.after or t < c.before)

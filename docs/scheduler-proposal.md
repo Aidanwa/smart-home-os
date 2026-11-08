@@ -111,7 +111,9 @@ Every trigger and action gets a short `id` (e.g. `"t1"`, `"a3"`) so run logs and
 {"type":"days","days":["sat","sun"]}
 {"type":"device","device":"0x…","attribute":"state","op":"eq","value":"ON"}
 {"type":"sun","state":"down"}
+{"type":"any","conditions":[{"type":"sun","state":"down"},{"type":"days","days":["sat","sun"]}]}
 ```
+The top-level list is AND. An `any` group is OR, one level deep (added 2026-11-08). The editor shows it as an All/Any toggle: "Any" is stored as a single `any` group.
 A `time_window` may wrap past midnight.
 
 **Actions**
@@ -188,7 +190,7 @@ The shapes are deliberately flat and use plain words so the agent can write them
 ## 6. Out of scope for v1
 
 These are noted so the shapes don't rule them out later:
-- OR/nested conditions (would be a `{"type":"any","conditions":[…]}` condition)
+- deeper nesting of condition groups (one level of `any` exists)
 - templates
 - webhook or manual-button triggers
 - scenes

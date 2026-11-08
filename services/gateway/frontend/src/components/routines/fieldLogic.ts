@@ -1,5 +1,5 @@
 // Non-component helpers for the trigger/condition editors (kept apart for React fast refresh).
-import type { AttributeInfo, AttributeMap, Condition, ConditionOp, Scalar, Trigger, TriggerOp } from './types';
+import type { AttributeInfo, AttributeMap, ConditionOp, LeafCondition, Scalar, Trigger, TriggerOp } from './types';
 import { EVENT_ATTRIBUTES, NUMERIC_OPS, OP_TEXT } from './types';
 
 const NICE_NAMES: Record<string, string> = { action: 'button press', state: 'on/off state', color_temp: 'colour temperature' };
@@ -45,7 +45,7 @@ export function newTrigger(type: Trigger['type'], id: string, attributes: Attrib
   return { id, type: 'device', device, attribute, op, value, rearm: null, for_s: null, cooldown_s: 0 };
 }
 
-export function newCondition(type: Condition['type'], attributes: AttributeMap): Condition {
+export function newCondition(type: LeafCondition['type'], attributes: AttributeMap): LeafCondition {
   if (type === 'time_window') return { type, after: '22:00', before: '06:00' };
   if (type === 'days') return { type, days: ['mon', 'tue', 'wed', 'thu', 'fri'] };
   if (type === 'sun') return { type, state: 'down' };

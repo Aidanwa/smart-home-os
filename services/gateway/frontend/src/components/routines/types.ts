@@ -40,11 +40,28 @@ export interface DeviceTrigger {
 
 export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger;
 
-export type Condition =
+export type LeafCondition =
   | { type: 'time_window'; after: string; before: string }
   | { type: 'days'; days: Day[] }
   | { type: 'device'; device: string; attribute: string; op: ConditionOp; value: Scalar }
   | { type: 'sun'; state: 'up' | 'down' };
+
+/** The routine's list is AND; an 'any' group inside it is OR. */
+export type Condition = LeafCondition | { type: 'any'; conditions: LeafCondition[] };
+
+export type ConditionMode = 'all' | 'any';
+
+/** The editor shows a flat list plus an All/Any toggle. 'Any' is stored as one 'any' group.
+ *  Other shapes (e.g. written by the agent later) aren't editable here and are left untouched. */
+export function splitConditions(cs: Condition[]): { mode: ConditionMode; leaves: LeafCondition[]; editable: boolean } {
+  if (cs.length === 1 && cs[0].type === 'any') return { mode: 'any', leaves: cs[0].conditions, editable: true };
+  if (cs.every(c => c.type !== 'any')) return { mode: 'all', leaves: cs as LeafCondition[], editable: true };
+  return { mode: 'all', leaves: [], editable: false };
+}
+
+export function joinConditions(mode: ConditionMode, leaves: LeafCondition[]): Condition[] {
+  return mode === 'any' && leaves.length ? [{ type: 'any', conditions: leaves }] : leaves;
+}
 
 /** What a device reports (from /api/routines/attributes): Z2M exposes metadata. */
 export interface AttributeInfo {
@@ -219,7 +236,9 @@ export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {
 
 export function summarizeRoutine(r: RoutineSpec, ctx?: DescribeCtx): string {
   const when = r.triggers.length ? r.triggers.map(t => describeTrigger(t, ctx)).join(' · ') : 'Manual only';
-  const ifs = r.conditions.length ? ` · ${r.conditions.length} condition${r.conditions.length === 1 ? '' : 's'}` : '';
+  const { mode, leaves } = splitConditions(r.conditions);
+  const n = leaves.length || r.conditions.length;
+  const ifs = n ? ` · ${n} condition${n === 1 ? '' : 's'}${mode === 'any' && n > 1 ? ' (any)' : ''}` : '';
   return `${when}${ifs} · ${r.actions.length} action${r.actions.length === 1 ? '' : 's'}`;
 }
 

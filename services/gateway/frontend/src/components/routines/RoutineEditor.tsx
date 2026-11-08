@@ -3,8 +3,8 @@ import { ArrowDown, ArrowUp, Clock, Plus, Trash2 } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
-import type { Action, AttributeMap, Condition, RoutineSpec, SetPayload, TempUnit, Trigger } from './types';
-import { formatInTz, nextId } from './types';
+import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, SetPayload, TempUnit, Trigger } from './types';
+import { formatInTz, joinConditions, nextId, splitConditions } from './types';
 import { TriggerRow } from './TriggerFields';
 import { ConditionRow } from './ConditionFields';
 import { newCondition, newTrigger } from './fieldLogic';
@@ -74,6 +74,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
     setSaving(false);
   };
 
+  const cond = splitConditions(spec.conditions);
+  const setConditions = (mode: ConditionMode, leaves: LeafCondition[]) => patch({ conditions: joinConditions(mode, leaves) });
+
   const canSave = previewable && !saving;
   const ctx = { attributes, tempUnit };
 
@@ -111,23 +114,44 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
       {/* ONLY IF */}
       <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold text-neutral-200">Only if</h3>
-          <p className="text-xs text-neutral-500">{spec.conditions.length ? 'All of these must be true when it starts.' : 'Optional. Checked each time it starts (Run now skips them).'}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-200">Only if</h3>
+            <p className="text-xs text-neutral-500">
+              {cond.leaves.length === 0 ? 'Optional. Checked each time it starts (Run now skips them).'
+                : cond.leaves.length === 1 ? 'This must be true when it starts.'
+                : cond.mode === 'any' ? 'At least one of these must be true when it starts.'
+                : 'All of these must be true when it starts.'}
+            </p>
+          </div>
+          {cond.editable && cond.leaves.length > 1 && (
+            <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-neutral-800 shrink-0" role="group" aria-label="Match all or any">
+              {([['all', 'All'], ['any', 'Any']] as const).map(([m, text]) => (
+                <button key={m} type="button" onClick={() => setConditions(m, cond.leaves)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium ${cond.mode === m ? 'bg-neutral-700 text-white' : 'text-neutral-500'}`}>{text}</button>
+              ))}
+            </div>
+          )}
         </div>
-        {spec.conditions.map((c, i) => (
-          <ConditionRow key={i} condition={c} attributes={attributes} tempUnit={tempUnit}
-            onChange={nc => patch({ conditions: setAt<Condition>(spec.conditions, i, nc) })}
-            onRemove={() => patch({ conditions: without(spec.conditions, i) })} />
+        {!cond.editable && (
+          <p className="text-xs text-amber-400">These conditions were set up outside the editor (nested groups) and are kept as they are.</p>
+        )}
+        {cond.leaves.map((c, i) => (
+          <div key={i} className="space-y-3">
+            {i > 0 && <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-center">{cond.mode === 'any' ? 'or' : 'and'}</p>}
+            <ConditionRow condition={c} attributes={attributes} tempUnit={tempUnit}
+              onChange={nc => setConditions(cond.mode, setAt<LeafCondition>(cond.leaves, i, nc))}
+              onRemove={() => setConditions(cond.mode, without(cond.leaves, i))} />
+          </div>
         ))}
-        <div className="flex flex-wrap gap-2">
+        {cond.editable && <div className="flex flex-wrap gap-2">
           {([['time_window', 'Between times'], ['days', 'Days'], ['sun', 'Dark / light'], ['device', 'Device reading']] as const).map(([type, text]) => (
             <button key={type} type="button" className={addBtn}
-              onClick={() => patch({ conditions: [...spec.conditions, newCondition(type, attributes)] })}>
+              onClick={() => setConditions(cond.mode, [...cond.leaves, newCondition(type, attributes)])}>
               <Plus size={14} /> {text}
             </button>
           ))}
-        </div>
+        </div>}
       </section>
 
       {/* DO */}

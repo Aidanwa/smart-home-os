@@ -1,7 +1,8 @@
 """Pydantic shapes for routines. The single source of truth for what a stored routine may contain.
 
 Kept flat and plain-worded so the agent can write them later. See docs/scheduler-proposal.md §3.
-Triggers: time, sun, device. Conditions: time_window, days, device, sun. Actions: device, group, delay.
+Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
+the routine's condition list itself is AND. Actions: device, group, delay.
 """
 from typing import Annotated, Literal, Union
 
@@ -146,7 +147,24 @@ class SunCondition(_Strict):
     state: Literal["up", "down"]
 
 
-Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition], Field(discriminator="type")]
+LeafCondition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition], Field(discriminator="type")]
+
+
+class AnyCondition(_Strict):
+    """Passes if at least one of its conditions does (OR). The routine's top-level list is AND."""
+    type: Literal["any"]
+    conditions: list[LeafCondition] = Field(min_length=1, max_length=20)
+
+
+Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, AnyCondition], Field(discriminator="type")]
+
+
+def leaf_conditions(conditions: list) -> list:
+    """Every non-group condition, with 'any' groups flattened."""
+    out = []
+    for c in conditions:
+        out.extend(c.conditions if isinstance(c, AnyCondition) else [c])
+    return out
 
 
 # ---------------------------------------------------------------- actions
@@ -205,7 +223,7 @@ class RoutineSpec(_Strict):
     actions: list[Action] = Field(min_length=1, max_length=50)
 
     def uses_sun(self) -> bool:
-        return any(t.type == "sun" for t in self.triggers) or any(c.type == "sun" for c in self.conditions)
+        return any(t.type == "sun" for t in self.triggers) or any(c.type == "sun" for c in leaf_conditions(self.conditions))
 
     @field_validator("name")
     @classmethod
