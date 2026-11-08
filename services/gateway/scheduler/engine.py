@@ -2,7 +2,7 @@
 
 Everything here is derived state, rebuilt from Postgres at startup: the next fire time of each
 time/sun trigger, the match state of each device trigger, and the active run per routine.
-See docs/scheduler-proposal.md §2 and §4.
+See the Routines section of CLAUDE.md.
 """
 import asyncio
 import logging

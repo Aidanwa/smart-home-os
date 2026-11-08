@@ -92,14 +92,18 @@ Then open `https://zigbee-hub.tail1752d3.ts.net:8000` and log in with your exist
 ## 8. Updating later
 
 ```sh
-cd ~/smart-home-os && git pull && docker compose up -d --build gateway agent
+cd ~/smart-home-os && git pull
+docker compose up -d --build agent      # only if agent code changed; build one service at a time
+docker compose up -d --build gateway    # also restarts the agent (~40 s while Whisper loads)
 ```
+
+If the pull includes a new Alembic migration, back up and apply it with the new image before swapping containers (the procedure is under Migrations in [CLAUDE.md](../CLAUDE.md)). The current head is listed there too.
 
 To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx build --platform linux/arm64 ...` and push to a registry, but building on the Pi is simpler and fine for a solo project.
 
 ## 9. Backups
 
-- **Pi, 03:00 nightly:** `/usr/local/bin/smarthome-backup.sh` (root cron) writes `~/backups/smarthome-YYYY-MM-DD.tar.gz` and keeps 14 days. Its log is `/var/log/smarthome-backup.log`. Each bundle contains `smarthome/home_os.dump` + `.env`, `zigbee2mqtt/` (data dir, no logs), `mosquitto/`, and `pihole/` (Teleporter zip).
+- **Pi, 03:00 nightly:** `/usr/local/bin/smarthome-backup.sh` (root cron) writes `~/backups/smarthome-YYYY-MM-DD.tar.gz` and keeps 14 days. Its log is `/var/log/smarthome-backup.log`. Each bundle contains `smarthome/home_os.dump` (every table, including routines and their run history) + `.env`, `zigbee2mqtt/` (data dir, no logs), `mosquitto/`, and `pihole/` (Teleporter zip).
 - **PC, at logon + 09:00:** the Task Scheduler task "SmartHome Backup Pull" runs `C:\Users\adams\Backups\smart-home-os\pull-backups.ps1`, which copies new bundles and keeps 30 days. It logs to `pull.log` in the same folder.
 - **Docker cleanup, Sundays 03:30:** `/usr/local/bin/docker-prune.sh` removes dangling images and build cache unused for 7+ days. Its log is `/var/log/docker-prune.log`.
 - **Cert, 04:00 on the 1st:** `/usr/local/bin/renew-tailscale-cert.sh` restarts the gateway only if the cert changed. Its log is `/var/log/tailscale-cert-renew.log`.
@@ -131,4 +135,4 @@ Spotify Soloist, Spotify's official headless Connect client, plays to the 3.5mm 
 - **Updates:** each Soloist build expires after 90 days. The container restarts and downloads the new build on its own.
 - **Why a container:** Soloist needs glibc 2.38, and Debian 12 has 2.36. The image is Debian 13, about 100 MB. It uses about 35 MB of RAM and about 8% of one core while playing.
 - **Audio:** the ALSA `PCM` control is pinned at 0 dB (`alsactl store`). Use Spotify's volume.
-- **App side:** nothing to configure. The device stays in `/me/player/devices` while idle, so the agent can start it by name ("Bedroom Speakers") with no phone or PC open.
+- **App side:** nothing to configure. The device stays in `/me/player/devices` while idle, so the agent and routines (the "Play music" action) can start it by name ("Bedroom Speakers") with no phone or PC open.

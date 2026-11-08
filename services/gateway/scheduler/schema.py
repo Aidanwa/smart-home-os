@@ -1,6 +1,6 @@
 """Pydantic shapes for routines. The single source of truth for what a stored routine may contain.
 
-Kept flat and plain-worded so the agent can write them later. See docs/scheduler-proposal.md §3.
+Kept flat and plain-worded so the agent can write them (tools/routines_api.py). See the Routines section of CLAUDE.md.
 Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
 the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
 spotify_ctrl, agent (Spotify and agent actions go through the agent as the routine's owner;

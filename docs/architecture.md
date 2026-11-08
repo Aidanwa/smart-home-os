@@ -14,13 +14,13 @@ flowchart TD
 
     %% Gateway Service
     subgraph GatewayContainer["Gateway Container"]
-        Gateway["Gateway Service<br/>(API, MqttBus, Auth, SPA host)"]
+        Gateway["Gateway Service<br/>(API, MqttBus, Auth, SPA host,<br/>routine scheduler)"]
     end
 
     %% Data & Infra
     subgraph Infrastructure["Data & Infrastructure"]
-        Postgres[("PostgreSQL<br/>(Users, Roles, Config)")]
-        Redis[("Redis<br/>(Digital Twin)")]
+        Postgres[("PostgreSQL<br/>(Users, prefs, secrets, rooms,<br/>home, routines + run log)")]
+        Redis[("Redis<br/>(Digital twin, device metadata,<br/>Spotify cache)")]
         MQTT["MQTT Broker + Z2M<br/>(on Pi 'zigbee-hub', outside compose)"]
         Hardware["Zigbee Hardware<br/>(Lights, Sensors)"]
     end
@@ -29,15 +29,17 @@ flowchart TD
     Edge -. "planned" .-> Agent
     UI -- "REST + WS (HTTPS, cookie JWT)" --> Gateway
     Gateway -- "Proxies /api/agent/* (REST + WS)" --> Agent
+    Gateway -- "Scheduler: /internal/* (Spotify tools, 'ask the agent' runs; internal-scope JWT)" --> Agent
 
     %% Flow: Agent to Gateway (agent mints a short-lived JWT for the user)
     Agent -- "1. GET /api/devices (home state)" --> Gateway
     Agent -- "2. POST /api/devices/{id}/set" --> Gateway
+    Agent -- "3. /api/routines (rt_* tools)" --> Gateway
     Agent -- "Prefs, secrets, memory, home profile" --> Postgres
     Agent -- "Spotify playlist cache" --> Redis
 
     %% Flow: Gateway to Data
-    Gateway -- "Users, prefs, secrets, rooms, home" --> Postgres
+    Gateway -- "Users, prefs, secrets, rooms, home, routines" --> Postgres
     Gateway -- "Digital twin (state by IEEE address)" --> Redis
 
     %% Flow: Gateway to Hardware

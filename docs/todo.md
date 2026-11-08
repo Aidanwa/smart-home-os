@@ -1,15 +1,18 @@
 
 # HIGH PRIORITY:
 
-## Scheduling / routines / triggers / automations
+## Notifications (ntfy)
 
-This is a big necessary next step for smart home robustness. The Routines tab is still a placeholder.
+Routines are built (2026-11-08; see the Routines section of CLAUDE.md). The next step is push notifications via [ntfy](https://ntfy.sh): POST text to `https://<server>/<topic>` and the ntfy phone app shows it. It can be self-hosted as one small container on the Pi or used via ntfy.sh, and supports priority, tags and action buttons. On ntfy.sh the topic name is effectively the password, so use a long random topic or self-host with auth, and store it in `user_secrets`.
 
-Time schedules, plus cool triggers such as sunrise/sunset, device state changes, etc.
+- Failure alerts: push `failed`/`missed` routine runs (today they only show as the red badge on the Routines tab).
+- A `notify` routine action: "door left open 10 min → notify", "washer power < 5 W for 3 min → laundry done".
+- Agent reminders: "remind me at 6 to take the bins out" becomes a routine with a notify action. The agent's routine tools currently say reminders aren't supported.
 
-Design agreed in [scheduler-proposal.md](scheduler-proposal.md); not implemented yet.
+## Routines: smaller follow-ups
 
-Later: ntfy (https://ntfy.sh) push notifications, for routine failure alerts, a "notify" action in routines (door left open, laundry done), and agent reminders. See section 10 of the proposal.
+- Starter templates (wake-up, sunset lamp, all off).
+- Ideas considered but not built: stale-sensor guard ("no report from X for N hours"), rate-of-change triggers ("humidity +10 in 10 min"), webhook triggers, colour (`xy`/`hue`) in device actions, a run-as switch in the editor.
 
 ## Admin controls (Settings > Admin page)
 
