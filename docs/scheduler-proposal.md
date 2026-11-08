@@ -1,111 +1,91 @@
-# Proposal: routines / scheduler
+# Routines / scheduler: design and reference
 
-Status: **design agreed 2026-11-08. Slices 0–4 implemented 2026-11-08. Next candidates: ntfy notifications (§10), templates.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
+Status: **built 2026-11-08** (slices 0–4, see §13). This started as the proposal answering [scheduler-handoff.md](scheduler-handoff.md) and now describes what exists. Decisions marked **(decided)** were settled with Aidan. Next candidates: ntfy notifications (§10) and templates.
 
-## 1. Corrections to the handoff doc
+Code: [services/gateway/scheduler/](../services/gateway/scheduler/) (engine), [api/routine_routes.py](../services/gateway/api/routine_routes.py) (API), [frontend/src/components/routines/](../services/gateway/frontend/src/components/routines/) (UI), [agent tools/routines_api.py](../services/agent/tools/routines_api.py) and [agent api/internal_routes.py](../services/agent/api/internal_routes.py) (agent side).
 
-Verified against the code on 2026-11-08:
+## 1. Findings that shaped the design (verified 2026-11-08)
 
-- **There's no device-control logic to reuse yet.** The ID translation, publish and wait for `/set` all live inside the route handlers in `api/routes.py`. Slice 0 moves this into `core/device_control.py`; the routes and the scheduler both call it.
-- **State-change triggers need the previous value, and nothing stores it.** Each `device_update` on the bus queue carries the full current Z2M state, and the twin is overwritten before the broadcast goes out. The scheduler keeps its own last-seen value for each attribute it watches, seeded from the twin at startup.
-- **Bus subscriber queues are unbounded** (`asyncio.Queue()` with no maxsize), so the `QueueFull` guards never fire. The scheduler's consumer must stay non-blocking: it only filters and spawns tasks. It can't kill the listen loop either way, because every subscriber has its own queue.
-- **The agent's internal endpoint must sit outside `/api/agent/*`.** The gateway proxies that whole prefix to the browser. Use `/internal/...` instead. The agent publishes no host port, so only containers on `smarthome_net` can reach it.
-- **Store stable IDs and resolve names at run time.** Routines store IEEE addresses and numeric Z2M group IDs, and look up the `friendly_name` when they run, so renaming a device doesn't break routines.
-- **Sun triggers need a location.** `Home.latitude`/`longitude` are nullable and `timezone` defaults to `UTC`. Sun triggers and conditions are rejected at save time when there's no location.
-- **Already verified:** `zoneinfo` works in the gateway image on the Pi (tzdata is present). `astral` is not installed. The gateway runs as a single uvicorn process with no `--workers`.
-- **A lead on the group bug (unverified):** `delete_group` evicts only members that have a `name` key. Only our own `add_group_member` writes that key, because Z2M's `bridge/groups` members carry only `ieee_address`/`endpoint`. So real members are skipped, and `group/remove` then runs against a group that still has devices in it.
+- **Device control lived inside the route handlers.** It was moved into [core/device_control.py](../services/gateway/core/device_control.py). The routes and the scheduler both call it.
+- **State-change triggers need the previous value, and nothing stored it.** Every `device_update` on the bus carries the full Z2M state, and the twin is overwritten before the broadcast. The scheduler keeps its own match state per device trigger, seeded from the twin.
+- **Bus subscriber queues are unbounded.** The scheduler's consumer stays non-blocking: it only evaluates triggers and spawns tasks. Each subscriber has its own queue, so the scheduler can't break the MQTT listen loop.
+- **The agent's internal endpoints sit outside `/api/agent/*`,** because the gateway proxies that whole prefix to the browser. They live at `/internal/...`, which only containers on `smarthome_net` can reach.
+- **Routines store stable IDs and look up names when they run.** That means IEEE addresses and numeric Z2M group IDs, so renaming a device doesn't break a routine.
+- **Sun triggers need a location.** `Home.latitude`/`longitude` are nullable. A routine that uses the sun is rejected at save time (HTTP 422) when the home has no location.
+- **The group bug is still open:** see KNOWN BUGS in [todo.md](todo.md). The lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes that key. Z2M's members carry `ieee_address`/`endpoint`, so real members are skipped.
 
 ## 2. Architecture
 
-**The scheduler runs inside the gateway**, as a `Scheduler` object created in `lifespan` after `bus.start()`, stopped before `bus.stop()`, and stored at `app.state.scheduler`. This is the right place because the gateway owns the bus, the twin and MQTT publishing. A separate service would need its own MQTT subscription plus a control channel back into the gateway.
+**The scheduler runs inside the gateway.** A `Scheduler` is created in `lifespan` after `bus.start()`, stopped before `bus.stop()`, and stored at `app.state.scheduler`. The gateway owns the bus, the twin and MQTT publishing, so a separate service would need its own MQTT subscription plus a control channel back into the gateway.
 
-New package `services/gateway/scheduler/`:
-
-| Module | Role |
+| Module (`services/gateway/scheduler/`) | Role |
 |---|---|
-| `schema.py` | Pydantic models for triggers, conditions and actions (discriminated unions on `type`). Shared by the API, the engine and, later, the agent tools. |
-| `store.py` | DB access for routines and runs. |
-| `engine.py` | `Scheduler`: the time loop, the event loop, `for` timers, and per-routine run bookkeeping. |
-| `runner.py` | Runs one routine instance: evaluates conditions, executes actions, writes the run log. |
-| `sun.py` | Sunrise/sunset via `astral` (small, pure Python, no network). |
-| `agent_client.py` | Gateway → agent internal calls with a minted 5-minute JWT. |
+| `schema.py` | Pydantic models for triggers, conditions and actions (discriminated unions on `type`, `extra=forbid`). The single source of truth for routine JSON, shared by the API, the engine and, through the gateway, the agent tools. |
+| `timing.py` | Next/previous fire times for time and sun triggers in the home timezone. Sunrise/sunset come from `astral` (pure Python, no network). |
+| `matching.py` | Value comparisons, the re-arm (hysteresis) rule, and condition checks. |
+| `engine.py` | `Scheduler`: the time loop, the device-event loop, `for` timers, overlap handling, catch-up, and the nightly prune. |
+| `runner.py` | Runs one routine instance: each action in order, saving progress after each step, including background parts. |
+| `actions.py` | What each action does (device, group, delay, fade, Spotify, agent). |
+| `agent_client.py` | Gateway → agent internal calls, using a minted 5-minute JWT with `scope: "internal"`. |
+| `store.py` | Database access for routines and runs. |
 
-**How the scheduler runs:**
+**How it runs**
 
-- **Time loop.** A min-heap of `(fire_at, routine_id, trigger_id)` for time and sun triggers. It sleeps until the earliest entry, capped at 60 s, or until a reload event fires. The cap keeps it honest across clock jumps.
-- **Event loop.** One `bus.subscribe()` queue. For each `device_update` it looks up the routines watching that IEEE and attribute in an in-memory index, does edge detection (§4), and spawns runs or `for` timers.
-- **Reloads.** CRUD routes call `scheduler.reload(routine_id)` directly (same process). `home_routes` calls `scheduler.reload_all()` when the timezone or location changes.
+- **Time loop.** It keeps a dict of the next fire time for each time/sun trigger. It sleeps until the earliest one, waking early when something is reloaded, and never sleeps longer than 60 s, so clock jumps are noticed.
+- **Event loop.** It reads one `bus.subscribe()` queue. For each `device_update` it looks the IEEE address up in an index of device triggers, evaluates the matching triggers (§4), and spawns runs or `for` timers.
+- **Reloads.** Routes that change a routine call `scheduler.reload(routine_id)`. Home profile create, update and delete call `scheduler.reload_all()`, since the timezone or location may have changed.
 - **Startup order.**
-  1. Take a Postgres advisory lock. If it's already held, log loudly and don't schedule. This guards against an accidental second process double-firing.
-  2. Mark any run still `running` as `interrupted`.
-  3. Wait (up to 30 s) for the bus to receive `bridge/devices`.
-  4. Seed last-seen state from the twin.
-  5. Build the heap.
-  6. Run catch-up (§4).
-- **Nightly housekeeping** at 04:00 local prunes the run log (§7).
+  1. Take the Postgres advisory lock. If another process holds it, log an error and don't schedule.
+  2. Mark any `running` runs as `interrupted`.
+  3. Load the timezone and location, then the routines.
+  4. Wait up to 15 s for MQTT.
+  5. Seed the device triggers from the twin.
+  6. Catch up (§4).
+- If startup fails (for example, the tables don't exist yet), the gateway still serves, and the UI shows "scheduler isn't running".
 
-Nothing important lives only in memory. Routines and the run log are in Postgres. In-memory state (the heap, last-seen values, `for` timers, active runs) is all derived and gets rebuilt at startup.
+Nothing important lives only in memory. Routines and runs are in Postgres. The in-memory state (next fire times, trigger match state, `for` timers, active runs) is derived from them and rebuilt at startup.
 
 ## 3. Data model
 
-Two tables in `shared/database/models.py`, plus one Alembic revision.
+Two tables (migration `b3e1d7a9c204`, hand-written and checked with `alembic check`).
 
-**`routines`**
+**`routines`**: `id`, `name`, `description`, `enabled`, `owner_user_id` (run-as user for Spotify/LLM, `ON DELETE CASCADE`), `mode` (`single`|`restart`), `grace_minutes` (default 5), `triggers`/`conditions`/`actions` (JSONB lists), `schema_version`, `last_run_at`/`last_run_status` (denormalised for the list), `created_at`/`updated_at`.
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `name` | String(100) | |
-| `description` | String(500) null | |
-| `enabled` | bool, default true | |
-| `owner_user_id` | FK users, `ON DELETE CASCADE` | Whose Spotify/LLM credentials actions run as **(decided: household-wide routines, each with a run-as owner)** |
-| `mode` | String(16): `single` \| `restart` | **(decided)** |
-| `grace_minutes` | int, default 5 | **(decided)** catch-up window for time/sun triggers |
-| `triggers` | JSONB list | |
-| `conditions` | JSONB list | AND-ed |
-| `actions` | JSONB list | ordered |
-| `schema_version` | int, default 1 | for future JSON migrations |
-| `last_run_at`, `last_run_status` | denormalized | for the list view |
-| `created_at`, `updated_at` | | |
-
-Triggers, conditions and actions are JSONB because they're polymorphic, always loaded and saved as a whole, and never queried individually. Everything the list view or the engine filters on is a real column.
+Routines are **household-wide** (decided): any logged-in user can see and edit any routine. The creator is the run-as owner. Duplicating makes the copier the owner. There's no run-as switch in the UI (declined).
 
 **`routine_runs`**
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `routine_id` | FK, `ON DELETE CASCADE` | |
-| `trigger_id` | String(16) null | null for "run now" |
-| `trigger_type` | String(16) | `time` \| `sun` \| `device` \| `manual` \| `catchup` |
-| `scheduled_for` | timestamptz null | set for time/sun triggers |
-| `started_at`, `finished_at` | timestamptz | |
-| `status` | String(16) | `running` \| `success` \| `partial` \| `failed` \| `skipped` \| `missed` \| `cancelled` \| `interrupted` |
-| `late_seconds` | int null | set when the run was caught up |
-| `trigger_detail` | JSONB | e.g. the device state that fired it, or which condition skipped it |
-| `steps` | JSONB list | `{i, type, status, started_at, ms, detail, error}` per action |
-| `error` | text null | |
+| Column | Notes |
+|---|---|
+| `trigger_id`, `trigger_type` | `time` \| `sun` \| `device` \| `manual` |
+| `scheduled_for` | Set for time/sun triggers. A partial unique index on `(routine_id, trigger_id, scheduled_for)` means an occurrence can be recorded at most once, which makes catch-up idempotent. |
+| `status` | `running` \| `success` \| `partial` \| `failed` \| `skipped` \| `missed` \| `cancelled` \| `interrupted` |
+| `late_seconds` | Set when a run started ≥ 5 s late. |
+| `trigger_detail` | What fired it (`{device, attribute, value, held_s?, already_true?}`), or why it was skipped or missed (`reason`). |
+| `steps` | One per action: `{id, type, status: ok\|partial\|failed\|skipped\|cancelled\|running, started_at, ms, detail, error}` |
+| `error` | Summary of failed steps. |
 
-Indexes: `(routine_id, started_at DESC)`. There's also a partial unique index on `(routine_id, trigger_id, scheduled_for) WHERE scheduled_for IS NOT NULL`, which makes a missed or caught-up time trigger impossible to run twice.
+There's also an index on `(routine_id, started_at)`.
 
 ### JSON shapes
 
-Every trigger and action gets a short `id` (e.g. `"t1"`, `"a3"`) so run logs and catch-up can refer to it. Device references are IEEE addresses, and group references are Z2M numeric IDs. Days are `["mon", …, "sun"]`, and `null` means every day. Times are local `"HH:MM"` in the home timezone.
+Triggers and actions have short ids (`"t1"`, `"a3"`). Device references are IEEE addresses and groups are Z2M numeric ids. Days are `["mon", …, "sun"]`, with `null` meaning every day. Times are local `"HH:MM"` in the home timezone. Values are device-native: **temperature is always °C**, and the editor always shows and accepts °F.
 
-**Triggers**
+**Triggers** (any one starts the routine; no triggers means it only runs with Run now)
 ```json
 {"id":"t1","type":"time","at":"07:00","days":["mon","tue","wed","thu","fri"]}
 {"id":"t2","type":"sun","event":"sunset","offset_min":30,"days":null}
-{"id":"t3","type":"device","device":"0x00158d0001a2b3c4","attribute":"contact",
- "op":"eq","value":false,"rearm":null,"for_s":null,"cooldown_s":0}
+{"id":"t3","type":"device","device":"0x…","attribute":"contact","op":"eq","value":false,
+ "rearm":null,"for_s":null,"cooldown_s":0,"fire_on_start":false}
 {"id":"t4","type":"device","device":"0x…","attribute":"temperature","op":"lt","value":18,"rearm":1.5}
 {"id":"t5","type":"device","device":"0x…","attribute":"action","op":"eq","value":"on_press"}
 ```
-- Device trigger `op` is one of `eq | ne | gt | gte | lt | lte | changes`. Values are device-native (temperature is always °C; the editor always shows and accepts °F).
-- `rearm` (numeric ops only) is a hysteresis margin: `lt 18, rearm 1.5` fires at 17.9 and not again until the reading has risen to 19.5 or above. Added 2026-11-08 for noisy sensors and heater-style routines.
-- `action` (remote buttons) is an event attribute: every matching report fires, since the twin keeps the last value. `changes` on it means "any press". `for_s` isn't allowed on it.
+- **`op`:** `eq | ne | gt | gte | lt | lte | changes`.
+- **`rearm`** (numeric ops only) is a hysteresis margin: `lt 18, rearm 1.5` fires at 17.9 and not again until the reading has risen to 19.5 or above.
+- **`action`** (remote buttons) is an event attribute: every matching report fires, because the twin keeps the last value. `changes` on it means "any press". `for_s` and `fire_on_start` aren't allowed on it.
+- **`fire_on_start`:** also fire if the reading already matches when the routine is saved or the hub starts.
 
-**Conditions** (all must pass)
+**Conditions** (the list is AND)
 ```json
 {"type":"time_window","after":"22:00","before":"06:00"}
 {"type":"days","days":["sat","sun"]}
@@ -113,212 +93,183 @@ Every trigger and action gets a short `id` (e.g. `"t1"`, `"a3"`) so run logs and
 {"type":"sun","state":"down"}
 {"type":"any","conditions":[{"type":"sun","state":"down"},{"type":"days","days":["sat","sun"]}]}
 ```
-The top-level list is AND. An `any` group is OR, one level deep (added 2026-11-08). The editor shows it as an All/Any toggle: "Any" is stored as a single `any` group.
-A `time_window` may wrap past midnight.
+- A `time_window` can wrap past midnight.
+- `any` is OR, one level deep. The editor shows it as an All/Any toggle, and "Any" is stored as a single `any` group.
 
-**Actions**
+**Actions** (in order)
 ```json
 {"id":"a1","type":"device","device":"0x…","set":{"state":"ON","brightness":200,"transition":2}}
 {"id":"a2","type":"group","group":3,"set":{"state":"OFF"}}
 {"id":"a3","type":"delay","seconds":300}
-{"id":"a4","type":"fade","target":{"device":"0x…"},"to_brightness":254,"from_brightness":1,
- "duration_s":600,"method":"native","wait":false}
-{"id":"a5","type":"spotify_play","speaker":"Bedroom Speakers","uri":"spotify:playlist:…",
- "volume":35,"shuffle":true}
-{"id":"a6","type":"spotify_ctrl","cmd":"pause","speaker":null}
+{"id":"a4","type":"fade","device":"0x…","group":null,"to_brightness":254,"from_brightness":1,
+ "to_color_temp":250,"from_color_temp":455,"duration_s":600,"method":"native","wait":false}
+{"id":"a5","type":"spotify_play","speaker":"Bedroom Speakers","uri":"spotify:playlist:…","title":"Morning",
+ "volume":10,"ramp_to":35,"ramp_s":600,"shuffle":true}
+{"id":"a6","type":"spotify_ctrl","cmd":"pause","speaker":null,"volume":null}
 {"id":"a7","type":"agent","prompt":"Pick calm music that suits the weather and play it in the bedroom."}
 ```
-- Every action accepts `"stop_on_error": false`. The default is to continue, and the run is then marked `partial` **(decided)**.
-- `set` reuses `DeviceSetRequest`: `state`, `brightness`, `color_temp`, `transition`.
-- `delay` is capped at 12 h.
-
-The shapes are deliberately flat and use plain words so the agent can write them later. The agent tool will take the routine as a JSON string and get back the Pydantic validation errors (§9), so the Responses API strict schema never has to model the nested unions.
+- **`stop_on_error`:** every action accepts it, default `false`. A failed step then makes the run `partial` (decided).
+- **`set`:** uses `DeviceSetRequest`'s fields (`state`, `brightness` 0–254, `color_temp` in mireds, `transition`).
+- **Limits:** `delay` is capped at 12 h. `duration_s` is at most 6000. `ramp_s` is 30–7200. A fade needs exactly one of `device`/`group`.
 
 ## 4. Engine behaviour
 
 **Time and sun triggers**
-- The next occurrence is computed in the home timezone with `zoneinfo`.
-- **DST.** A time that doesn't exist on the spring-forward day is shifted forward by the gap (02:30 runs at 03:30). A time that occurs twice in autumn runs once, at the first occurrence.
-- Sun times are recomputed for each date. If the sun doesn't rise or set that day (polar regions), that day is skipped and logged as `missed`.
+- Fire times are computed in the home timezone (`zoneinfo`).
+- **DST:** a time that doesn't exist on the spring-forward day is shifted forward by the gap (02:30 runs at 03:30). A time that occurs twice in autumn runs once.
+- **Sun times** are computed per date. A day with no sunrise or sunset, or a home with no location, simply has no fire.
 
 **Grace and catch-up (decided)**
-- Every time/sun fire is compared to `now`, not only at startup. A fire that is ≤ `grace_minutes` late runs, with `late_seconds` recorded. A later one is logged as `missed` and doesn't run.
-- At startup, each trigger's most recent occurrence is checked against the unique index. That turns "the gateway was down at 07:00" into a late run or a `missed` row.
-- This also covers the **Pi having no RTC.** It boots with the last-shutdown time from fake-hwclock, then NTP jumps the clock forward. The 60 s loop cap plus the grace rule means a jump can never set off a burst of stale routines.
+- **Late but within grace:** any time/sun fire up to `max(grace_minutes, 30 s)` late runs, with `late_seconds` recorded.
+- **Beyond grace:** the run is recorded as `missed` and doesn't run. Grace 0 therefore still allows 30 s.
+- **At startup:** each trigger's most recent occurrence since the routine was last edited is checked against the unique index. If it wasn't recorded, it runs late or is logged `missed`.
+- **Clock jumps:** next fire times are computed from "now", so a clock jump (the Pi has no RTC) produces at most one `missed` row, never a burst of runs.
 
-**Device triggers: edge detection is the main debounce**
-- A trigger fires only when the predicate goes from false to true for that attribute. Z2M republishing `occupancy: true` every 30 s doesn't re-fire.
-- Updates that don't include the attribute are ignored.
-- The first value seen after startup only seeds the state and never fires.
-- `cooldown_s` (default 0) suppresses re-fires within a window, for noisy threshold sensors.
-- `changes` fires on any change of value.
-
-**`for` duration (v1 extra, decided)**
-- When the predicate becomes true, a timer task starts. If the predicate goes false before `for_s` elapses, the timer is cancelled. When it elapses, the routine fires.
-- On restart the timer can't know how long the state has already held. If the twin shows the predicate true at startup, the timer starts from boot. That's conservative: the trigger fires late, never early.
+**Device triggers**
+- **Edge-triggered:** a trigger fires when its comparison changes from false to true. Repeated identical reports don't re-fire. Reports that don't include the attribute are ignored.
+- **First reading:** after startup or an edit, the first reading only sets the state, unless `fire_on_start` is set. Then it fires once, even if the startup seed and a live report both arrive first.
+- **`rearm`:** a matched trigger stays matched until the value moves back past the threshold by the margin.
+- **`for_s`:** a timer starts when the trigger matches and is cancelled if it stops matching first. A state that's already true at startup starts its timer at boot, so it fires late rather than early.
+- **`cooldown_s`:** suppresses re-fires within that window.
+- **`changes`:** fires on any change of value.
 
 **Overlap (decided)**
-- `single`: a trigger that arrives while a run is active is ignored, without logging a skip row.
-- `restart`: the active run is cancelled, logged as `cancelled` with the steps completed so far, and a new run starts. This is what makes "motion → on, wait 5 min, off" extend on each motion.
+- `single`: a trigger that arrives while a run is still active is logged as `skipped` (except Run now, which gets HTTP 409).
+- `restart`: the active run is cancelled (logged `cancelled` with its steps so far) and a new run starts.
+- Disabling or deleting a routine cancels its current run. Editing it doesn't.
 
-**Conditions** are evaluated when the trigger fires, against the twin and the home clock. A condition failure logs a `skipped` run naming the failing condition, which answers "why didn't my routine fire?"
+**Conditions** are checked when a trigger fires (Run now skips them). A failure logs a `skipped` run whose reason names the condition: "Condition 1 not met: BedroomThermometer temperature is 19.5".
 
 ## 5. Actions
 
 **Device and group**
-- Actions go through `core/device_control.py`.
-- **Fix folded in:** the device `/set` result is checked against the requested `state` when it's `ON`/`OFF`. On a mismatch, the command is re-sent once. If the state still doesn't match, the step fails as `unconfirmed`. `TOGGLE`, brightness and colour aren't matched. This lives in the shared function, so the agent's `confirmed_state` benefits too.
-- Group sets stay fire-and-forget. Each group step then **verifies after 3 s**: it reads the group's members from `gateway:groups`, compares their twin `state`, and lists any members that didn't follow in the step detail. If some members didn't follow, the step is `partial`.
+- **Device:** goes through `device_control.set_device`. The reply's `state` is checked against an ON/OFF request; on a mismatch the command is re-sent once, and then the step fails.
+- **Group:** sets are fire-and-forget. For ON/OFF, the step then watches members' twin state for up to 3 s, returning early once they all follow. If some don't follow, the step is `partial` and lists them; if none do, it fails.
 
 **Fade**
-- `method: native` sends one `set` with `transition = duration_s`. The Zigbee limit is about 6553 s. If the light is off, it first sends `state: ON` at `from_brightness`.
-- `method: stepped` is a v1 extra **(decided)**. It sends brightness steps about every `max(duration/50, 2)` s, each with a short transition, for bulbs that mishandle long native transitions. It **aborts if someone changes the light** (the twin shows a brightness or state differing from what was last sent) and records `aborted: manual override` in the step.
-- `wait: false` (the default) runs the fade in the background of the run, so "fade the lights up and start music" happens at the same time. Background fades belong to the run and are cancelled with it.
+- **Native (default):** one command with `transition = duration_s`, so the bulb does the work. If the light is off, or a `from_` value is set, a start command (`state: ON` at `from_brightness`, else 1) goes first. A fade to 0 is an OFF with a transition. Fades skip the ON/OFF reply check, because a bulb can still report ON mid-fade-out.
+- **Stepped:** sends steps every `max(2 s, duration/50)`, interpolating brightness and colour temperature. It stops if someone changes the light:
+  - **What counts as a change:** a report outside every level it sent in the last 7 s, ±10. Hue bulbs report in-between levels and the final value arrives about 5 s late.
+  - **On the first suspicious report,** the fade holds (sends nothing, so it can't overwrite the change). On the next check it stops if the light is still off course and carries on if it was just lag.
+  - **Limit:** a change to a level the fade passed in the last few seconds can't be told apart from lag. Turning the light off always counts.
+- **`wait: false`** (default): the fade (stepped) or the bulb's transition (native) runs while later actions go ahead. A stepped fade's step shows `running`, and the run finishes once it's done. Cancelling the run cancels it.
 
-**Spotify (decided: internal agent endpoint)**
-- The agent gets `POST /internal/tools/{name}` with body `{"args": {...}}`. It authenticates with a gateway-minted 5-minute JWT carrying `scope: "internal"`.
-- It runs an allow-listed tool directly with no LLM: `spot_play`, `spot_ctrl`, `spot_search_playlist`. The existing `spotify_play` already confirms playback via `_await_playing`, and that confirmation becomes the step result.
-- There is a single owner of the token code. If the agent is down, the step fails clearly with "agent unreachable".
-- The routine editor's playlist picker uses the same endpoint (through a thin gateway route) or reads the agent's Redis cache `user:{id}:spotify_playlists`.
+**Spotify (decided: via an internal agent endpoint, no LLM)**
+- **How:** `POST /internal/tools/{name}` on the agent, allow-listed to `spot_play`, `spot_ctrl`, `spot_search`, `spot_search_playlist`, `spot_devices` and `spot_player`. It runs as the routine's owner.
+- **Order of commands:** volume and shuffle are set before playback so music doesn't start loud. If the idle speaker refuses, they're retried after playback starts. `spot_play` confirms that playback actually started.
+- **Volume ramp:** steps every `max(15 s, ramp_s/20)`. It stops if playback stops, moves to another speaker, or the volume is changed by hand (more than 3% off).
+- **Agent down:** the step fails with "Agent unreachable…".
 
-**Ask the agent (decided: later slice of v1)**
-- The agent gets `POST /internal/agent/run {prompt}`, which runs `process_intent_stream` for the run-as user.
-- The editor labels it clearly ("Uses the LLM. Costs tokens, results can vary").
-- The full reply and every tool call/result go into the step detail. The step fails if a tool call errors or the loop hits its iteration limit.
-- It uses a separate history key per routine, so it doesn't clutter the user's chat.
+**Ask the agent (decided)**
+- **How it runs:** `POST /internal/agent/run {prompt, routine}` runs the instruction through the normal LLM loop as the owner, with:
+  - no chat history, read or written
+  - memory and `rt_*` tools withheld, so a routine can't rewrite itself
+  - an "unattended" note in the system prompt
+- **What's recorded:** the agent's reply and every tool call with its outcome.
+- **When it fails:** a tool fails, the provider errors, or the loop hits its 5-step limit.
+- **Cost cap (decided):** at most **2 agent runs per routine per hour** (`AGENT_RUNS_PER_HOUR`, counted from the run log, so it survives restarts). Over the cap, the step is `skipped` and the run `partial`.
 
-## 6. Out of scope for v1
+## 6. Not built (noted so the shapes don't rule them out)
 
-These are noted so the shapes don't rule them out later:
-- deeper nesting of condition groups (one level of `any` exists)
-- templates
-- webhook or manual-button triggers
-- scenes
-- vacation mode
-- colour (`xy`/`hue`) in `set`
-- presence and phone location
-- notifications (see §10)
-- routines triggering other routines
-- a "notify" action
+- **Notifications and a `notify` action (§10):** reminders like "remind me…" are blocked on these, and the agent is told to say so.
+- **Templates.**
+- **Deeper condition nesting:** one level of `any` exists.
+- **Triggers:** stale-sensor and rate-of-change triggers (considered for slice 2, not chosen), and webhook triggers.
+- **Scenes, vacation mode, presence.**
+- **Colour (`xy`/`hue`) in `set`.**
+- **Routines triggering routines.**
+- **A run-as switch** (declined).
+- **Import/export** (declined).
 
-## 7. Run log and failure visibility (decided: UI only for now)
+## 7. Run log and visibility (decided: UI only for now)
 
-- **Retention.** `skipped` rows are kept 2 days, everything else 30 days. The nightly prune at 04:00 deletes the rest. The volume is trivial for Postgres on the SD card.
-- **Live updates.** The scheduler pushes `{type:"routine_run", routine_id, status, ...}` through the existing `/api/ws` fan-out, using a new `bus.broadcast(msg)` helper. The route that deletes a device starts using that helper too.
-- **Failure badge.** The Routines tab shows a red count of `failed`/`partial`/`missed` runs since the user last opened the tab. The "last opened" time is stored as `routines_seen_at` in `ui_settings`.
-- **Logs.** Every run also logs one line in the gateway log at INFO, or at WARNING when it fails.
+- **Retention:** `skipped` runs are kept 2 days, everything else 30. Pruning happens once at startup and then nightly after 04:00 local.
+- **Live updates:** `{type: "routine_run", routine_id, run_id, status}` goes over `/api/ws` via `bus.broadcast()`. The frontend re-dispatches it as the `onRoutineRun` event.
+- **Failure badge:** a red count on the Routines tab of `failed`/`partial`/`missed`/`interrupted` runs since this user last opened the tab. That time is stored as `ui_settings.routines_seen_at`; if it was never set, the last 7 days count.
+- **Gateway log:** one line per run (INFO, or WARNING if it didn't succeed), plus lines for triggers, skips and misses.
 
-## 8. API
-
-New `api/routine_routes.py`, prefix `/api/routines`, with `get_current_user` on each route. There's no RBAC, so any logged-in user can manage any routine. The run-as owner defaults to the creator. An editor can set it to themselves but not to another user, because that would spend someone else's tokens.
+## 8. API (`api/routine_routes.py`, `get_current_user` on each route)
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/routines` | list, with last run and `next_fire_at` |
-| POST | `/api/routines` | create (validated) |
+| GET | `/api/routines` | `{timezone, scheduler_active, routines: [...]}` with `next_fire_at`, `running`, owner |
+| POST | `/api/routines` | create (422 on invalid; 422 if it uses the sun and the home has no location) |
+| POST | `/api/routines/preview` | validate a draft; next 5 fire times plus warnings (missing devices/groups/attributes, unavailable Spotify speaker, no location) |
+| GET | `/api/routines/attributes` | per device: properties with type/unit/allowed values (Z2M exposes, cached in Redis `gateway:device_exposes`) and current values |
+| GET | `/api/routines/spotify/devices` | the current user's Spotify speakers |
+| GET | `/api/routines/spotify/search?q=` | music picker: the user's playlists first, then the catalogue |
+| GET | `/api/routines/alerts` | badge count since `routines_seen_at` |
+| POST | `/api/routines/alerts/seen` | mark the badge as seen |
 | GET / PUT / DELETE | `/api/routines/{id}` | read / full replace / delete |
 | POST | `/api/routines/{id}/enabled` | `{enabled}` |
-| POST | `/api/routines/{id}/run` | run now. Conditions are bypassed by default; `?check_conditions=true` applies them |
-| POST | `/api/routines/{id}/duplicate` | copy, disabled |
-| GET | `/api/routines/{id}/runs?limit=` | run history |
-| GET | `/api/routines/runs/recent?since=` | for the badge |
-| POST | `/api/routines/preview` | validate a draft and return the next 5 fire times, plus warnings such as "device not found" or "no home location" |
-| GET | `/api/routines/sun` | today's sunrise/sunset, shown in the editor |
+| POST | `/api/routines/{id}/duplicate` | copy named "X (copy)", disabled, owned by the caller |
+| POST | `/api/routines/{id}/run` | run now (conditions skipped; 409 if already running in `single` mode) |
+| GET | `/api/routines/{id}/runs?limit=` | run history (default 20, max 100) |
 
-## 9. UI
+Fixed paths are declared before `/{id}`, so they aren't parsed as routine ids.
 
-**List (mobile first)**
-- One column of cards. Each shows the name, a readable summary ("Weekdays 07:00 · 3 actions"), an enable switch, a last-run chip, "next: Mon 07:00", and a run-now button.
-- A warning icon appears when the routine references a device that no longer exists.
+## 9. UI (`frontend/src/components/routines/`)
 
-**Editor**
-- Full-screen `Sheet` on mobile, side panel on desktop.
-- Three sections, **When / Only if / Do**, each a list of typed rows with a "+ add" menu.
-- **Pickers.** The device picker comes from `useDevices`. The attribute picker offers the keys that device actually reports in the twin. The group picker comes from `useGroups`. The playlist picker comes from Spotify.
-- **Advanced** collapsible: mode, grace minutes, run-as.
-- The preview endpoint shows the next fire times live while you edit.
+- **List:** one card per routine with a readable summary, enable switch, last-run chip, next run, and buttons for Run now, History, Duplicate and Edit. The Routines tab carries the red failure badge.
+- **Editor:** a full-width Sheet with:
+  - **When:** time, sunrise/sunset, device or sensor.
+  - **Only if:** conditions, with the All/Any toggle.
+  - **Do:** device, group, fade, wait, play music, music control, ask the agent.
+  - **Advanced:** mode and catch-up window.
+  - **Live preview:** next runs and warnings.
+- **Pickers:**
+  - **Readings:** come from `/attributes` (the right input per type, units, "Now: …", °F for temperatures).
+  - **Music:** search box.
+  - **Speakers:** from Spotify.
+  - **Fades:** colour temperature in Kelvin.
+- **Number boxes** use `NumberField`, which leaves your typing alone while focused and clamps when you leave the box. Use it for any new number input.
+- **History:** expandable steps, with fade, music and agent details (reply and ✓/✗ tool calls).
+- **Mirroring the backend:** `types.ts` mirrors `schema.py`. Keep the two in sync.
 
-**Run history:** per routine, a drawer with expandable step details.
+## 10. Next: ntfy notifications
 
-**Plumbing**
-- A shared `summarizeRoutine()` produces the readable text. The agent can reuse the same wording later.
-- New shadcn components will probably be needed: switch, select, input, collapsible. They're built at image build time, so the Pi runtime cost is nil.
+[ntfy](https://ntfy.sh) is a simple pub/sub push service. You POST text to `https://<server>/<topic>`, and the ntfy phone app shows it. It can be self-hosted as one small container on the Pi or used via ntfy.sh, and supports priority, tags and action buttons. Planned uses:
+1. **Failure alerts:** push `failed`/`missed` runs.
+2. **A `notify` action:** "door left open 10 min → notify", "washer power < 5 W for 3 min → laundry done".
+3. **Agent reminders:** "remind me at 6 to take the bins out" becomes a routine with a notify action.
 
-## 10. Later: ntfy (noted per Aidan, 2026-11-08)
+On ntfy.sh the topic name is effectively the password, so use a long random topic or self-host with auth, and store it in `user_secrets`.
 
-[ntfy](https://ntfy.sh) is a simple pub/sub push service. You POST text to `https://<server>/<topic>`, and the ntfy phone app (Android/iOS) shows a notification. It can be self-hosted as one small container on the Pi or used via ntfy.sh. Notifications support priority, tags and click/action buttons.
+## 11. Agent integration (built)
 
-Planned uses:
-1. **Failure alerts:** a per-user or household setting to push `failed`/`missed` routine runs.
-2. **A `notify` action in routines:** "door left open 10 min → notify", "washing machine power < 5 W for 3 min → laundry done".
-3. **Agent tool:** "remind me at 6 to take the bins out" becomes a routine with a notify action.
+- **Tools** ([tools/routines_api.py](../services/agent/tools/routines_api.py)):
+  - **`rt_format`:** the routine JSON format, fetched on demand to keep everyday chat cheap (decided).
+  - **`rt_list`:** an on-demand tool; routines aren't summarised into every prompt (decided).
+  - **`rt_save`:** creates a routine, or applies a partial update merged onto the saved routine.
+  - **`rt_enable`, `rt_run`.**
+  - **`rt_delete`:** needs `confirmed=true` after the user says yes (decided). Creating and editing happen directly, with a one-sentence read-back.
+- **Names, not ids:** the model uses device and group names, and the tools translate both ways. Unknown names come back with the list of real ones.
+- **Validation:** the gateway's 422 errors go back to the model so it can fix the JSON and retry.
+- **Cost:** the six tool schemas add about 450 tokens to every chat message.
 
-The topic name acts as the password on ntfy.sh, so use a long random topic or self-host with auth. Store it in `user_secrets`.
+## 12. Migration and dependencies
 
-## 11. Agent integration (later; the design is ready for it)
+- **Migration:** `b3e1d7a9c204` (down from `52850728036c`) adds both tables. It was hand-written rather than autogenerated, then verified with `alembic check` inside the new image before the containers were swapped. On the Pi it was applied with `docker compose run --rm -T --no-deps gateway sh -c "cd /app/shared && uv run --no-sync alembic upgrade head"`, after a `pg_dump` backup.
+- **Dependency:** `astral` (gateway only). It's pure Python; on Windows it also pulls in `tzdata`.
 
-- **Tools** `routine_list`, `routine_upsert` (the routine as a JSON string, validated by the same Pydantic models, with errors returned to the model) and `routine_enable`.
-- They call `/api/routines` with the agent's existing minted JWT, following the existing `GatewayClient` pattern.
-- The system prompt gets a one-line summary per routine. The readable summaries make that cheap.
+## 13. What was built, by slice (all 2026-11-08)
 
-## 12. Migration plan
+- **Slice 0: groundwork.**
+  - Built: `device_control`, ON/OFF reply check with one retry, `bus.broadcast`.
+  - Skipped: the group-bug warm-up.
+- **Slice 1:** tables, time triggers, device/group/delay actions, the time loop (advisory lock, interrupted cleanup, grace, catch-up), the run log, CRUD/enable/run/runs/preview, and the list and editor.
+- **Slice 2:** sun triggers, all conditions, device triggers (edge, re-arm margin, cooldown, `for`, button presses), group checks, the failure badge, pruning and the attribute pickers.
+- **Afterwards:** All/Any conditions, `NumberField`, and °F only.
+- **Slice 3:** the internal agent endpoint, Spotify play/control with volume ramp, and native and stepped fades with colour temperature.
+- **Slice 4:** the "Ask the agent" action (capped at 2 per hour), duplicate, the `rt_*` agent tools, and `fire_on_start`.
 
-1. Add the `Routine` and `RoutineRun` models to `shared/database/models.py`.
-2. Autogenerate with `down_revision = 52850728036c` (the tunnel procedure is in CLAUDE.md).
-3. Review the file and hand-add the partial unique index if autogenerate misses it.
-4. Apply on the Pi **only after approval**: `docker exec home_gateway sh -c "cd /app/shared && uv run --no-sync alembic upgrade head"`.
-5. Update the head in CLAUDE.md.
+Each slice was checked with `compileall`, `npx tsc -b`, lint on the new files, local logic checks using fakes, and live checks on the Pi using throwaway `TEST …` routines that were deleted afterwards.
 
-New dependency: `astral` (gateway only), in slice 2.
+## 14. Resolved questions
 
-## 13. Implementation order
-
-**Slice 0: groundwork (no user-visible change)**
-1. Extract `core/device_control.py` (resolve the device or group, publish, RPC) and make the routes use it.
-2. Add `state` matching plus one retry to device `set`.
-3. Add the `bus.broadcast()` helper.
-4. *(Optional warm-up)* Reproduce and fix the group delete/member-remove bug.
-
-**Slice 1: first usable version**
-1. Models, migration and Pydantic schemas.
-2. Time triggers with days. Device, group and delay actions.
-3. The engine's time loop, with the advisory lock, interrupted-run cleanup, the grace window and startup catch-up.
-4. The run log, including `skipped`/`missed`.
-5. CRUD, enable, run now, runs and preview endpoints.
-6. List UI with enable, run now, last-run chip and next fire. A simple editor for time triggers and device/group actions.
-
-*Usable as:* "every night at 23:30, all off"; "weekdays 07:00 bedroom on".
-
-**Slice 2: triggers and conditions**
-1. Sun triggers (`astral`) and the sun condition.
-2. Time window, days and device conditions.
-3. Device triggers with edge detection, cooldown and `for`.
-4. `single`/`restart` modes.
-5. Group verify.
-6. Live run updates, the failure badge and the run-history drawer.
-7. Prune housekeeping.
-
-**Slice 3: music and fades**
-1. The agent's `/internal/tools/*` endpoint and the gateway `agent_client`.
-2. `spotify_play`/`spotify_ctrl` actions and the playlist picker.
-3. Native and stepped fades with `wait` and manual-override abort.
-
-*Usable as:* the full 07:00 wake-up example.
-
-**Slice 4: polish**
-1. The "Ask the agent" action.
-2. Duplicate.
-3. Agent routine tools (§11).
-
-**Later:** ntfy (§10), OR conditions, templates, webhooks, scenes.
-
-Each slice is verified per CLAUDE.md: `compileall`, `npx tsc -b`, a container rebuild, and reading the logs. Each slice also gets a hands-on check with a test routine one or two minutes in the future.
-
-## 14. Smaller open questions (defaults in bold; say if any should change)
-
-1. Does "Run now" apply conditions? **No by default**, with an opt-in flag.
-2. Does the "Ask the agent" action share the user's chat history? **No**: each routine gets a separate history key.
-3. What happens when a routine's device is removed from the network? **The routine stays**: it shows a warning in the list, and that action fails with "device not found" when it runs.
-4. Run log retention: **30 days, `skipped` 2 days**.
-5. Maximum delay: **12 h**.
-6. Default fade method: **native**, with stepped available.
+1. **Does Run now apply conditions?** No.
+2. **Does "Ask the agent" share chat history?** No. It uses no history at all.
+3. **What if a routine's device is removed from the network?** The routine stays, the preview warns, and that action fails with "Device not found" when it runs.
+4. **Run log retention?** 30 days, and 2 days for `skipped`.
+5. **Maximum delay?** 12 h.
+6. **Default fade method?** Native, with stepped available.
