@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent", tags=["Agentic Chat"])
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+from shared.security import JWT_SECRET_KEY  # raises at startup if unset
 ALGORITHM = "HS256"
 
 # Cryptographic Token Extraction Helper

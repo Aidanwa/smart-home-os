@@ -15,6 +15,9 @@ from shared.database.models import Home
 
 logger = logging.getLogger(__name__)
 
+# Tools whose calls change Spotify playback, so the cached "now playing" context must be refetched.
+SPOTIFY_STATE_TOOLS = {"spot_play", "spot_ctrl", "spot_queue"}
+
 class SmartHomeOrchestrator:
     def __init__(
         self,
@@ -222,7 +225,8 @@ class SmartHomeOrchestrator:
                     
                     # -> THE INVALIDATION ENGINE <-
                     # Check what domains the tools actually interacted with
-                    touched_spotify = any("spotify" in call.get("name", "") for call in tool_calls)
+                    # Only tools that change playback state; spot_info/spot_search* are read-only.
+                    touched_spotify = any(call.get("name", "") in SPOTIFY_STATE_TOOLS for call in tool_calls)
                     
                     # Rebuild the prompt. 
                     # If Spotify was touched, pass None to force a refetch. Otherwise pass the cache.

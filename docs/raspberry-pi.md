@@ -101,6 +101,7 @@ To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx
 
 - **Pi, 03:00 nightly:** `/usr/local/bin/smarthome-backup.sh` (root cron) writes `~/backups/smarthome-YYYY-MM-DD.tar.gz` and keeps 14 days. Its log is `/var/log/smarthome-backup.log`. Each bundle contains `smarthome/home_os.dump` + `.env`, `zigbee2mqtt/` (data dir, no logs), `mosquitto/`, and `pihole/` (Teleporter zip).
 - **PC, at logon + 09:00:** the Task Scheduler task "SmartHome Backup Pull" runs `C:\Users\adams\Backups\smart-home-os\pull-backups.ps1`, which copies new bundles and keeps 30 days. It logs to `pull.log` in the same folder.
+- **Docker cleanup, Sundays 03:30:** `/usr/local/bin/docker-prune.sh` removes dangling images and build cache unused for 7+ days. Its log is `/var/log/docker-prune.log`.
 - **Cert, 04:00 on the 1st:** `/usr/local/bin/renew-tailscale-cert.sh` restarts the gateway only if the cert changed. Its log is `/var/log/tailscale-cert-renew.log`.
 
 ## 10. Restore after a dead SD card
@@ -115,5 +116,6 @@ To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx
    ```
    0 4 1 * * /usr/local/bin/renew-tailscale-cert.sh
    0 3 * * * /usr/local/bin/smarthome-backup.sh
+   30 3 * * 0 /usr/local/bin/docker-prune.sh
    ```
 8. Optional: add `cgroup_enable=memory` to `/boot/firmware/cmdline.txt` so the agent's 1G limit is enforced.

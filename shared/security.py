@@ -3,8 +3,16 @@ import hashlib
 import os
 from cryptography.fernet import Fernet
 
+def _require_jwt_secret() -> str:
+    """The single source of JWT_SECRET_KEY for every service. No fallback on purpose:
+    the gateway and agent must agree on it, and it also seeds Fernet for stored secrets."""
+    value = os.getenv("JWT_SECRET_KEY", "").strip()
+    if not value:
+        raise RuntimeError("JWT_SECRET_KEY is not set. Refusing to start (see .env.example).")
+    return value
+
 # Reuse the central secret key as our operational seed
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+JWT_SECRET_KEY = _require_jwt_secret()
 
 def _get_fernet_key() -> bytes:
     """Derive a valid 32-byte URL-safe base64 key from the JWT secret key using SHA-256."""

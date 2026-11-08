@@ -3,8 +3,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from passlib.context import CryptContext
 
-# Fallback contexts for local development. Provide a persistent env override in production.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7b9d8df2ac3ce72b8d0093cf1b988fce899ea298b11119fcd5c95279da7311ef")
+from shared.security import JWT_SECRET_KEY as SECRET_KEY  # raises at startup if unset
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 Days for low-friction home dashboards
 

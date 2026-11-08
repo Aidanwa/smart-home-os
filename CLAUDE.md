@@ -87,7 +87,7 @@ There are **no tests**. Use these checks:
 - **Adding a tool** takes 3 steps. (1) Add the JSON schema in [tools/schema.py](services/agent/tools/schema.py); Spotify tools are gated on `has_spotify`. (2) Register the name in `TOOL_REGISTRY` in `api/dependencies.py`. (3) Make the method signature accept `user_id` as a kwarg plus the schema args; it's called as `tool(user_id=..., **args)`. Tool names are kept short on purpose (`spot_*`) to save tokens.
 - **WS protocol** (`/api/agent/chat/stream`): the server sends raw text chunks, JSON-string tool events `{"type":"tool_call","name","arguments","status":"pending|completed"}`, then a literal `[DONE]`.
 - `POST /api/agent/voice` transcribes uploaded audio with faster-whisper and returns the text; the frontend then sends it as chat.
-- **Secrets**: `user_secrets.encrypted_credentials` uses Fernet with a key derived from `SHA256(JWT_SECRET_KEY)`. **Rotating `JWT_SECRET_KEY` invalidates every stored secret and every session.**
+- **Secrets**: `user_secrets.encrypted_credentials` uses Fernet with a key derived from `SHA256(JWT_SECRET_KEY)`. **Rotating `JWT_SECRET_KEY` invalidates every stored secret and every session.** Every service reads it only via `shared.security.JWT_SECRET_KEY`, which raises at import if it is unset. There is no fallback.
 
 ## Frontend (`services/gateway/frontend`)
 
@@ -102,7 +102,5 @@ React 19 + Vite 8 + TypeScript 6 + Tailwind v4 + shadcn (`radix-nova`, component
 
 - Some `user_secrets` rows predate encryption (plaintext Spotify rows found 2026-11-07). `decrypt_secret` raises on them, so those users must re-link Spotify. (`/api/platform/secrets` was fixed to encrypt on 2026-11-07.)
 - Device-RPC replies resolve on the device's *next* state publish from any source (a physical switch press counts too). Per-device locking now prevents concurrent sets from clobbering each other, but the reply isn't matched against the requested values. **Low impact:** the UI ignores the `/set` response and renders only twin updates from `/api/ws`, so it self-corrects. Only the agent reads `confirmed_state`, so this matters only for screenless voice use (the planned edge node). There, a lost command could be reported as "done". If that becomes relevant, match on `state` only (brightness and colour can't be matched reliably).
-- The orchestrator's Spotify cache invalidation checks for `"spotify" in tool name`, but the tools are named `spot_*`, so it never fires.
 - `GatewayClient.rename_group` sends `new_name` as a query param, but the gateway expects a JSON body. The method is unregistered dead code.
-- JWT secret: gateway `core/security.py` and agent `tools/gateway_api.py` fall back to a hard-coded default, while agent `api/routes.py` and `shared/security.py` don't. If the env var is missing they silently disagree.
 - Group member removal and MQTT errors: see KNOWN BUGS in [docs/todo.md](docs/todo.md).

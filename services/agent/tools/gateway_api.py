@@ -9,8 +9,8 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-# Import the identical shared secret utilized by the gateway and routes.py
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7b9d8df2ac3ce72b8d0093cf1b988fce899ea298b11119fcd5c95279da7311ef")
+# The identical shared secret used by the gateway and routes.py (raises at startup if unset)
+from shared.security import JWT_SECRET_KEY
 ALGORITHM = "HS256"
 
 class GatewayClient:
