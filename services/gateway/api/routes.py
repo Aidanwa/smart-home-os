@@ -11,6 +11,7 @@ from shared.database.models import DevicePlacement
 from shared.database.core import get_db
 
 from core.mqtt_bus import AsyncMqttBus
+from core import device_control
 from api.dependencies import get_mqtt_bus
 from api.models import (
     DeviceListResponse, DeviceStateResponse, DeviceSetRequest, GroupInfo,
@@ -99,34 +100,24 @@ async def set_device_state(
             detail="No valid state fields provided"
         )
 
-    # TRANSLATION STEP
-    target_ieee = bus._device_registry.get(device_id, device_id)
-
-    # 1. Translate UUID (IEEE) to friendly_name for Z2M routing
-    raw_state_str = await bus.redis.hget("gateway:digital_twin", target_ieee)
-    friendly_name = device_id # Fallback
-    
-    if raw_state_str:
-        state_obj = json.loads(raw_state_str)
-        friendly_name = state_obj.get("friendly_name", device_id)
-
-    topic = f"zigbee2mqtt/{friendly_name}/set"
-    
     try:
-        # This awaits the Zigbee network's confirmation via the Future-backed RPC system.
-        # It relies on the hardware successfully publishing a new state.
-        result = await bus.rpc(topic, payload)
-        
+        # Awaits the device's next state publish; ON/OFF requests are checked against it.
+        result = await device_control.set_device(bus, device_id, payload)
+
         return {
             "status": "success",
             "device": device_id,
             "confirmed_state": result
         }
-    except TimeoutError as e:
+    except TimeoutError:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail=f"Device '{friendly_name}' did not confirm the state change in time. It might be offline or unresponsive."
+            detail=f"Device '{device_id}' did not confirm the state change in time. It might be offline or unresponsive."
         )
+    except device_control.DeviceStateMismatch as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+    except device_control.MqttDisconnected as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -181,12 +172,7 @@ async def delete_device(
         # 4. Wipe the device from digital twin and broadcast the deletion to subscribers
         await bus.redis.hdel("gateway:digital_twin", target_ieee)
         
-        update_msg = {"type": "device_delete", "device": target_ieee}
-        for q in list(bus._subscribers):
-            try:
-                q.put_nowait(update_msg)
-            except asyncio.QueueFull:
-                pass
+        bus.broadcast({"type": "device_delete", "device": target_ieee})
 
         return {
             "status": "success", 
@@ -405,20 +391,17 @@ async def set_group_state(
     if not payload:
         raise HTTPException(status_code=400, detail="No valid state fields provided")
 
-    topic = f"zigbee2mqtt/{friendly_name}/set"
-    
-    if not bus.client:
-        raise HTTPException(status_code=503, detail="MQTT Bus is disconnected")
-        
     try:
-        # Direct publish. No RPC await. 
-        await bus.client.publish(topic, json.dumps(payload))
-        
+        # Direct publish. No RPC await.
+        await device_control.set_group(bus, friendly_name, payload)
+
         return {
             "status": "command_sent",
             "group": friendly_name,
             "message": "Group broadcast sent. Devices will update asynchronously."
         }
+    except device_control.MqttDisconnected as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

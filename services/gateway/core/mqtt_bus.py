@@ -95,6 +95,14 @@ class AsyncMqttBus:
     def unsubscribe(self, q: asyncio.Queue):
         self._subscribers.discard(q)
 
+    def broadcast(self, msg: dict):
+        """Push a message to every subscriber queue (the /api/ws clients, later the scheduler)."""
+        for q in list(self._subscribers):
+            try:
+                q.put_nowait(msg)
+            except asyncio.QueueFull:
+                pass
+
     async def _process_message(self, message: aiomqtt.Message):
         topic = str(message.topic)
         try:
@@ -111,12 +119,7 @@ class AsyncMqttBus:
                 self._known_groups = {g.get("friendly_name") for g in payload if isinstance(g, dict)}
 
                 # Broadcast Group Changes to the Frontend
-                group_msg = {"type": "groups_update", "groups": payload}
-                for q in list(self._subscribers):
-                    try:
-                        q.put_nowait(group_msg)
-                    except asyncio.QueueFull:
-                        pass
+                self.broadcast({"type": "groups_update", "groups": payload})
         
         # Catch the heavy info payload so we never have to RPC for it
         if topic == f"{self.z2m_base}/bridge/info":
@@ -195,12 +198,7 @@ class AsyncMqttBus:
                 await self.redis.hset("gateway:digital_twin", twin_key, json.dumps(payload))
 
                 # Broadcast to UI using the IEEE address so it maps perfectly
-                update_msg = {"type": "device_update", "device": twin_key, "state": payload}
-                for q in list(self._subscribers):
-                    try:
-                        q.put_nowait(update_msg)
-                    except asyncio.QueueFull:
-                        pass
+                self.broadcast({"type": "device_update", "device": twin_key, "state": payload})
                 
                 # If we were waiting on a device state change via RPC, resolve it using the reference name!
                 if device_name in self._pending_rpcs:
