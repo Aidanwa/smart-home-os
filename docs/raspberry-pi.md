@@ -97,10 +97,23 @@ cd ~/smart-home-os && git pull && docker compose up -d --build gateway agent
 
 To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx build --platform linux/arm64 ...` and push to a registry, but building on the Pi is simpler and fine for a solo project.
 
-## 9. Backups (recommended once it's the only copy)
+## 9. Backups
 
-Nightly cron on the Pi:
-```
-0 3 * * * docker exec home_postgres pg_dump -U <DB_USER> -Fc -f /tmp/b.dump home_os && docker cp home_postgres:/tmp/b.dump /home/<user>/backups/home_os-$(date +\%a).dump
-```
-That keeps a rolling 7 days. Copy them off the Pi occasionally, e.g. pull them from the PC with `scp`.
+- **Pi, 03:00 nightly:** `/usr/local/bin/smarthome-backup.sh` (root cron) writes `~/backups/smarthome-YYYY-MM-DD.tar.gz` and keeps 14 days. Its log is `/var/log/smarthome-backup.log`. Each bundle contains `smarthome/home_os.dump` + `.env`, `zigbee2mqtt/` (data dir, no logs), `mosquitto/`, and `pihole/` (Teleporter zip).
+- **PC, at logon + 09:00:** the Task Scheduler task "SmartHome Backup Pull" runs `C:\Users\adams\Backups\smart-home-os\pull-backups.ps1`, which copies new bundles and keeps 30 days. It logs to `pull.log` in the same folder.
+- **Cert, 04:00 on the 1st:** `/usr/local/bin/renew-tailscale-cert.sh` restarts the gateway only if the cert changed. Its log is `/var/log/tailscale-cert-renew.log`.
+
+## 10. Restore after a dead SD card
+
+1. Flash Raspberry Pi OS Lite **64-bit**, hostname `zigbee-hub`, user `adams`, and enable SSH. Install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`). Remove the old `zigbee-hub` machine in the Tailscale admin first, so the name doesn't become `zigbee-hub-1`.
+2. Copy the newest bundle from `C:\Users\adams\Backups\smart-home-os\` to the Pi and unpack it: `mkdir ~/restore && tar -xzf smarthome-*.tar.gz -C ~/restore`.
+3. **Mosquitto:** `sudo apt install mosquitto`, `sudo cp -a ~/restore/mosquitto/. /etc/mosquitto/`, `sudo systemctl restart mosquitto`.
+4. **Zigbee2MQTT:** install it per its docs (Node.js, clone into `/home/zigbee2mqtt/zigbee2mqtt`, systemd unit). **Before first start**, copy `~/restore/zigbee2mqtt/.` into its `data/` dir and `chown -R zigbee2mqtt:` it. Same coordinator stick means no re-pairing.
+5. **Pi-hole:** install it (`curl -sSL https://install.pi-hole.net | bash`), then import with `sudo pihole-FTL --teleporter ~/restore/pihole/*.zip`.
+6. **Stack:** run sections 1, 3, 4 and 6 above: Docker, clone, cert. Use `cp ~/restore/smarthome/.env ~/smart-home-os/.env` instead of copying from the PC. Before `up --build`, restore the DB as in section 5, with `~/restore/smarthome/home_os.dump` as the dump file.
+7. Re-create the cron jobs. The scripts are kept in the repo under [deploy/pi/](../deploy/pi/): `sudo install -m 755 deploy/pi/*.sh /usr/local/bin/`, then run `sudo crontab -e`:
+   ```
+   0 4 1 * * /usr/local/bin/renew-tailscale-cert.sh
+   0 3 * * * /usr/local/bin/smarthome-backup.sh
+   ```
+8. Optional: add `cgroup_enable=memory` to `/boot/firmware/cmdline.txt` so the agent's 1G limit is enforced.

@@ -10,10 +10,12 @@ Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA, TLS via T
                      │                                                   │ calls back into gateway REST
                      ├─► postgres :5432 (users, prefs, secrets, rooms, home profile)
                      ├─► redis (digital twin of device state + caches)
-                     └─► MQTT broker + Zigbee2MQTT on a Pi at host `zigbee-hub` (Tailscale), NOT in compose
+                     └─► MQTT broker (:1884, auth) + Zigbee2MQTT as host systemd services, NOT in compose
 ```
 
-- **Today**: compose runs on the Windows PC (`awapc.tail1752d3.ts.net`). **Plan**: move the whole stack onto the Pi. Keep things lightweight: there's a 1G memory limit on the agent, Whisper `tiny.en` int8 on CPU, and a small DB pool. Don't add heavy dependencies casually. The gateway's cert pair is chosen by `TLS_HOST` in `.env` (it defaults to `awapc.tail1752d3.ts.net`). The migration runbook is [docs/raspberry-pi.md](docs/raspberry-pi.md).
+- **Production** runs on the Pi 4 (4 GB, SD card, 64-bit Debian 12) at `zigbee-hub.tail1752d3.ts.net`, in `~/smart-home-os` (user `adams`). It moved there on 2026-11-07. The Pi also runs Mosquitto, Z2M, Pi-hole and Tailscale as host services. Compose reaches the broker via `MQTT_HOST=host.docker.internal`, port 1884; 1883 is localhost-only. Keep things lightweight: the agent has a 1G memory limit (enforced, since the Pi boots with `cgroup_enable=memory`), Whisper is `tiny.en` int8 on CPU, and the DB pool is small. Don't add heavy dependencies casually. A Pi rebuild takes minutes, not seconds.
+- The gateway's cert pair is chosen by `TLS_HOST` in `.env` (it defaults to `awapc.tail1752d3.ts.net` for the PC). Setup, backups and restore are in [docs/raspberry-pi.md](docs/raspberry-pi.md). Root cron scripts on the Pi are copied from [deploy/pi/](deploy/pi/): nightly backup at 03:00 and the monthly cert renewal. Edit the copies there and re-`install` them on the Pi.
+- The PC (`awapc`) no longer runs the stack. Its old compose volumes are stale. SSH from the PC: `ssh adams@zigbee-hub` (key auth).
 - Only the gateway is exposed to the browser. The agent is reached through the gateway's proxy at `http://agent:8001` and `ws://agent:8001` (hard-coded in [services/gateway/main.py](services/gateway/main.py)).
 
 ## Repo layout
@@ -35,7 +37,7 @@ docker compose up -d --build agent
 docker compose logs -f gateway           # or agent
 ```
 
-The app is at `https://awapc.tail1752d3.ts.net:8000`.
+The app is at `https://zigbee-hub.tail1752d3.ts.net:8000`. To deploy, push from the PC, then on the Pi run `cd ~/smart-home-os && git pull && docker compose up -d --build gateway` (or `agent`). Build one service at a time: parallel builds have timed out on npm downloads.
 
 `.env` (git-ignored, read by compose `env_file`) uses Docker service hostnames (`postgres`, `redis`, `gateway`, `zigbee-hub`). It **won't work for processes on the host** without overrides. [.env.example](.env.example) lists every variable the services read. Note that `CORS_ORIGINS` is currently unused because the origins are hard-coded in `main.py`.
 
@@ -49,7 +51,7 @@ Both services have a top-level package named `api`. That's fine because they're 
 
 - Check or apply in the running container (verified working):
   `docker exec home_gateway sh -c "cd /app/shared && uv run --no-sync alembic current"` (use `upgrade head` to apply).
-- New migration: edit `shared/database/models.py`, then autogenerate from the host. The container has the old model code until it's rebuilt. `env.py` reads `DATABASE_URL` and falls back to `postgresql+asyncpg://admin:password@localhost:5432/home_os`. Postgres publishes 5432 to the host.
+- New migration: edit `shared/database/models.py`, then autogenerate from the host. The container has the old model code until it's rebuilt. `env.py` reads `DATABASE_URL` and falls back to `postgresql+asyncpg://admin:password@localhost:5432/home_os`. Postgres publishes 5432 to the Pi's loopback only. To autogenerate from the PC, first tunnel to the Pi's DB with `ssh -N -L 5432:127.0.0.1:5432 adams@zigbee-hub` (the PC's own compose must be down), and set `DATABASE_URL` with the real credentials.
   `cd shared; uv run alembic revision --autogenerate -m "msg"`. Review the generated file before applying.
 - The current head is `52850728036c`.
 
