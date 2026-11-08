@@ -1,4 +1,26 @@
 
+# HIGH PRIORITY:
+
+## Scheduling / routines / triggers / automations
+
+This is a big necessary next step for smart home robustness. The Routines tab is still a placeholder.
+
+Time schedules, plus cool triggers such as sunrise/sunset, device state changes, etc.
+
+## Admin controls (Settings > Admin page)
+
+add admin account type with admin settings page that can edit all other users and permissions (no RBAC exists yet).
+
+## Mobile UI and general UI bugs
+
+Chat doesn't expand to full screen, margin at bottom.
+
+Bottom bar doesn't show on mobile, need to scroll to see it.
+
+Rooms canvas is unusable on mobile.
+
+General UI bug sweep.
+
 # BIG FEATURES:
 
 ## Adding agent logic
@@ -15,39 +37,17 @@ Resolve user IP address and provide current user location to model.
 
 Web search tool
 
-## Spotify improvement
-
-Create headless sink spotify connection container to run on pi for constant spotify connection.
-
 ## Voice input
 
 Need to create edge node containers for wakeword listening and tts stt responses.
 
 improve ui voice input to websocket instead of rest for faster processing.
 
-## Adding Accounts and user settings
-
-add admin account type with admin settings page that can edit all other users and permissions
-
 ## rooms
 
 add sorting by room to devices page.
 
 inform agent of device state by room organization
-
-## adding routines/scheduling/automations
-
-This is a big necessary next step for smart home robustness
-
-add cool triggers such as sunrise/sunset
-
-## FE improvements
-
-Chat doesn't expand to full screen, margin at bottom.
-
-Bottom bar doesn't show on mobile, need to scroll to see it.
-
-Rooms canvas is unusable on mobile. 
 
 ## Digital Wardrobe Management
 

@@ -119,3 +119,16 @@ To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx
    30 3 * * 0 /usr/local/bin/docker-prune.sh
    ```
 8. Optional: add `cgroup_enable=memory` to `/boot/firmware/cmdline.txt` so the agent's 1G limit is enforced.
+9. Optional, the Spotify speaker (see section 11): it isn't in the backup bundle. Recreate `/etc/soloist/api_key` and `~/soloist`, then re-pair.
+
+## 11. Spotify speaker ("Bedroom Speakers")
+
+Spotify Soloist, Spotify's official headless Connect client, plays to the 3.5mm jack, which is cabled to the bedroom speakers. It's independent of this repo and of the app's compose stack:
+
+- **Files:** `~/soloist` on the Pi (a compose project named `soloist`). Its `README.md` covers start, logs, re-pairing and rebuilding.
+- **API key:** `/etc/soloist/api_key` (root, 0600), from the Spotify for Developers dashboard.
+- **State:** the docker volume `soloist_soloist_data` holds the binary, the saved Spotify session and the cache.
+- **Updates:** each Soloist build expires after 90 days. The container restarts and downloads the new build on its own.
+- **Why a container:** Soloist needs glibc 2.38, and Debian 12 has 2.36. The image is Debian 13, about 100 MB. It uses about 35 MB of RAM and about 8% of one core while playing.
+- **Audio:** the ALSA `PCM` control is pinned at 0 dB (`alsactl store`). Use Spotify's volume.
+- **App side:** nothing to configure. The device stays in `/me/player/devices` while idle, so the agent can start it by name ("Bedroom Speakers") with no phone or PC open.
