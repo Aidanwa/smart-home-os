@@ -16,7 +16,7 @@ Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA, TLS via T
 - **Production** runs on the Pi 4 (4 GB, SD card, 64-bit Debian 12) at `zigbee-hub.tail1752d3.ts.net`, in `~/smart-home-os` (user `adams`). It moved there on 2026-11-07. The Pi also runs Mosquitto, Z2M, Pi-hole and Tailscale as host services. Compose reaches the broker via `MQTT_HOST=host.docker.internal`, port 1884; 1883 is localhost-only. Keep things lightweight: the agent has a 1G memory limit (enforced, since the Pi boots with `cgroup_enable=memory`), Whisper is `tiny.en` int8 on CPU, and the DB pool is small. Don't add heavy dependencies casually. A Pi rebuild takes minutes, not seconds.
 - The gateway's cert pair is chosen by `TLS_HOST` in `.env` (it defaults to `awapc.tail1752d3.ts.net` for the PC). Setup, backups and restore are in [docs/raspberry-pi.md](docs/raspberry-pi.md). Root cron scripts on the Pi are copied from [deploy/pi/](deploy/pi/): nightly backup at 03:00 and the monthly cert renewal. Edit the copies there and re-`install` them on the Pi.
 - The PC (`awapc`) no longer runs the stack. Its old compose volumes are stale. SSH from the PC: `ssh adams@zigbee-hub` (key auth).
-- Only the gateway is exposed to the browser. The agent is reached through the gateway's proxy at `http://agent:8001` and `ws://agent:8001` (hard-coded in [services/gateway/main.py](services/gateway/main.py)).
+- Only the gateway is exposed (the agent publishes no host port). The agent is reached through the gateway's proxy at `http://agent:8001` and `ws://agent:8001` (hard-coded in [services/gateway/main.py](services/gateway/main.py)).
 
 ## Repo layout
 
@@ -101,10 +101,8 @@ React 19 + Vite 8 + TypeScript 6 + Tailwind v4 + shadcn (`radix-nova`, component
 ## Known issues (found 2026-11-07 while writing this; not yet fixed)
 
 - Some `user_secrets` rows predate encryption (plaintext Spotify rows found 2026-11-07). `decrypt_secret` raises on them, so those users must re-link Spotify. (`/api/platform/secrets` was fixed to encrypt on 2026-11-07.)
-- `/api/zones/*` has no auth dependency.
 - Device-RPC replies resolve on the device's *next* state publish from any source (a physical switch press counts too). Per-device locking now prevents concurrent sets from clobbering each other, but the reply isn't matched against the requested values. **Low impact:** the UI ignores the `/set` response and renders only twin updates from `/api/ws`, so it self-corrects. Only the agent reads `confirmed_state`, so this matters only for screenless voice use (the planned edge node). There, a lost command could be reported as "done". If that becomes relevant, match on `state` only (brightness and colour can't be matched reliably).
 - The orchestrator's Spotify cache invalidation checks for `"spotify" in tool name`, but the tools are named `spot_*`, so it never fires.
 - `GatewayClient.rename_group` sends `new_name` as a query param, but the gateway expects a JSON body. The method is unregistered dead code.
 - JWT secret: gateway `core/security.py` and agent `tools/gateway_api.py` fall back to a hard-coded default, while agent `api/routes.py` and `shared/security.py` don't. If the env var is missing they silently disagree.
-- The login cookie has `secure=False` even though the site is HTTPS-only now.
 - Group member removal and MQTT errors: see KNOWN BUGS in [docs/todo.md](docs/todo.md).

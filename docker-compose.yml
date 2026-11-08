@@ -52,8 +52,7 @@ services:
     container_name: home_agent
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8001:8001"
+    # No published port: only the gateway reaches the agent, via http://agent:8001 on smarthome_net.
     networks:
       - smarthome_net
     logging:

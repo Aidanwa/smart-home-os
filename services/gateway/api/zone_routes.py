@@ -6,9 +6,10 @@ from uuid import UUID
 # Adjust these imports based on your actual structure
 from shared.database.core import get_db
 from shared.database.models import LogicalZone, DevicePlacement
+from api.auth import get_current_user
 from .models import ZoneCreate, ZoneRename, ZoneUpdateLayout, ZoneResponse, BatchPlacementUpdate, PlacementResponse
 
-router = APIRouter(prefix="/api/zones", tags=["Spatial Layout"])
+router = APIRouter(prefix="/api/zones", tags=["Spatial Layout"], dependencies=[Depends(get_current_user)])
 
 @router.get("", response_model=list[ZoneResponse])
 async def get_floor_zones(floor_level: int = 1, db: AsyncSession = Depends(get_db)):

@@ -84,7 +84,7 @@ async def login_user(request: UserAuthRequest, response: Response, db: AsyncSess
         value=token,
         httponly=True,
         samesite="strict",
-        secure=False,  # Set to True in production environment with managed SSL/TLS termination
+        secure=True,  # Gateway is HTTPS-only (Tailscale cert); browsers also accept this on http://localhost
         max_age=60 * 24 * 30 * 60,  # 30-day duration matching access token expiry configurations
         path="/",
     )
@@ -93,7 +93,7 @@ async def login_user(request: UserAuthRequest, response: Response, db: AsyncSess
 
 @auth_router.post("/logout")
 async def logout_user(response: Response):
-    response.delete_cookie(key="access_token", samesite="strict", httponly=True, path="/")
+    response.delete_cookie(key="access_token", samesite="strict", httponly=True, secure=True, path="/")
     logger.info(f"User logged out successfully.")
 
     return {"status": "success", "message": "Active session cleared successfully."}
@@ -159,8 +159,8 @@ async def delete_account(
             key="access_token",
             path="/",
             httponly=True,
-            samesite="lax",
-            secure=False # Set to True if using HTTPS
+            samesite="strict",
+            secure=True,
         )
         
         return {"status": "success", "message": "Account permanently deleted."}
