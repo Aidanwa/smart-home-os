@@ -28,7 +28,12 @@ class SmartHomeOrchestrator:
         spotify_service: SpotifyService,
         system_prompt_tmpl: str, 
         tool_map: Dict[str, Callable],
+        ephemeral: bool = False,
+        prompt_suffix: str = "",
+        excluded_tools: frozenset = frozenset(),
     ):
+        # ephemeral: don't read or write the user's chat history (routine runs).
+        # prompt_suffix: appended to the system prompt. excluded_tools: never offered or run.
         self.llm = llm_provider
         self.gateway = gateway_client
         self.memory = memory_manager
@@ -36,7 +41,10 @@ class SmartHomeOrchestrator:
         self.spotify = spotify_service
         self.system_prompt_tmpl = system_prompt_tmpl
         self.tools_schema = []
-        self.tool_map = tool_map
+        self.tool_map = {k: v for k, v in tool_map.items() if k not in excluded_tools}
+        self.excluded_tools = excluded_tools
+        self.ephemeral = ephemeral
+        self.prompt_suffix = prompt_suffix
         self.max_iterations = 5
         
         # --- System-Level Caches ---
@@ -115,9 +123,16 @@ class SmartHomeOrchestrator:
             weatherinfo=current_weather,
             spotifyinfo=current_spotify,
             timeinfo=time_str,
-        )
+        ) + self.prompt_suffix
         
         return instructions, current_weather, current_spotify
+
+    def _tools_for(self, has_spotify: bool) -> list:
+        return [t for t in get_agent_tools(has_spotify=has_spotify) if t["name"] not in self.excluded_tools]
+
+    def _remember(self, user_id: str, message: dict):
+        if not self.ephemeral:
+            self.memory.add_message(user_id, message)
     
     async def initialize_session(self, user_id: str) -> dict:
         """
@@ -136,7 +151,7 @@ class SmartHomeOrchestrator:
 
         # 2. Pre-check Spotify credentials so the tools schema is ready instantly
         has_spotify = await self.spotify.check_credentials(user_id)
-        self.tools_schema = get_agent_tools(has_spotify=has_spotify)
+        self.tools_schema = self._tools_for(has_spotify)
         
         return {"status": "success", "message": "Agent caches initialized."}
 
@@ -151,10 +166,10 @@ class SmartHomeOrchestrator:
         # Conditionally build the tools schema based on the user's ID
         # should already do this in initialize_session onconnect function
         if not self.tools_schema:
-            self.tools_schema = get_agent_tools(has_spotify=await self.spotify.check_credentials(user_id))
+            self.tools_schema = self._tools_for(await self.spotify.check_credentials(user_id))
         logger.debug(f"Tools schema for user {user_id}: {[tool['name'] for tool in self.tools_schema]}")
         # 2. Retrieve Pruned History
-        history = self.memory.get_history(user_id)
+        history = [] if self.ephemeral else self.memory.get_history(user_id)
         
         # Start message array with System, then History, then the New Query
         current_messages = [{"role": "system", "content": instructions}]
@@ -162,7 +177,7 @@ class SmartHomeOrchestrator:
         
         new_msg = {"role": "user", "content": user_text}
         current_messages.append(new_msg)
-        self.memory.add_message(user_id, new_msg)
+        self._remember(user_id, new_msg)
 
         # The Agentic Loop
         for iteration in range(self.max_iterations):
@@ -188,7 +203,7 @@ class SmartHomeOrchestrator:
                     if accumulated_text:
                         assistant_msg = {"role": "assistant", "content": accumulated_text}
                         current_messages.append(assistant_msg)
-                        self.memory.add_message(user_id, assistant_msg)
+                        self._remember(user_id, assistant_msg)
                         
                         logger.info(f"SYSTEM PROMPT:\n{current_messages[0]['content']}\n")
                         self.memory.pretty_print_history(user_id)
@@ -199,7 +214,7 @@ class SmartHomeOrchestrator:
                     
                     current_messages.extend(tool_calls)
                     for msg in tool_calls:
-                        self.memory.add_message(user_id, msg)
+                        self._remember(user_id, msg)
                         
                         yield {
                             "type": "tool_call", 
@@ -213,7 +228,9 @@ class SmartHomeOrchestrator:
                     
                     current_messages.extend(tool_results)
                     for tr in tool_results:
-                        self.memory.add_message(user_id, tr)
+                        self._remember(user_id, tr)
+                        # For callers that need outcomes (routine runs); the chat WS ignores this type.
+                        yield {"type": "tool_result", "call_id": tr.get("call_id"), "output": tr.get("output")}
 
                     for msg in tool_calls:
                         yield {

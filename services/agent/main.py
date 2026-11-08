@@ -7,7 +7,8 @@ from api.internal_routes import router as internal_router
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Smart Home OS - Agent Service")
+# Docs off: the agent is reachable through the gateway's /api/agent proxy.
+app = FastAPI(title="Smart Home OS - Agent Service", docs_url=None, redoc_url=None, openapi_url=None)
 
 # Allow the frontend to connect
 app.add_middleware(

@@ -283,6 +283,25 @@ async def set_enabled(routine_id: uuid.UUID, body: EnabledRequest, db: AsyncSess
     return _out(r, sched)
 
 
+@router.post("/{routine_id}/duplicate", status_code=status.HTTP_201_CREATED)
+async def duplicate_routine(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
+                            user: User = Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
+    """Copy a routine: disabled (so it can't double-fire next to the original), no run history,
+    run-as the person copying it."""
+    src = await _get_or_404(db, routine_id)
+    name = f"{src.name} (copy)"
+    copy = Routine(
+        owner_user_id=user.id, name=name[:100], description=src.description, enabled=False, mode=src.mode,
+        grace_minutes=src.grace_minutes, triggers=src.triggers, conditions=src.conditions, actions=src.actions,
+        schema_version=src.schema_version,
+    )
+    db.add(copy)
+    await db.commit()
+    await db.refresh(copy)
+    await sched.reload(copy.id)
+    return _out(copy, sched, user.username)
+
+
 @router.post("/{routine_id}/run", status_code=status.HTTP_202_ACCEPTED)
 async def run_now(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
                   user=Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):

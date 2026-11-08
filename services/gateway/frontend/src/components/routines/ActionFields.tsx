@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { searchMusic, useSpotifyDevices } from '../../hooks/useRoutines';
 import type { Action, MusicResult, SetPayload } from './types';
-import { kelvinToMired, miredToKelvin } from './types';
+import { AGENT_RUNS_PER_HOUR, kelvinToMired, miredToKelvin } from './types';
 import { NumberField } from './NumberField';
 import { chip, input } from './styles';
 
@@ -17,6 +17,7 @@ export function ActionFields({ action, onChange, deviceOptions, groups }: Action
   if (action.type === 'delay') return <DelayFields action={action} onChange={onChange} />;
   if (action.type === 'spotify_play') return <MusicFields action={action} onChange={onChange} />;
   if (action.type === 'spotify_ctrl') return <MusicCtrlFields action={action} onChange={onChange} />;
+  if (action.type === 'agent') return <AgentFields action={action} onChange={onChange} />;
   if (action.type === 'fade') {
     const targets = [
       ...deviceOptions.filter(d => d.hasBrightness).map(d => ({ value: `d:${d.ieee}`, label: d.name })),
@@ -335,6 +336,28 @@ export function MusicCtrlFields({ action, onChange }: { action: CtrlAction; onCh
           %
         </div>
       )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ ask the agent
+
+type AgentAction = Extract<Action, { type: 'agent' }>;
+
+export function AgentFields({ action, onChange }: { action: AgentAction; onChange: (a: Action) => void }) {
+  return (
+    <div className="space-y-2">
+      <textarea className={`${input} min-h-24`} maxLength={1000} value={action.prompt}
+        placeholder="e.g. Pick calm music that suits today's weather and play it on Bedroom Speakers."
+        onChange={e => onChange({ ...action, prompt: e.target.value })} />
+      <p className="text-xs text-amber-400/90">
+        Uses the AI: costs tokens and can do things a little differently each time. Runs at most {AGENT_RUNS_PER_HOUR}× per hour for this routine;
+        extra triggers skip this step. Its reply and everything it did show in History.
+      </p>
+      <label className="flex items-center gap-2 text-xs text-neutral-500">
+        <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+        Stop the routine if this fails
+      </label>
     </div>
   );
 }

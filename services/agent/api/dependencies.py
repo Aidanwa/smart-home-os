@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.orchestrator import SmartHomeOrchestrator
 from tools.spotify_service import SpotifyService
 from tools.gateway_api import GatewayClient
+from tools.routines_api import RoutineTools
 from core.memory import MemoryManager
 from tools.weather_service import WeatherService
 from shared.database.core import get_db
@@ -24,6 +25,7 @@ gateway_client = GatewayClient(base_url=GATEWAY_URL)
 memory_manager = MemoryManager()
 weather_service = WeatherService()
 spotify_service = SpotifyService()
+routine_tools = RoutineTools(gateway_client)
 
 # Voice Services
 try:
@@ -61,6 +63,7 @@ Rules:
 2. If asked to turn on a light, use the `set_device_state` tool with the devices friendly name.
 3. Be concise and conversational. Do not list device IDs to the user. Keep interactions short and natural.
 4. If the user requests specific music, search for exact matches before playing with a general query.
+5. For schedules and automations ("every night at 11", "when the door opens"), use the rt_* routine tools.
 """
 
 TOOL_REGISTRY = {
@@ -80,7 +83,23 @@ TOOL_REGISTRY = {
     "spot_search": spotify_service.spotify_search,
     "spot_queue": spotify_service.spotify_queue_track,
     "spot_search_playlist": spotify_service.spotify_search_playlist,
+
+    #routines
+    "rt_format": routine_tools.rt_format,
+    "rt_list": routine_tools.rt_list,
+    "rt_save": routine_tools.rt_save,
+    "rt_enable": routine_tools.rt_enable,
+    "rt_run": routine_tools.rt_run,
+    "rt_delete": routine_tools.rt_delete,
 }
+
+# Routine runs ("ask the agent" actions) must not edit routines (a routine could rewrite itself)
+# or the user's long-term memory.
+ROUTINE_RUN_EXCLUDED_TOOLS = frozenset({"update_memory", "rt_save", "rt_enable", "rt_run", "rt_delete", "rt_format", "rt_list"})
+ROUTINE_RUN_NOTE = (
+    "\n\nYou are running unattended as part of the routine '{routine}'. Nobody is reading or listening "
+    "and nobody can answer questions: act on the instruction with the tools, or say briefly why you didn't."
+)
 
 async def get_orchestrator(db: AsyncSession = Depends(get_db)):
     """

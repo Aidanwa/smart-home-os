@@ -74,6 +74,10 @@ def create_app() -> FastAPI:
         title="Smart Home Gateway",
         description="FastAPI mqtt orchestrator with Redis Digital Twin",
         lifespan=lifespan,
+        # No public API map: /docs, /redoc and /openapi.json are unauthenticated otherwise.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     # RE-ADDED: CORS Middleware for local Vite development

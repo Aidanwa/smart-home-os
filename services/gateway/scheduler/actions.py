@@ -5,12 +5,14 @@ import asyncio
 import json
 import math
 import time
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from core import device_control
 from core.mqtt_bus import AsyncMqttBus
-from scheduler import agent_client
-from scheduler.schema import (DelayAction, DeviceAction, FadeAction, GroupAction,
+from scheduler import agent_client, store
+from scheduler.schema import (AGENT_RUNS_PER_HOUR, AgentAction, DelayAction, DeviceAction, FadeAction, GroupAction,
                               SpotifyCtrlAction, SpotifyPlayAction)
 
 GROUP_VERIFY_SECONDS = 3.0
@@ -35,7 +37,9 @@ class StepFailed(Exception):
 @dataclass
 class RunContext:
     bus: AsyncMqttBus
-    owner_id: str  # whose Spotify account the routine uses
+    owner_id: str  # whose Spotify account / LLM settings the routine uses
+    routine_id: uuid.UUID | None = None
+    routine_name: str = ""
 
 
 # ------------------------------------------------------------------ helpers
@@ -95,6 +99,8 @@ async def perform(ctx: RunContext, action) -> tuple[str, dict, object]:
             return await _spotify_play(ctx, action)
         if isinstance(action, SpotifyCtrlAction):
             return (*await _spotify_ctrl(ctx, action), None)
+        if isinstance(action, AgentAction):
+            return (*await _agent(ctx, action), None)
     except TimeoutError:
         raise StepFailed("Device did not confirm in time (offline or unresponsive?)")
     except (device_control.DeviceStateMismatch, device_control.MqttDisconnected, agent_client.AgentError) as e:
@@ -316,3 +322,17 @@ async def _spotify_ctrl(ctx: RunContext, a: SpotifyCtrlAction):
         args["vol"] = a.volume
     res = await agent_client.call_tool(ctx.owner_id, "spot_ctrl", **args)
     return "ok", {"speaker": a.speaker or "current device", "cmd": a.cmd, "message": res.get("message")}
+
+
+# ------------------------------------------------------------------ ask the agent (LLM)
+
+async def _agent(ctx: RunContext, a: AgentAction):
+    if ctx.routine_id is not None:
+        used = await store.count_agent_steps(ctx.routine_id, datetime.now(timezone.utc) - timedelta(hours=1))
+        if used >= AGENT_RUNS_PER_HOUR:
+            return "skipped", {"reason": f"limit reached: the agent runs at most {AGENT_RUNS_PER_HOUR}x per hour per routine"}
+    res = await agent_client.run_agent(ctx.owner_id, a.prompt, ctx.routine_name)
+    detail = {"prompt": a.prompt, "reply": res.get("reply", ""), "tool_calls": res.get("tool_calls", [])}
+    if res.get("status") != "success":
+        raise StepFailed(res.get("message") or "The agent didn't finish", detail)
+    return "ok", detail

@@ -49,3 +49,16 @@ def _tidy(message: str) -> str:
         if "incomplete" in message:
             return "Spotify credentials are incomplete; re-link Spotify in Settings."
     return message.replace("Do not retry. ", "")
+
+
+async def run_agent(user_id, prompt: str, routine_name: str) -> dict:
+    """Run an instruction through the agent's LLM loop (no chat history, no memory writes).
+    Returns {status, reply, tool_calls: [{name, arguments, ok, error?}], message?}."""
+    try:
+        res = await _client.post("/internal/agent/run", json={"prompt": prompt, "routine": routine_name},
+                                 headers={"Authorization": f"Bearer {_token(user_id)}"}, timeout=120.0)
+    except httpx.RequestError as e:
+        raise AgentError(f"Agent unreachable ({type(e).__name__}); is the agent container running?")
+    if res.status_code != 200:
+        raise AgentError(f"Agent refused the instruction (HTTP {res.status_code}): {res.text[:200]}")
+    return res.json()

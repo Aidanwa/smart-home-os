@@ -115,7 +115,7 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
   const pick = (device: string, attribute: string) => {
     const nextInfo = findInfo(ctx.attributes, device, attribute);
     const { op, value } = defaultComparison(nextInfo, attribute, ctx.attributes[device]?.current?.[attribute]);
-    onChange({ ...trigger, device, attribute, op, value, rearm: null, for_s: null });
+    onChange({ ...trigger, device, attribute, op, value, rearm: null, for_s: null, fire_on_start: false });
   };
 
   const setOp = (op: TriggerOp) => {
@@ -129,6 +129,7 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
       ...trigger, op, value,
       rearm: isNumericOp(op) ? trigger.rearm : null,
       for_s: op === 'changes' ? null : trigger.for_s,
+      fire_on_start: op === 'changes' ? false : trigger.fire_on_start,
     });
   };
 
@@ -150,6 +151,15 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
           {!isEvent && trigger.op !== 'changes' && (
             <MinutesField text="Only after it has held for" seconds={trigger.for_s} onChange={for_s => onChange({ ...trigger, for_s })}
               hint="e.g. no motion for 10 minutes. Starts counting when it first matches." />
+          )}
+          {!isEvent && trigger.op !== 'changes' && (
+            <div>
+              <label className="flex items-center gap-2 text-xs text-neutral-400">
+                <input type="checkbox" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
+                Also fire if it's already true when saved or when the hub restarts
+              </label>
+              <p className="text-xs text-neutral-600 mt-1">Normally it only fires when the reading changes into a match. Useful for e.g. "heater on below 18°".</p>
+            </div>
           )}
           {isNumericOp(trigger.op) && (
             <div>

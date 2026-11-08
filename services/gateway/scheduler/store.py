@@ -93,3 +93,12 @@ async def set_last_run(routine_id: uuid.UUID, at: datetime, status: str) -> None
             .values(last_run_at=at, last_run_status=status, updated_at=Routine.updated_at)
         )
         await s.commit()
+
+
+async def count_agent_steps(routine_id: uuid.UUID, since: datetime) -> int:
+    """Agent steps that actually ran (ok or failed: both spent tokens) for a routine since `since`."""
+    async with AsyncSessionLocal() as s:
+        runs = (await s.scalars(select(RoutineRun.steps).where(
+            RoutineRun.routine_id == routine_id, RoutineRun.started_at >= since))).all()
+    return sum(1 for steps in runs for st in (steps or [])
+               if st.get("type") == "agent" and st.get("status") in ("ok", "failed", "running"))

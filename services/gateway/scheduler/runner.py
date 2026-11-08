@@ -24,7 +24,7 @@ def _now() -> datetime:
 async def execute(bus: AsyncMqttBus, routine_id: uuid.UUID, name: str, run_id: uuid.UUID,
                   spec: RoutineSpec, owner_id, is_stopping) -> str:
     """Runs every action, persisting progress after each step. Returns the final status."""
-    ctx = RunContext(bus=bus, owner_id=str(owner_id))
+    ctx = RunContext(bus=bus, owner_id=str(owner_id), routine_id=routine_id, routine_name=name)
     steps: list[dict] = []
     background: list[tuple[dict, asyncio.Task, float]] = []
     status = "running"
@@ -80,7 +80,8 @@ async def execute(bus: AsyncMqttBus, routine_id: uuid.UUID, name: str, run_id: u
             await store.update_run(run_id, steps=steps)
 
         failures = sum(1 for s in steps if s["status"] == "failed")
-        partials = sum(1 for s in steps if s["status"] == "partial")
+        # an agent step skipped by its hourly cap means the routine didn't do everything asked
+        partials = sum(1 for s in steps if s["status"] == "partial" or (s["type"] == "agent" and s["status"] == "skipped"))
         if stopped_early or (failures and failures == len(steps)):
             status = "failed"
         elif failures or partials:

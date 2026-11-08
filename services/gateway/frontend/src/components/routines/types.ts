@@ -36,6 +36,7 @@ export interface DeviceTrigger {
   rearm: number | null;    // hysteresis margin, numeric ops only
   for_s: number | null;
   cooldown_s: number;
+  fire_on_start: boolean;  // also fire if already true when saved / when the hub starts
 }
 
 export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger;
@@ -100,10 +101,14 @@ export type Action =
   | {
       id: string; type: 'spotify_ctrl'; cmd: 'pause' | 'resume' | 'next' | 'previous' | 'volume';
       speaker: string | null; volume: number | null; stop_on_error: boolean;
-    };
+    }
+  | { id: string; type: 'agent'; prompt: string; stop_on_error: boolean };
+
+export const AGENT_RUNS_PER_HOUR = 2;  // mirrors scheduler/schema.py
 
 export const ACTION_LABEL: Record<Action['type'], string> = {
   device: 'Device', group: 'Group', delay: 'Wait', fade: 'Fade', spotify_play: 'Play music', spotify_ctrl: 'Music control',
+  agent: 'Ask the agent',
 };
 
 // Colour temperature: Z2M uses mireds; people think in Kelvin (2700 K warm, 6500 K daylight).

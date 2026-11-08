@@ -3,7 +3,8 @@
 Kept flat and plain-worded so the agent can write them later. See docs/scheduler-proposal.md §3.
 Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
 the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
-spotify_ctrl (Spotify goes through the agent as the routine's owner; see agent_client.py).
+spotify_ctrl, agent (Spotify and agent actions go through the agent as the routine's owner;
+see agent_client.py).
 """
 from typing import Annotated, Literal, Union
 
@@ -92,14 +93,20 @@ class DeviceTrigger(_Strict):
     rearm: float | None = Field(None, gt=0)
     for_s: int | None = Field(None, ge=1, le=86400)
     cooldown_s: int = Field(0, ge=0, le=86400)
+    # Also fire if the reading already matches when the routine is saved or the hub starts
+    # (normally only a change *into* the matching state fires).
+    fire_on_start: bool = False
 
     @model_validator(mode="after")
     def _check(self):
         _check_comparison(self.op, self.value)
         if self.rearm is not None and self.op not in NUMERIC_OPS:
             raise ValueError("a re-arm margin only applies to above/below comparisons")
-        if self.for_s is not None and (self.op == "changes" or self.attribute in EVENT_ATTRIBUTES):
+        lasting = self.op != "changes" and self.attribute not in EVENT_ATTRIBUTES
+        if self.for_s is not None and not lasting:
             raise ValueError("'for' needs a lasting state, not a one-off change or button press")
+        if self.fire_on_start and not lasting:
+            raise ValueError("'fire if already true' needs a lasting state, not a one-off change or button press")
         return self
 
 
@@ -276,8 +283,20 @@ class FadeAction(_Strict):
         return self
 
 
+class AgentAction(_Strict):
+    """Run a plain-language instruction through the agent's LLM loop, as the routine's owner.
+    Costs tokens and can vary between runs; capped at AGENT_RUNS_PER_HOUR per routine."""
+    id: ShortId
+    type: Literal["agent"]
+    prompt: str = Field(min_length=1, max_length=1000)
+    stop_on_error: bool = False
+
+
+AGENT_RUNS_PER_HOUR = 2
+
+
 Action = Annotated[
-    Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction],
+    Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction, AgentAction],
     Field(discriminator="type"),
 ]
 

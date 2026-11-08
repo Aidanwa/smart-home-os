@@ -96,6 +96,64 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
         }
     ]
 
+    # Routine tools (always available). Short names save tokens; the format lives in rt_format.
+    NO_ARGS = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
+    tools.extend([
+        {
+            "name": "rt_format",
+            "description": "Get the JSON format for routines (schedules/automations). Call this before rt_save.",
+            "parameters": NO_ARGS,
+        },
+        {
+            "name": "rt_list",
+            "description": "List the household's routines with ids, next run, last result and full definitions. Use before editing, enabling, running or deleting one.",
+            "parameters": NO_ARGS,
+        },
+        {
+            "name": "rt_save",
+            "description": "Create a routine (id null) or update one (id from rt_list; send only the fields that change, e.g. just triggers). Use device/group names. After saving, read back what it does in one short sentence.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "routine": {"type": "string", "description": "The routine as a JSON object string (see rt_format)."},
+                    "id": {"type": ["string", "null"], "description": "Routine id to replace, or null to create."},
+                },
+                "required": ["routine", "id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "rt_enable",
+            "description": "Turn a routine on or off (e.g. 'skip the wake-up routine').",
+            "parameters": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "enabled": {"type": "boolean"}},
+                "required": ["id", "enabled"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "rt_run",
+            "description": "Run a routine now.",
+            "parameters": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": ["id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "rt_delete",
+            "description": "Delete a routine. Call with confirmed=false first, ask the user, and only call again with confirmed=true after they say yes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "confirmed": {"type": "boolean"}},
+                "required": ["id", "confirmed"],
+                "additionalProperties": False,
+            },
+        },
+    ])
+
     # Conditionally inject Spotify tools
     if has_spotify:
         spotify_tools = [

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, Pencil, Play, Plus, Workflow } from 'lucide-react';
+import { Copy, History, Pencil, Play, Plus, Workflow } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
 import { useGroups } from '../../hooks/useGroups';
@@ -19,7 +19,7 @@ function toSpec(r: Routine): RoutineSpec {
 }
 
 export function RoutinesView({ devices }: { devices: Record<string, DeviceState> }) {
-  const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, fetchRuns, preview } = useRoutines();
+  const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, duplicate, fetchRuns, preview } = useRoutines();
   const { groups } = useGroups();
   const attributes = useDeviceAttributes();
   const [tempUnit, setTempUnit] = useTempUnit();
@@ -35,6 +35,12 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const handleRun = async (r: Routine) => {
     const err = await runNow(r.id);
     flash(r.id, err ?? 'Started', !!err);
+  };
+
+  const handleDuplicate = async (r: Routine) => {
+    const { routine, error: err } = await duplicate(r.id);
+    if (routine) setPanel({ kind: 'edit', routine });  // the copy starts disabled; open it to adjust
+    else flash(r.id, err ?? 'Could not duplicate', true);
   };
 
   const editing = panel?.kind === 'edit' ? panel.routine : null;
@@ -113,7 +119,10 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                 <button type="button" onClick={() => setPanel({ kind: 'history', routine: r })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200">
                   <History size={14} /> History
                 </button>
-                <button type="button" onClick={() => setPanel({ kind: 'edit', routine: r })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200 ml-auto">
+                <button type="button" onClick={() => handleDuplicate(r)} aria-label="Duplicate" title="Duplicate" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200 ml-auto">
+                  <Copy size={14} />
+                </button>
+                <button type="button" onClick={() => setPanel({ kind: 'edit', routine: r })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200">
                   <Pencil size={14} /> Edit
                 </button>
               </div>

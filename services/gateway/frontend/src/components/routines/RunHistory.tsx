@@ -79,6 +79,7 @@ function StepRow({ step }: { step: RunStep }) {
     : step.type === 'fade' ? `Fade ${String(d.target ?? '')} to ${Math.round(Number(d.to_brightness ?? 0) / 2.54)}% over ${Math.round(Number(d.duration_s ?? 0) / 60 * 10) / 10} min (${String(d.method ?? '')})`
     : step.type === 'spotify_play' ? `Play ${String(d.playing ?? '')} on ${String(d.speaker ?? '')}`
     : step.type === 'spotify_ctrl' ? `${String(d.cmd ?? '')} on ${String(d.speaker ?? '')}`
+    : step.type === 'agent' ? 'Ask the agent'
     : `${target ?? step.type}${d.sent ? ` → ${Object.entries(d.sent as Record<string, unknown>).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
   const notes = ['message', 'ramp', 'ramp_stopped', 'stopped_early', 'note']
     .filter(k => typeof d[k] === 'string')
@@ -92,6 +93,12 @@ function StepRow({ step }: { step: RunStep }) {
         {typeof d.reason === 'string' && <p className="text-neutral-500">{d.reason}</p>}
         {Array.isArray(d.did_not_follow) && <p className="text-amber-400 break-words">Didn't follow: {d.did_not_follow.join(', ')}</p>}
         {notes.map(n => <p key={n} className="text-neutral-500 break-words">{n}</p>)}
+        {typeof d.reply === 'string' && d.reply && <p className="text-neutral-300 break-words whitespace-pre-line">“{d.reply}”</p>}
+        {Array.isArray(d.tool_calls) && (d.tool_calls as { name: string; ok: boolean | null; error?: string; arguments?: unknown }[]).map((c, i) => (
+          <p key={i} className={`break-words ${c.ok === false ? 'text-red-400' : 'text-neutral-500'}`}>
+            {c.ok === false ? '✗' : '✓'} {c.name} {c.arguments ? JSON.stringify(c.arguments).slice(0, 160) : ''}{c.error ? ` — ${c.error}` : ''}
+          </p>
+        ))}
         {step.ms != null && step.type !== 'delay' && <p className="text-neutral-600">{step.ms} ms</p>}
       </div>
     </div>

@@ -363,9 +363,13 @@ class Scheduler:
         if st.active is None or seed:
             # First reading: learn the state without firing. A state that already holds at
             # startup starts its 'for' clock now (conservative: fires late, never early).
+            # fire_on_start opts in to firing on an already-true first reading (saved / restart).
+            first = st.active is None  # the startup seed and a live report can both arrive first; fire once
             st.active = matches
             if matches and trig.for_s:
                 self._start_for_timer(r, trig, st, value, name)
+            elif matches and first and trig.fire_on_start:
+                self._fire_device(r, trig, st, value, name, already_true=True)
             return
         if not st.active and matches:
             st.active = True

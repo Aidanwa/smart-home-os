@@ -42,7 +42,7 @@ export function newTrigger(type: Trigger['type'], id: string, attributes: Attrib
   const [device, info] = Object.entries(attributes).sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name))[0] ?? ['', undefined];
   const attribute = info?.properties[0]?.property ?? '';
   const { op, value } = defaultComparison(info?.properties[0], attribute, info?.current?.[attribute]);
-  return { id, type: 'device', device, attribute, op, value, rearm: null, for_s: null, cooldown_s: 0 };
+  return { id, type: 'device', device, attribute, op, value, rearm: null, for_s: null, cooldown_s: 0, fire_on_start: false };
 }
 
 export function newCondition(type: LeafCondition['type'], attributes: AttributeMap): LeafCondition {
@@ -71,5 +71,6 @@ export function newAction(type: Action['type'], id: string, firstDevice: string,
       id, type, speaker: DEFAULT_SPEAKER, uri: '', title: null, volume: null, ramp_to: null, ramp_s: null, shuffle: null, stop_on_error: false,
     };
     case 'spotify_ctrl': return { id, type, cmd: 'pause', speaker: null, volume: null, stop_on_error: false };
+    case 'agent': return { id, type, prompt: '', stop_on_error: false };
   }
 }
