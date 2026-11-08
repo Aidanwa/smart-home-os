@@ -137,13 +137,13 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
             },
             {
                 "name": "spot_ctrl",
-                "description": "Unified transport, device, and volume controls. Use this to pause, skip tracks, toggle shuffle, change volume, or transfer playback to a new speaker.",
+                "description": "Unified transport, device, and volume controls. Use this to resume, pause, skip tracks, toggle shuffle, change volume, or transfer playback to a new speaker. Use 'resume' (not 'next') when the user just says play/continue/unpause.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "cmd": {
                             "type": "string",
-                            "enum": ["pause", "next", "previous", "shuffle", "repeat", "volume", "transfer"],
+                            "enum": ["resume", "pause", "next", "previous", "shuffle", "repeat", "volume", "transfer"],
                             "description": "The control action to execute."
                         },
                         "dev": {

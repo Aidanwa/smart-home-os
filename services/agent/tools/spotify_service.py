@@ -340,7 +340,12 @@ class SpotifyService:
             
             cmd = cmd.lower()
             
-            if cmd == "pause":
+            if cmd == "resume":
+                # PUT /me/player/play with no body resumes the current track where it left off.
+                await self._request(user_id, "PUT", "/me/player/play", params=params)
+                message = "Playback resumed."
+
+            elif cmd == "pause":
                 await self._request(user_id, "PUT", "/me/player/pause", params=params)
                 message = "Playback paused."
                 
