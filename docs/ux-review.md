@@ -46,12 +46,12 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab.
 - [ ] Placement needs "select a room, then click a device in the sidebar", otherwise a "Placement Error" modal. Drag from the sidebar or a "which room?" picker is easier.
 - [ ] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle.
-- [ ] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet.
+- [ ] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
 - [ ] Copy: "Autosaving soon..." rendered as a button; "F0" / "Floor 0" instead of `formatFloorName`; "Home Context Not Initialized" has no button to Settings → Home.
 
 ## Settings, login, shell
 
-- [ ] Jargon throughout: "Authenticate Dashboard Context", "Initialize", "Identity modifications pushed correctly", "Save Orchestrator Context", "Checking structural configuration context…". One plain-language pass.
+- [x] Jargon throughout: "Authenticate Dashboard Context", "Initialize", "Identity modifications pushed correctly", "Save Orchestrator Context", "Checking structural configuration context…". One plain-language pass. *(Done 2026-11-08: login, all Settings tabs, health popover, Rooms, delete/remove dialogs, chat empty state. The empty Admin tab is hidden.)*
 - [ ] Registering doesn't sign you in.
 - [ ] Spotify OAuth returns to the Home tab; the callback is only processed once Settings is opened (`SettingsView.tsx`), so linking looks like it failed. Disconnect has no confirm; "Connecting…" progress is styled as a green success.
 - [ ] Home profile: only 7 US timezones; no feedback on whether the address geocoded (sun triggers depend on it); "Reset Configuration" uses `window.confirm` and doesn't warn that sun routines and Rooms break.

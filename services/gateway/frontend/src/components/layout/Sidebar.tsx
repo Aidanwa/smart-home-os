@@ -52,7 +52,7 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
             {/* Custom Telemetry Hover Box */}
             <div className="absolute left-full ml-4 top-0 translate-y-0 hidden group-hover:block bg-neutral-900/95 border border-neutral-800 text-neutral-200 p-4 rounded-xl shadow-2xl z-50 w-80 backdrop-blur-md transition-all duration-200 text-left">
               <h3 className="text-sm font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
-                <span>Network Health State</span>
+                <span>Hub status</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${
                   healthStatus === 'healthy' 
                     ? 'bg-green-500/10 text-green-400' 
@@ -64,11 +64,11 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
                 </span>
               </h3>
               <p className="text-xs text-neutral-400 leading-relaxed font-sans">
-                {healthStatus === 'healthy' && "All systems running normally. Main gateway server, device message network, and digital twin memory sync are fully operational."}
-                {healthStatus === 'checking' && "Synchronizing live system telemetry and reading component states..."}
-                {healthStatus === 'mqtt is unhealthy' && "⚠️ Device network connection lost. Recommendation: Check Mosquitto broker service container or try restarting the Raspberry Pi host machine."}
-                {healthStatus === 'smart home os is unhealthy' && "❌ Main gateway server returned an unexpected error state (502). Recommendation: Verify docker container stability and check compose stack logs."}
-                {healthStatus === 'unhealthy' && "⚠️ Gateway mesh network completely unreachable. Recommendation: Verify local router wireless connectivity or Tailscale VPN service status."}
+                {healthStatus === 'healthy' && "Everything is working."}
+                {healthStatus === 'checking' && "Checking…"}
+                {healthStatus === 'mqtt is unhealthy' && "The hub can’t reach the Zigbee network, so devices won’t respond. Check the Mosquitto service, or restart the Pi."}
+                {healthStatus === 'smart home os is unhealthy' && "The hub is up but reporting an error. Check the gateway logs."}
+                {healthStatus === 'unhealthy' && "Can’t reach the hub. Check your Wi-Fi and that Tailscale is connected."}
               </p>
             </div>
           </div>

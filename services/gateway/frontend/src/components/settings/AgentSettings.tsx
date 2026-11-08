@@ -100,7 +100,7 @@ export function AgentSettings() {
 
         if (!secretRes.ok) {
            const errData = await secretRes.json();
-           throw new Error(errData.detail || 'Failed to securely vault API key.');
+           throw new Error(errData.detail || 'Couldn’t save the API key.');
         }
       }
 
@@ -111,7 +111,7 @@ export function AgentSettings() {
       setTimeout(() => setStatus(null), 3000);
 
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Network error while saving configurations.' });
+      setStatus({ type: 'error', message: err.message || 'Couldn’t reach the hub. Settings weren’t saved.' });
     }
   };
 
@@ -122,9 +122,9 @@ export function AgentSettings() {
       <div>
         <h2 className="text-base font-medium text-neutral-200 flex items-center gap-2">
           <Bot size={18} className="text-blue-400" />
-          LLM Orchestrator Config
+          Assistant
         </h2>
-        <p className="text-xs text-neutral-500 mt-1">Configure the "brain" of your Smart Home OS.</p>
+        <p className="text-xs text-neutral-500 mt-1">The AI model behind the Agent tab and “Ask the agent” routines.</p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -145,7 +145,7 @@ export function AgentSettings() {
 
           {/* Model Selection */}
           <div className="space-y-2">
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Target Model</label>
+            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Model</label>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -165,8 +165,8 @@ export function AgentSettings() {
               <Server size={14} className="text-neutral-400" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-neutral-200">System API Key</h3>
-              <p className="text-xs text-neutral-500">Use the ambient `.env` key configured by the server administrator.</p>
+              <h3 className="text-sm font-medium text-neutral-200">Use the hub’s API key</h3>
+              <p className="text-xs text-neutral-500">The key set up on the hub. Turn off to use your own.</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input 
@@ -180,7 +180,7 @@ export function AgentSettings() {
           </div>
             <div className="pt-4 border-t border-neutral-800/50 animate-in slide-in-from-top-2">
               <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <KeyRound size={12} /> Personal Secret Key
+                <KeyRound size={12} /> Your API key
                 {hasCustomKey && !useSystemKey && <span className="text-green-400 ml-auto flex items-center gap-1"><div className="w-1.5 h-1.5 bg-green-400 rounded-full"/> Key Saved</span>}
               </label>
               <input
@@ -191,7 +191,7 @@ export function AgentSettings() {
                 className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-neutral-600 transition-colors disabled:opacity-50"
                 disabled={useSystemKey}
               />
-              <p className="text-[10px] text-neutral-500 mt-1.5">This secret is stored securely in your individual PostgreSQL vault space.</p>
+              <p className="text-[10px] text-neutral-500 mt-1.5">Stored encrypted on the hub and used only for your account.</p>
             </div>
         </div>
 
@@ -203,7 +203,7 @@ export function AgentSettings() {
 
         <div className="flex justify-end">
           <button type="submit" className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]">
-            Save Orchestrator Context
+            Save
           </button>
         </div>
       </form>

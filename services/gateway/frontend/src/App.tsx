@@ -198,6 +198,6 @@ export default function App() {
 
 function AppContent() {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-neutral-400 font-mono">Initializing System context...</div>;
+  if (isLoading) return <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-neutral-400 font-mono">Loading…</div>;
   return isAuthenticated ? <AuthenticatedDashboard /> : <LoginCard />;
 }

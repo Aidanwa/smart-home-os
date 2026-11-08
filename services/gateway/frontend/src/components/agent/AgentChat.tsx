@@ -71,7 +71,7 @@ export const AgentChat: React.FC = () => {
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 gap-3">
             <Bot size={48} className="opacity-20" />
-            <p>How can I orchestrate your home today?</p>
+            <p>What can I do for you?</p>
           </div>
         ) : (
           <div className="space-y-4">

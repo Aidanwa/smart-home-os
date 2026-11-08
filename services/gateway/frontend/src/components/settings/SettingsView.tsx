@@ -13,7 +13,7 @@ const SpotifyLogo = () => (
 
 export function SettingsView() {
   const { authenticatedFetch } = useAuth();
-  const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'agent' | 'connections' | 'admin'>('account'); 
+  const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'agent' | 'connections'>('account'); 
 
   // Integration states
   const [vaultStatus, setVaultStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -58,29 +58,29 @@ export function SettingsView() {
       });
 
       if (res.ok) {
-        setVaultStatus({ type: 'success', message: 'Spotify linked successfully! Agent is ready to DJ.' });
+        setVaultStatus({ type: 'success', message: 'Spotify is linked. The agent and routines can now play music.' });
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
         const data = await res.json();
-        setVaultStatus({ type: 'error', message: data.detail || 'Spotify linking failed.' });
+        setVaultStatus({ type: 'error', message: data.detail || 'Couldn’t link Spotify. Try again.' });
       }
     } catch (err) {
-      setVaultStatus({ type: 'error', message: 'Network error during Spotify link.' });
+      setVaultStatus({ type: 'error', message: 'Couldn’t reach the hub while linking Spotify.' });
     }
   };
 
   const handleSpotifyLogin = async () => {
-    setVaultStatus({ type: 'success', message: 'Requesting secure link from Gateway...' });
+    setVaultStatus({ type: 'success', message: 'Opening Spotify…' });
     try {
       const res = await authenticatedFetch('/api/integrations/spotify/auth-url');
       const data = await res.json(); 
       if (data && data.auth_url) {
         window.location.href = data.auth_url;
       } else {
-        setVaultStatus({ type: 'error', message: 'Gateway did not return a valid auth_url.' });
+        setVaultStatus({ type: 'error', message: 'Couldn’t start the Spotify sign-in. Try again.' });
       }
     } catch (err) {
-      setVaultStatus({ type: 'error', message: 'Network error communicating with gateway.' });
+      setVaultStatus({ type: 'error', message: 'Couldn’t reach the hub. Try again.' });
     }
   };
 
@@ -100,14 +100,14 @@ export function SettingsView() {
   return (
     <div className="animate-in fade-in duration-500 max-w-4xl w-full">
       <header className="mb-8">
-        <h1 className="text-2xl font-medium tracking-tight">System Settings</h1>
-        <p className="text-sm text-neutral-500 mt-1">Manage user identity credentials, coordinate external integrations, and access admin consoles.</p>
+        <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
+        <p className="text-sm text-neutral-500 mt-1">Your account, home profile, assistant and linked services.</p>
       </header>
 
       {/* Sub-tab Navigation Switcher */}
       {/* Scrolls sideways on narrow screens instead of pushing the page wider */}
       <div className="flex border-b border-neutral-800 mb-6 gap-6 text-sm font-medium overflow-x-auto overflow-y-hidden">
-        {['account', 'home', 'agent', 'connections', 'admin'].map((tab) => (
+        {['account', 'home', 'agent', 'connections'].map((tab) => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab as any)}
@@ -126,8 +126,8 @@ export function SettingsView() {
       {/* Section: Premium External Vault Binding */}
       {settingsTab === 'connections' && (
         <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4 animate-in fade-in duration-200">
-          <h2 className="text-base font-medium text-neutral-200">External Cloud Integration Secrets</h2>
-          <p className="text-xs text-neutral-500 leading-relaxed">Securely establish identity links with external resource providers to empower your local agentic reasoning capabilities.</p>
+          <h2 className="text-base font-medium text-neutral-200">Linked services</h2>
+          <p className="text-xs text-neutral-500 leading-relaxed">Accounts the agent and routines can use.</p>
           
           {vaultStatus && (
             <div className={`p-3 rounded-lg text-xs ${vaultStatus.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
@@ -143,14 +143,14 @@ export function SettingsView() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-medium text-neutral-200">Spotify Music Link</h3>
+                    <h3 className="text-sm font-medium text-neutral-200">Spotify</h3>
                     {connectedServices.spotify && (
                       <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-md border border-green-400/20">
                         <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> Linked
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-neutral-500">Allows your home helper agent to automatically command network media playback items.</p>
+                  <p className="text-xs text-neutral-500">Lets the agent and routines play music on your speakers.</p>
                 </div>
               </div>
               
@@ -166,7 +166,7 @@ export function SettingsView() {
                   onClick={handleSpotifyLogin}
                   className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
                 >
-                  Link Account
+                  Link
                 </button>
               )}
             </div>
@@ -174,17 +174,6 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* Section: Static Isolation Admin Console */}
-      {settingsTab === 'admin' && (
-        <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4 animate-in fade-in duration-200">
-          <div className="flex items-center gap-2 border-b border-neutral-800 pb-3 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-md">Root Operator</span>
-            <h2 className="text-base font-medium text-neutral-200">Administrative Configuration</h2>
-          </div>
-          <p className="text-xs text-neutral-500 leading-relaxed">Advanced controls and system configurations reserved for internal system deployment oversight.</p>
-          <p className="text-xs text-neutral-500 leading-relaxed">This section is intentionally left minimal as the current system iteration does not expose any adjustable parameters to end users.</p>
-        </div>
-      )}
 
     </div>
   );

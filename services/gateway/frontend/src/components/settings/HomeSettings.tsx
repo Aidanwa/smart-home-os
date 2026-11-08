@@ -83,11 +83,11 @@ export const HomeSettingsCard = () => {
         setIsEditing(false);
       } else {
         const errData = await res.json();
-        setError(errData.detail || 'Failed to update context.');
+        setError(errData.detail || 'Couldn’t save the home profile.');
       }
     } catch (err) {
       console.error("Failed to save home data", err);
-      setError('Network or system validation failure.');
+      setError('Couldn’t reach the hub. Changes weren’t saved.');
     } finally {
       setSaving(false);
     }
@@ -100,7 +100,7 @@ export const HomeSettingsCard = () => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete your home configuration? This will disable layout-aware spatial layers.")) return;
+    if (!window.confirm("Reset the home profile? The Rooms tab needs it, and sunrise/sunset routines need the address.")) return;
     
     setSaving(true);
     try {
@@ -125,7 +125,7 @@ export const HomeSettingsCard = () => {
     }
   };
 
-  if (loading) return <div className="text-neutral-500 p-4">Loading configuration...</div>;
+  if (loading) return <div className="text-neutral-500 p-4">Loading…</div>;
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
@@ -133,7 +133,7 @@ export const HomeSettingsCard = () => {
         <div>
           <h2 className="text-xl font-semibold text-neutral-100">Home Profile</h2>
           <p className="text-sm text-neutral-400 mt-1">
-            Set your physical address and house limits to automatically generate localized micro-features.
+            Your address sets local weather and sunrise/sunset times. Floors set up the Rooms tab.
           </p>
         </div>
         
@@ -251,7 +251,7 @@ export const HomeSettingsCard = () => {
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
-              {saving ? 'Syncing...' : exists ? 'Save Changes' : 'Initialize Home Context'}
+              {saving ? 'Saving…' : exists ? 'Save' : 'Save home profile'}
             </button>
             
             {exists && (
@@ -275,7 +275,7 @@ export const HomeSettingsCard = () => {
               disabled={saving}
               className="text-red-500 hover:text-red-400 text-sm font-medium transition-colors disabled:opacity-50"
             >
-              Reset Configuration
+              Reset home profile
             </button>
           </div>
         )}

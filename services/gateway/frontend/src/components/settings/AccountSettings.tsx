@@ -40,7 +40,7 @@ export function AccountSettings() {
       });
 
       if (res.ok) {
-        setProfileStatus({ type: 'success', message: 'Identity modifications pushed correctly.' });
+        setProfileStatus({ type: 'success', message: 'Saved.' });
         setNewPassword('');
         setIsEditing(false); // Drop back to static view on success
         await refreshUser(); // Pull the new username into AuthContext (header, settings view)
@@ -51,10 +51,10 @@ export function AccountSettings() {
         const detail = Array.isArray(data.detail)
           ? data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(' ')
           : data.detail;
-        setProfileStatus({ type: 'error', message: detail || 'Identity update rejected by validator.' });
+        setProfileStatus({ type: 'error', message: detail || 'Couldn’t save your changes.' });
       }
     } catch {
-      setProfileStatus({ type: 'error', message: 'Failed to sync identity updates with database context.' });
+      setProfileStatus({ type: 'error', message: 'Couldn’t reach the hub. Your changes weren’t saved.' });
     }
   };
 
@@ -76,11 +76,11 @@ export function AccountSettings() {
         logout();
       } else {
         const data = await res.json();
-        setProfileStatus({ type: 'error', message: data.detail || 'Failed to delete account.' });
+        setProfileStatus({ type: 'error', message: data.detail || 'Couldn’t delete the account.' });
         setShowDeleteConfirm(false);
       }
     } catch (err) {
-      setProfileStatus({ type: 'error', message: 'Network error communicating with gateway.' });
+      setProfileStatus({ type: 'error', message: 'Couldn’t reach the hub. Try again.' });
       setShowDeleteConfirm(false);
     }
   };
@@ -106,12 +106,12 @@ export function AccountSettings() {
             onClick={() => setIsEditing(true)} 
             className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99] self-start sm:self-center"
           >
-            Edit Account Details
+            Edit
           </button>
         </div>
       ) : (
         <form onSubmit={handleSaveProfile} className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4">
-          <h2 className="text-base font-medium text-neutral-200">Update Profile Fields</h2>
+          <h2 className="text-base font-medium text-neutral-200">Edit account</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Username</label>
@@ -123,7 +123,7 @@ export function AccountSettings() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">New Password (Optional)</label>
+              <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">New password (leave blank to keep)</label>
               <input 
                 type="password" 
                 placeholder="••••••••" 
@@ -142,7 +142,7 @@ export function AccountSettings() {
 
           <div className="flex gap-3 pt-2">
             <button type="submit" className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]">
-              Save Profile Changes
+              Save
             </button>
             <button type="button" onClick={handleCancelEdit} className="px-4 py-2 bg-transparent hover:bg-neutral-800/50 text-neutral-400 text-xs font-medium rounded-lg transition-colors">
               Cancel
@@ -154,8 +154,8 @@ export function AccountSettings() {
       {/* Disconnect Session */}
       <div className="bg-orange-900/40 border border-orange-800 p-6 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-base font-medium text-neutral-200">Log Out of System</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">Safely terminate your active web session context on this local device display panel.</p>
+          <h2 className="text-base font-medium text-neutral-200">Log out</h2>
+          <p className="text-xs text-neutral-500 mt-0.5">Sign out on this device. You’ll stay signed in everywhere else.</p>
         </div>
         <button 
           onClick={() => setShowLogoutConfirm(true)} 
@@ -169,7 +169,7 @@ export function AccountSettings() {
       <div className="bg-red-950/10 border border-red-900/30 p-6 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-base font-medium text-red-400">Danger Zone</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">Permanently delete your account, preferences, and vault credentials. This cannot be undone.</p>
+          <p className="text-xs text-neutral-500 mt-0.5">Delete your account, settings and linked accounts (Spotify, API key). This can’t be undone.</p>
         </div>
         <button 
           onClick={() => setShowDeleteConfirm(true)} 
@@ -185,14 +185,14 @@ export function AccountSettings() {
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-lg font-medium text-neutral-100">Confirm Disconnection</h3>
-            <p className="text-sm text-neutral-400 leading-relaxed">Are you completely sure you want to log out of your Smart Home OS cluster? You will be required to input credentials again to re-authenticate.</p>
+            <h3 className="text-lg font-medium text-neutral-100">Log out?</h3>
+            <p className="text-sm text-neutral-400 leading-relaxed">You’ll need your username and password to sign back in on this device.</p>
             <div className="flex gap-3 justify-end pt-2">
               <button onClick={() => setShowLogoutConfirm(false)} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-xl transition-colors">
                 Cancel
               </button>
               <button onClick={logout} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-xl transition-colors active:scale-[0.99]">
-                Confirm Log Out
+                Log out
               </button>
             </div>
           </div>
@@ -203,14 +203,14 @@ export function AccountSettings() {
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-neutral-950 border border-red-900/50 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-lg font-semibold text-red-500">Permanently Delete Account?</h3>
-            <p className="text-sm text-neutral-300 leading-relaxed">This action is <span className="font-bold text-red-400">irreversible</span>. All of your personal preferences, system layouts, and vaulted external integration tokens will be wiped from the database.</p>
+            <h3 className="text-lg font-semibold text-red-500">Delete your account?</h3>
+            <p className="text-sm text-neutral-300 leading-relaxed">This <span className="font-bold text-red-400">can’t be undone</span>. Your settings, saved API key and Spotify link will be deleted.</p>
             <div className="flex gap-3 justify-end pt-4">
               <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-xl transition-colors">
                 Cancel
               </button>
               <button onClick={handleDeleteAccount} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-xl transition-colors active:scale-[0.99]">
-                Yes, Delete Everything
+                Delete account
               </button>
             </div>
           </div>

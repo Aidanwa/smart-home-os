@@ -37,7 +37,7 @@ export function LoginCard() {
       if (isRegister) {
         const res = await register(username, password);
         if (res.success) {
-          setSuccess('Identity initialized! Proceed to Login.');
+          setSuccess('Account created. Sign in below.');
           setIsRegister(false);
           setPassword(''); 
         } else {
@@ -78,9 +78,9 @@ export function LoginCard() {
     } catch (err) {
       const isGatewayAlive = await checkGatewayConnectivity();
       if (!isGatewayAlive) {
-        setError('⚠️ Gateway Mesh Unreachable – Verify local host docker-compose stability and container availability.');
+        setError('Can’t reach the hub. Check that it’s powered on and that this device is on Tailscale.');
       } else {
-        setError('A critical gateway communication error occurred.');
+        setError('Something went wrong talking to the hub. Try again.');
       }
     } finally {
       setIsSubmitting(false);
@@ -110,12 +110,12 @@ export function LoginCard() {
             <Lock size={22} className="animate-pulse" style={{ animationDuration: '3s' }} />
           </div>
           <h2 className="text-xl font-medium tracking-tight text-neutral-100">
-            {isRegister ? 'Create System Identity' : 'Authenticate Dashboard Context'}
+            {isRegister ? 'Create an account' : 'Sign in'}
           </h2>
           <p className="text-xs text-neutral-400 mt-1 max-w-[280px]">
             {isRegister 
-              ? 'Create an account for your Smart Home os.' 
-              : 'Sign in to access your smart home os.'}
+              ? 'Create an account for this home.' 
+              : 'Sign in to control your home.'}
           </p>
         </div>
 
@@ -183,7 +183,7 @@ export function LoginCard() {
 
             {capsLockActive && (
               <span className="text-[10px] text-amber-400 mt-1.5 block font-medium animate-pulse">
-                ⚠️ Warning: Caps Lock is active on your device.
+                Caps Lock is on.
               </span>
             )}
           </div>
@@ -196,10 +196,10 @@ export function LoginCard() {
             {isSubmitting ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                <span>{isRegister ? 'Initializing Identity...' : 'Authenticating...'}</span>
+                <span>{isRegister ? 'Creating account…' : 'Signing in…'}</span>
               </>
             ) : (
-              <span>{isRegister ? 'Initialize' : 'Sign In'}</span>
+              <span>{isRegister ? 'Create account' : 'Sign in'}</span>
             )}
           </button>
         </form>
@@ -210,7 +210,7 @@ export function LoginCard() {
           onClick={handleToggleMode} 
           className="w-full text-center text-xs text-neutral-500 hover:text-neutral-300 mt-5 transition-colors disabled:opacity-30 cursor-pointer focus:outline-none focus:underline"
         >
-          {isRegister ? 'Already registered? Log in' : 'Request new account'}
+          {isRegister ? 'Already have an account? Sign in' : 'Create an account'}
         </button>
       </div>
     </div>

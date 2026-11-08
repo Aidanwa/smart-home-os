@@ -196,7 +196,7 @@ export function DeviceConfigDrawer({
                 <h3 className="font-medium text-lg">Remove Device?</h3>
               </div>
               <p className="text-neutral-400 text-sm">
-                Are you sure you want to permanently remove <strong className="text-white">"{name}"</strong> from the network? This action cannot be undone.
+                Remove <strong className="text-white">"{name}"</strong> from the Zigbee network? You’ll have to pair it again to use it.
               </p>
               <div className="flex justify-end gap-3 pt-4">
                 <Tooltip text="Cancel removal">

@@ -75,7 +75,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
           <p className="text-sm text-neutral-400">Control multiple devices together</p>
         </div>
         {!isCreating ? (
-          <Tooltip text="Create a new room or group">
+          <Tooltip text="Create a group">
             <button 
               onClick={() => setIsCreating(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0"
@@ -209,7 +209,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
             <div className="flex justify-between items-center p-4 border-b border-neutral-800 rounded-t-2xl">
               <h3 className="font-medium text-lg text-white">Manage: {managingGroup.friendly_name}</h3>
-              <Tooltip text="Close modal">
+              <Tooltip text="Close">
                 <button onClick={() => setManagingGroup(null)} className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-800 transition-colors"><X size={20} /></button>
               </Tooltip>
             </div>
@@ -257,7 +257,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
               <h3 className="font-medium text-lg">Delete Group?</h3>
             </div>
             <p className="text-neutral-400 text-sm">
-              Are you sure you want to delete the group <strong className="text-white">"{groupToDelete}"</strong>? This action cannot be undone.
+              Are you sure you want to delete the group <strong className="text-white">"{groupToDelete}"</strong>? The devices in it aren’t affected.
             </p>
             <div className="flex justify-end gap-3 pt-4">
               <Tooltip text="Cancel deletion">
