@@ -7,6 +7,10 @@ This is a big necessary next step for smart home robustness. The Routines tab is
 
 Time schedules, plus cool triggers such as sunrise/sunset, device state changes, etc.
 
+Design agreed in [scheduler-proposal.md](scheduler-proposal.md); not implemented yet.
+
+Later: ntfy (https://ntfy.sh) push notifications, for routine failure alerts, a "notify" action in routines (door left open, laundry done), and agent reminders. See section 10 of the proposal.
+
 ## Admin controls (Settings > Admin page)
 
 add admin account type with admin settings page that can edit all other users and permissions (no RBAC exists yet).
