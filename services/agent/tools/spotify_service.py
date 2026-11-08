@@ -300,14 +300,40 @@ class SpotifyService:
         bucket = data.get(f"{typ}s", {}).get("items", [])
         return bucket[0] if bucket else None
 
+    async def _await_playing(self, user_id: str, timeout: float = 1.5, interval: float = 0.3) -> tuple[bool, Dict]:
+        """Poll the player until it reports a loaded, playing item. Returns early on success,
+        so a working command adds only a few hundred ms; a silent failure waits `timeout`."""
+        state: Dict = {}
+        waited = 0.0
+        while waited < timeout:
+            await asyncio.sleep(interval)
+            waited += interval
+            state = await self._request(user_id, "GET", "/me/player") or {}
+            if state.get("is_playing") and state.get("item"):
+                return True, state
+        return False, state
+
+    @staticmethod
+    def _not_started(state: Dict) -> Dict[str, Any]:
+        device = (state.get("device") or {}).get("name") or "the device"
+        return {
+            "status": "error",
+            "message": (
+                f"Spotify accepted the command, but nothing started playing on {device} "
+                "(no track loaded). Do not retry. Tell the user to press play once in the "
+                "Spotify app on that device, or restart the app."
+            ),
+        }
+
     # ---------------------------------------------------------
     # LLM Tool Executions (Names must match schema!)
     # ---------------------------------------------------------
-    async def spotify_play(self, user_id: str, market="US", dev=None, pos=0, q_type="track", q=None, ctx=None, uris=None, **kwargs) -> Dict[str, Any]:
-        """Tool: Start/resume playback."""
+    async def spotify_play(self, user_id: str, dev=None, uris=None, ctx=None, q=None, q_type=None, pos=None, market="US", **kwargs) -> Dict[str, Any]:
+        """Tool: Start playback of specific music. Unused fields arrive as null (strict schema)."""
         try:
             device_id = await self._resolve_device_id(user_id, dev)
             if not uris and not ctx and q:
+                q_type = q_type or "track"
                 item = await self._search_one(user_id, q, q_type, market)
                 if not item:
                     return {"status": "error", "message": "No search results found."}
@@ -315,78 +341,112 @@ class SpotifyService:
                     uris = [item["uri"]]
                 else:
                     ctx = item["uri"]
-                    
+
             body = {}
             if uris: body["uris"] = uris
             if ctx: body["context_uri"] = ctx
             if pos: body["position_ms"] = int(pos)
 
             await self._request(
-                user_id, "PUT", "/me/player/play", 
-                params={"device_id": device_id} if device_id else None, 
+                user_id, "PUT", "/me/player/play",
+                params={"device_id": device_id} if device_id else None,
                 json_data=body or None
             )
-            return {"status": "success", "message": "Playback started."}
+            started, state = await self._await_playing(user_id)
+            if not started:
+                return self._not_started(state)
+            return {"status": "success", "message": f"Now playing '{state['item'].get('name', 'track')}'."}
         except httpx.HTTPStatusError as e:
             return {"status": "error", "message": f"Spotify API rejected command: {e.response.text}"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    async def spotify_controller(self, user_id: str, cmd: str, dev: str = None, shuf: bool = True, rep: str = "context", vol: int = None, force_play: bool = True, **kwargs) -> Dict[str, Any]:
+    # Which spot_ctrl arguments each command may use. Anything else the model sends
+    # (strict mode makes it fill every field) is dropped before we act.
+    CMD_PARAMS = {
+        "resume":   {"dev"},
+        "pause":    {"dev"},
+        "next":     {"dev"},
+        "previous": {"dev"},
+        "shuffle":  {"dev", "shuf"},
+        "repeat":   {"dev", "rep"},
+        "volume":   {"dev", "vol"},
+        "transfer": {"dev", "play"},
+    }
+
+    async def spotify_controller(self, user_id: str, cmd: str, **args) -> Dict[str, Any]:
         """Tool: Unified transport, volume, and device controller for Spotify."""
+        cmd = (cmd or "").lower()
+        if cmd not in self.CMD_PARAMS:
+            return {"status": "error", "message": f"Unknown command: {cmd}"}
+
+        allowed = self.CMD_PARAMS[cmd]
+        opts = {k: v for k, v in args.items() if k in allowed and v is not None}
+        ignored = {k: v for k, v in args.items() if k not in allowed and v is not None}
+        if ignored:
+            logger.debug(f"spot_ctrl {cmd}: ignoring unused args {ignored}")
+
         try:
+            dev = opts.get("dev")
             device_id = await self._resolve_device_id(user_id, dev)
             params = {"device_id": device_id} if device_id else {}
-            
-            cmd = cmd.lower()
-            
+
             if cmd == "resume":
                 # PUT /me/player/play with no body resumes the current track where it left off.
                 await self._request(user_id, "PUT", "/me/player/play", params=params)
+                started, state = await self._await_playing(user_id)
+                if not started:
+                    return self._not_started(state)
                 message = "Playback resumed."
 
             elif cmd == "pause":
                 await self._request(user_id, "PUT", "/me/player/pause", params=params)
                 message = "Playback paused."
-                
+
             elif cmd == "next":
                 await self._request(user_id, "POST", "/me/player/next", params=params)
                 message = "Skipped to next track."
-                
+
             elif cmd == "previous":
                 await self._request(user_id, "POST", "/me/player/previous", params=params)
                 message = "Skipped to previous track."
-                
+
             elif cmd == "shuffle":
-                params["state"] = "true" if shuf else "false"
+                if "shuf" not in opts:
+                    return {"status": "error", "message": "shuf (true/false) is required for shuffle."}
+                params["state"] = "true" if opts["shuf"] else "false"
                 await self._request(user_id, "PUT", "/me/player/shuffle", params=params)
-                message = f"Shuffle turned {'on' if shuf else 'off'}."
-                
+                message = "Shuffle turned on." if opts["shuf"] else "Shuffle turned off."
+
             elif cmd == "repeat":
-                if rep not in ["track", "context", "off"]:
-                    rep = "context"
+                rep = opts.get("rep")
+                if rep not in ("track", "context", "off"):
+                    return {"status": "error", "message": "rep must be track, context or off for repeat."}
                 params["state"] = rep
                 await self._request(user_id, "PUT", "/me/player/repeat", params=params)
                 message = f"Repeat mode set to {rep}."
+
             elif cmd == "volume":
-                if vol is None:
-                    return {"status": "error", "message": "volume_percent is required for volume command."}
-                percent = max(0, min(100, int(vol)))
+                if "vol" not in opts:
+                    return {"status": "error", "message": "vol (0-100) is required for volume."}
+                percent = max(0, min(100, int(opts["vol"])))
                 params["volume_percent"] = percent
                 await self._request(user_id, "PUT", "/me/player/volume", params=params)
                 message = f"Volume set to {percent}%."
-                
-            elif cmd == "transfer":
+
+            else:  # transfer
                 if not device_id:
                     return {"status": "error", "message": f"Device '{dev}' not found. Please provide a valid device to transfer to."}
-                await self._request(user_id, "PUT", "/me/player", json_data={"device_ids": [device_id], "play": force_play})
-                message = f"Playback transferred to selected device."
-                
-            else:
-                return {"status": "error", "message": f"Unknown command: {cmd}"}
+                play = opts.get("play", True)
+                await self._request(user_id, "PUT", "/me/player", json_data={"device_ids": [device_id], "play": play})
+                if play:
+                    started, state = await self._await_playing(user_id)
+                    if not started:
+                        return self._not_started(state)
+                message = "Playback transferred and playing." if play else "Playback transferred (paused)."
 
             return {"status": "success", "message": message}
-            
+
         except httpx.HTTPStatusError as e:
             return {"status": "error", "message": f"Spotify API rejected controller command: {e.response.text}"}
         except Exception as e:

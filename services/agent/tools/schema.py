@@ -101,43 +101,44 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
         spotify_tools = [
             {
                 "name": "spot_play",
-                "description": "Start/resume playback. Provide a URI/context_uri or a simple search query. You must provide a device.",
+                "description": "Start playback of specific music on a device. Give track URIs in 'uris', OR an album/playlist/artist URI in 'ctx', OR a search 'q'. Set every unused field to null. Don't call repeatedly: if it returns an error saying playback didn't start, tell the user instead of retrying.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "dev": {
-                            "type": "string", 
+                            "type": "string",
                             "description": "Device name substring or device_id."
                         },
                         "uris": {
-                            "type": "array", 
+                            "type": ["array", "null"],
                             "items": {"type": "string"},
-                            "description": "List of track URIs to play (e.g., 'spotify:track:...')."
+                            "description": "Track URIs only ('spotify:track:...'). Never artist/album/playlist URIs. Null if using ctx or q."
                         },
                         "ctx": {
-                            "type": "string", 
-                            "description": "Album/playlist/artist URI to play (e.g., 'spotify:album:...')."
+                            "type": ["string", "null"],
+                            "description": "One album/playlist/artist URI ('spotify:album:...'). Never a track URI. Null if using uris or q."
                         },
                         "q": {
-                            "type": "string", 
-                            "description": "Fallback search query if no URIs provided (e.g., 'lofi beats')."
+                            "type": ["string", "null"],
+                            "description": "Search query to play the top result (e.g. 'lofi beats'). Null if uris or ctx is given."
                         },
                         "q_type": {
-                            "type": "string", 
-                            "enum": ["track", "album", "playlist", "artist"],
-                            "description": "Type for search-based playback."
+                            "type": ["string", "null"],
+                            "enum": ["track", "album", "playlist", "artist", None],
+                            "description": "Result type for q. Null if q is null."
                         },
                         "pos": {
-                            "type": "integer", 
-                            "description": "Start position in ms."
+                            "type": ["integer", "null"],
+                            "description": "Start position in ms. Null to start from the beginning."
                         }
                     },
-                    "required": ["dev"] 
+                    "required": ["dev", "uris", "ctx", "q", "q_type", "pos"],
+                    "additionalProperties": False
                 }
             },
             {
                 "name": "spot_ctrl",
-                "description": "Unified transport, device, and volume controls. Use this to resume, pause, skip tracks, toggle shuffle, change volume, or transfer playback to a new speaker. Use 'resume' (not 'next') when the user just says play/continue/unpause.",
+                "description": "Unified transport, device, and volume controls: resume, pause, skip, shuffle, repeat, volume, or transfer playback to another speaker. Use 'resume' (not 'next') when the user just says play/continue/unpause. Set every field the chosen cmd doesn't use to null.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -147,28 +148,29 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
                             "description": "The control action to execute."
                         },
                         "dev": {
-                            "type": "string", 
-                            "description": "Device name substring or device_id. Required if command is 'transfer'."
+                            "type": ["string", "null"],
+                            "description": "Device name substring or device_id. Required for 'transfer'; otherwise null to act on the active device."
                         },
                         "shuf": {
-                            "type": "boolean",
-                            "description": "Required if command is 'shuffle'. True to turn on, false to turn off."
+                            "type": ["boolean", "null"],
+                            "description": "Only for cmd='shuffle': true = on, false = off. Otherwise null."
                         },
                         "rep": {
-                            "type": "string", 
-                            "enum": ["track", "context", "off"],
-                            "description": "Required if command is 'repeat'. 'track' repeats song, 'context' repeats album/playlist."
+                            "type": ["string", "null"],
+                            "enum": ["track", "context", "off", None],
+                            "description": "Only for cmd='repeat': 'track' repeats the song, 'context' the album/playlist, 'off'. Otherwise null."
                         },
                         "vol": {
-                            "type": "integer", 
-                            "description": "Required if command is 'volume'. Target volume from 0-100."
+                            "type": ["integer", "null"],
+                            "description": "Only for cmd='volume': target volume 0-100. Otherwise null."
                         },
                         "play": {
-                            "type": "boolean", 
-                            "description": "Used if command is 'transfer'. True to start playing on the new device immediately. Default is true."
+                            "type": ["boolean", "null"],
+                            "description": "Only for cmd='transfer': true to start playing on the new device, false to keep it paused. Otherwise null."
                         }
                     },
-                    "required": ["cmd"]
+                    "required": ["cmd", "dev", "shuf", "rep", "vol", "play"],
+                    "additionalProperties": False
                 }
             },
             {
