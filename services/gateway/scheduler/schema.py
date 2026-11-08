@@ -2,7 +2,8 @@
 
 Kept flat and plain-worded so the agent can write them later. See docs/scheduler-proposal.md §3.
 Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
-the routine's condition list itself is AND. Actions: device, group, delay.
+the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
+spotify_ctrl (Spotify goes through the agent as the routine's owner; see agent_client.py).
 """
 from typing import Annotated, Literal, Union
 
@@ -206,7 +207,79 @@ class DelayAction(_Strict):
     stop_on_error: bool = False
 
 
-Action = Annotated[Union[DeviceAction, GroupAction, DelayAction], Field(discriminator="type")]
+SpotifyUri = Annotated[str, Field(pattern=r"^spotify:(playlist|album|artist|track|show|episode):[A-Za-z0-9]+$")]
+Mired = Annotated[int, Field(ge=150, le=500)]
+
+
+class SpotifyPlayAction(_Strict):
+    """Play a playlist/album/artist/track on a speaker (by name), as the routine's owner.
+    Optional volume ramp: start at `volume`, rise (or fall) to `ramp_to` over `ramp_s`."""
+    id: ShortId
+    type: Literal["spotify_play"]
+    speaker: str = Field(min_length=1, max_length=100)
+    uri: SpotifyUri
+    title: str | None = Field(None, max_length=200)  # display only (what the picker showed)
+    volume: int | None = Field(None, ge=0, le=100)
+    ramp_to: int | None = Field(None, ge=0, le=100)
+    ramp_s: int | None = Field(None, ge=30, le=7200)
+    shuffle: bool | None = None
+    stop_on_error: bool = False
+
+    @model_validator(mode="after")
+    def _check(self):
+        if (self.ramp_to is None) != (self.ramp_s is None):
+            raise ValueError("a volume ramp needs both ramp_to and ramp_s")
+        if self.ramp_to is not None and self.volume is None:
+            raise ValueError("a volume ramp needs a starting volume")
+        return self
+
+
+class SpotifyCtrlAction(_Strict):
+    id: ShortId
+    type: Literal["spotify_ctrl"]
+    cmd: Literal["pause", "resume", "next", "previous", "volume"]
+    speaker: str | None = Field(None, max_length=100)  # None = whatever is playing
+    volume: int | None = Field(None, ge=0, le=100)
+    stop_on_error: bool = False
+
+    @model_validator(mode="after")
+    def _check(self):
+        if (self.cmd == "volume") != (self.volume is not None):
+            raise ValueError("volume is required for cmd 'volume', and only for it")
+        return self
+
+
+class FadeAction(_Strict):
+    """Fade a light or group to a brightness (0 = fade to off), optionally also its colour
+    temperature. 'native' hands the whole fade to the bulb (one command with a transition);
+    'stepped' sends small steps for bulbs that mishandle long transitions, and stops if someone
+    changes the light. wait=false lets the next actions run while it fades."""
+    id: ShortId
+    type: Literal["fade"]
+    device: str | None = Field(None, max_length=64)  # IEEE; exactly one of device / group
+    group: int | None = None
+    to_brightness: int = Field(ge=0, le=254)
+    from_brightness: int | None = Field(None, ge=1, le=254)  # None = from where it is (or 1 if off)
+    to_color_temp: Mired | None = None
+    from_color_temp: Mired | None = None
+    duration_s: int = Field(ge=1, le=6000)  # Zigbee transitions max out around 6553 s
+    method: Literal["native", "stepped"] = "native"
+    wait: bool = False
+    stop_on_error: bool = False
+
+    @model_validator(mode="after")
+    def _check(self):
+        if (self.device is None) == (self.group is None):
+            raise ValueError("a fade targets exactly one of device or group")
+        if self.from_color_temp is not None and self.to_color_temp is None:
+            raise ValueError("from_color_temp needs to_color_temp")
+        return self
+
+
+Action = Annotated[
+    Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction],
+    Field(discriminator="type"),
+]
 
 
 # ---------------------------------------------------------------- routine

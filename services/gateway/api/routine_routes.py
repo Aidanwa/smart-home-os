@@ -3,6 +3,7 @@
 Routines are household-wide: any logged-in user may manage any routine. The creator is the
 run-as owner (whose Spotify/LLM credentials later action types will use).
 """
+import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,9 @@ from shared.database.core import get_db
 from shared.database.models import Routine, RoutineRun, User, UserPreference
 from api.auth import get_current_user
 from scheduler.engine import Scheduler
-from scheduler.schema import DeviceAction, DeviceCondition, DeviceTrigger, GroupAction, RoutineSpec, leaf_conditions
+from scheduler import agent_client
+from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, RoutineSpec,
+                              SpotifyCtrlAction, SpotifyPlayAction, leaf_conditions)
 from scheduler.timing import upcoming
 
 ALERT_STATUSES = ("failed", "partial", "missed", "interrupted")
@@ -111,10 +114,21 @@ async def preview_routine(spec: RoutineSpec, request: Request, user=Depends(get_
     group_ids = {g.get("id") for g in json.loads(raw_groups)} if raw_groups else set()
     twin = {k: json.loads(v) for k, v in (await bus.redis.hgetall("gateway:digital_twin")).items()}
     for a in spec.actions:
-        if isinstance(a, DeviceAction) and a.device not in twin:
-            warnings.append(f"Action {a.id}: device {a.device} isn't on the network")
-        if isinstance(a, GroupAction) and a.group not in group_ids:
-            warnings.append(f"Action {a.id}: group {a.group} doesn't exist")
+        device = getattr(a, "device", None) if isinstance(a, (DeviceAction, FadeAction)) else None
+        group = getattr(a, "group", None) if isinstance(a, (GroupAction, FadeAction)) else None
+        if device is not None and device not in twin:
+            warnings.append(f"Action {a.id}: device {device} isn't on the network")
+        if group is not None and group not in group_ids:
+            warnings.append(f"Action {a.id}: group {group} doesn't exist")
+    speakers = {a.speaker for a in spec.actions if isinstance(a, (SpotifyPlayAction, SpotifyCtrlAction)) and a.speaker}
+    if speakers:
+        try:
+            found = [d["name"].lower() for d in (await agent_client.call_tool(user.id, "spot_devices")).get("data", [])]
+            for sp in sorted(speakers):
+                if not any(sp.lower() in name for name in found):
+                    warnings.append(f"Spotify speaker '{sp}' isn't available right now")
+        except agent_client.AgentError as e:
+            warnings.append(f"Couldn't check Spotify: {e}")
     watched = [(f"Trigger {t.id}", t) for t in spec.triggers if isinstance(t, DeviceTrigger)]
     watched += [(f"Condition {i}", c) for i, c in enumerate(leaf_conditions(spec.conditions), 1) if isinstance(c, DeviceCondition)]
     for label, item in watched:
@@ -158,6 +172,51 @@ async def device_attributes(request: Request, user=Depends(get_current_user)):
                     props.append({"property": k, "type": "text"})
         out[ieee] = {"friendly_name": state.get("friendly_name", ieee), "properties": props,
                      "current": {p["property"]: state.get(p["property"]) for p in props}}
+    return out
+
+
+@router.get("/spotify/devices")
+async def spotify_devices(user: User = Depends(get_current_user)):
+    """Speakers on the current user's Spotify account (for the editor's speaker picker)."""
+    try:
+        return (await agent_client.call_tool(user.id, "spot_devices")).get("data", [])
+    except agent_client.AgentError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/spotify/search")
+async def spotify_search(q: str, user: User = Depends(get_current_user)):
+    """Music picker: the user's own playlists first, then Spotify's catalogue."""
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    mine, catalog = await asyncio.gather(
+        agent_client.call_tool(user.id, "spot_search_playlist", query=q),
+        agent_client.call_tool(user.id, "spot_search", q=q, types=["playlist", "album", "artist", "track"], limit=4),
+        return_exceptions=True,
+    )
+    if isinstance(mine, Exception) and isinstance(catalog, Exception):
+        raise HTTPException(status_code=502, detail=str(catalog))
+    out, seen = [], set()
+
+    def add(kind, name, subtitle, uri):
+        if uri and name and uri not in seen:
+            seen.add(uri)
+            out.append({"kind": kind, "name": name, "subtitle": subtitle, "uri": uri})
+
+    if not isinstance(mine, Exception):
+        for p in mine.get("data") or []:
+            add("playlist", p.get("name"), "Your playlist", p.get("uri"))
+    if not isinstance(catalog, Exception):
+        data = catalog.get("data") or {}
+        for p in data.get("playlists", []):
+            add("playlist", p.get("name"), f"Playlist · {p.get('owner')}", p.get("uri"))
+        for a in data.get("albums", []):
+            add("album", a.get("name"), f"Album · {', '.join(a.get('artists') or [])}", a.get("uri"))
+        for a in data.get("artists", []):
+            add("artist", a.get("name"), "Artist", a.get("uri"))
+        for t in data.get("tracks", []):
+            add("track", t.get("name"), f"Song · {', '.join(t.get('artists') or [])}", t.get("uri"))
     return out
 
 

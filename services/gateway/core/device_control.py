@@ -36,20 +36,21 @@ def _state_matches(requested: str | None, reply: dict) -> bool:
     return reported is None or str(reported).upper() == requested
 
 
-async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict) -> dict:
+async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_state: bool = True) -> dict:
     """Publish a state change and return the device's confirmed state.
 
     The RPC resolves on the device's next state publish from any source, so a stale or
     unrelated publish can arrive first. If an ON/OFF request comes back with the wrong state,
     the command is sent once more; a second mismatch raises DeviceStateMismatch.
     Raises TimeoutError if the device doesn't answer, MqttDisconnected if MQTT is down.
+    verify_state=False skips the ON/OFF check (a long fade-to-off can still report ON mid-transition).
     """
     if not bus.client:
         raise MqttDisconnected("MQTT Bus is disconnected")
 
     friendly_name = await resolve_friendly_name(bus, device_id)
     topic = f"{bus.z2m_base}/{friendly_name}/set"
-    requested = payload.get("state")
+    requested = payload.get("state") if verify_state else None
 
     result = await bus.rpc(topic, dict(payload))
     if _state_matches(requested, result):

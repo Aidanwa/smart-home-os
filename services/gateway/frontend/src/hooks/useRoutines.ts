@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AttributeMap, Routine, RoutineRun, RoutineSpec, TempUnit } from '../components/routines/types';
+import type { AttributeMap, MusicResult, Routine, RoutineRun, RoutineSpec, TempUnit } from '../components/routines/types';
 import { formatApiError } from '../components/routines/types';
 
 export interface PreviewResult {
@@ -125,4 +125,23 @@ export function useRoutineAlerts(onRoutinesTab: boolean) {
     return () => window.removeEventListener('onRoutineRun', sync);
   }, [onRoutinesTab]);
   return count;
+}
+
+/** Speakers on the user's Spotify account. */
+export function useSpotifyDevices() {
+  const [state, setState] = useState<{ names: string[]; error: string | null; loading: boolean }>({ names: [], error: null, loading: true });
+  useEffect(() => {
+    call('/api/routines/spotify/devices').then(res =>
+      setState({
+        names: res.ok ? (res.data as { name: string }[]).map(d => d.name) : [],
+        error: res.ok ? null : res.error,
+        loading: false,
+      }));
+  }, []);
+  return state;
+}
+
+export async function searchMusic(q: string): Promise<{ results: MusicResult[]; error: string | null }> {
+  const res = await call(`/api/routines/spotify/search?q=${encodeURIComponent(q)}`);
+  return { results: res.ok ? (res.data as MusicResult[]) : [], error: res.error };
 }

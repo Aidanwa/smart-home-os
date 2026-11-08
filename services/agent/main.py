@@ -2,6 +2,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
+from api.internal_routes import router as internal_router
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(internal_router)  # gateway-only (scheduler); see api/internal_routes.py
 
 @app.get("/")
 async def health_check():

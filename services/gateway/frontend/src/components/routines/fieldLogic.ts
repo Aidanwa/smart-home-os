@@ -1,5 +1,5 @@
 // Non-component helpers for the trigger/condition editors (kept apart for React fast refresh).
-import type { AttributeInfo, AttributeMap, ConditionOp, LeafCondition, Scalar, Trigger, TriggerOp } from './types';
+import type { Action, AttributeInfo, AttributeMap, ConditionOp, LeafCondition, Scalar, Trigger, TriggerOp } from './types';
 import { EVENT_ATTRIBUTES, NUMERIC_OPS, OP_TEXT } from './types';
 
 const NICE_NAMES: Record<string, string> = { action: 'button press', state: 'on/off state', color_temp: 'colour temperature' };
@@ -53,4 +53,23 @@ export function newCondition(type: LeafCondition['type'], attributes: AttributeM
   const attribute = info?.properties.find(p => p.property !== 'action')?.property ?? '';
   const d = defaultComparison(findInfo(attributes, device, attribute), attribute, info?.current?.[attribute]);
   return { type: 'device', device, attribute, op: (d.op === 'changes' ? 'eq' : d.op) as ConditionOp, value: d.value };
+}
+
+export const DEFAULT_SPEAKER = 'Bedroom Speakers';
+
+export function newAction(type: Action['type'], id: string, firstDevice: string, firstLight: string | null, firstGroup: number | null): Action {
+  switch (type) {
+    case 'device': return { id, type, device: firstDevice, set: { state: 'ON' }, stop_on_error: false };
+    case 'group': return { id, type, group: firstGroup ?? 0, set: { state: 'ON' }, stop_on_error: false };
+    case 'delay': return { id, type, seconds: 60, stop_on_error: false };
+    case 'fade': return {
+      id, type, device: firstLight ?? (firstGroup === null ? firstDevice : null), group: firstLight === null && firstGroup !== null ? firstGroup : null,
+      to_brightness: 254, from_brightness: null, to_color_temp: null, from_color_temp: null,
+      duration_s: 600, method: 'native', wait: false, stop_on_error: false,
+    };
+    case 'spotify_play': return {
+      id, type, speaker: DEFAULT_SPEAKER, uri: '', title: null, volume: null, ramp_to: null, ramp_s: null, shuffle: null, stop_on_error: false,
+    };
+    case 'spotify_ctrl': return { id, type, cmd: 'pause', speaker: null, volume: null, stop_on_error: false };
+  }
 }

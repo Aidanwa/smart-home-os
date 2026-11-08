@@ -1,6 +1,6 @@
 # Proposal: routines / scheduler
 
-Status: **design agreed 2026-11-08. Slices 0–2 implemented 2026-11-08; slice 3 (Spotify, fades) next.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
+Status: **design agreed 2026-11-08. Slices 0–3 implemented 2026-11-08; slice 4 (ask-the-agent action, duplicate, agent tools) next.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
 
 ## 1. Corrections to the handoff doc
 

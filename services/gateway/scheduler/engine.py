@@ -59,6 +59,7 @@ class LoadedRoutine:
     id: uuid.UUID
     updated_at: datetime
     spec: RoutineSpec
+    owner_id: uuid.UUID | None = None  # run-as user (Spotify account)
 
     @property
     def name(self) -> str:
@@ -168,7 +169,7 @@ class Scheduler:
         except ValidationError as e:
             logger.error(f"Routine '{row.name}' ({row.id}) is invalid and won't run: {e}")
             return
-        r = LoadedRoutine(id=row.id, updated_at=row.updated_at, spec=spec)
+        r = LoadedRoutine(id=row.id, updated_at=row.updated_at, spec=spec, owner_id=row.owner_user_id)
         self._routines[row.id] = r
         if not spec.enabled:
             return
@@ -302,7 +303,7 @@ class Scheduler:
         if run_id is None:
             return None  # this occurrence was already recorded
 
-        task = asyncio.create_task(runner.execute(self.bus, r.id, r.name, run_id, r.spec, lambda: self._stopping))
+        task = asyncio.create_task(runner.execute(self.bus, r.id, r.name, run_id, r.spec, r.owner_id, lambda: self._stopping))
         self._runs[r.id] = task
         task.add_done_callback(lambda t, rid=r.id: self._run_done(rid, t))
         return run_id

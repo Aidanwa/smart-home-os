@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NumberField } from './NumberField';
 import { ArrowDown, ArrowUp, Clock, Plus, Trash2 } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
-import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, SetPayload, TempUnit, Trigger } from './types';
-import { formatInTz, joinConditions, nextId, splitConditions } from './types';
+import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, TempUnit, Trigger } from './types';
+import { ACTION_LABEL, formatInTz, joinConditions, nextId, splitConditions } from './types';
+import { ActionFields } from './ActionFields';
+import { NumberField } from './NumberField';
 import { TriggerRow } from './TriggerFields';
 import { ConditionRow } from './ConditionFields';
-import { newCondition, newTrigger } from './fieldLogic';
-import { card, chip, iconBtn, input, label } from './styles';
+import { newAction, newCondition, newTrigger } from './fieldLogic';
+import { card, iconBtn, input, label } from './styles';
 
 interface Props {
   initial: RoutineSpec;
@@ -38,13 +39,13 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
     () =>
       Object.entries(devices)
         .filter(([, d]) => typeof d.state === 'string')
-        .map(([ieee, d]) => ({ ieee, name: (d.friendly_name as string) || ieee, hasColorTemp: d.color_temp !== undefined }))
+        .map(([ieee, d]) => ({ ieee, name: (d.friendly_name as string) || ieee, hasColorTemp: d.color_temp !== undefined, hasBrightness: d.brightness !== undefined }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [devices],
   );
 
   // Live validation + next fire times, debounced. Only meaningful once there's a name and an action.
-  const previewable = spec.name.trim().length > 0 && spec.actions.length > 0;
+  const previewable = spec.name.trim().length > 0 && spec.actions.length > 0 && !spec.actions.some(a => a.type === 'spotify_play' && !a.uri);
   useEffect(() => {
     if (!previewable) return;
     const handle = setTimeout(() => preview(spec).then(setPv), 400);
@@ -61,13 +62,11 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   };
 
   const addAction = (type: Action['type']) => {
-    const id = nextId('a', spec.actions);
-    const a: Action =
-      type === 'device' ? { id, type, device: deviceOptions[0]?.ieee ?? '', set: { state: 'ON' }, stop_on_error: false }
-      : type === 'group' ? { id, type, group: groups[0]?.id ?? 0, set: { state: 'ON' }, stop_on_error: false }
-      : { id, type, seconds: 60, stop_on_error: false };
+    const light = deviceOptions.find(d => d.hasBrightness)?.ieee ?? null;
+    const a = newAction(type, nextId('a', spec.actions), deviceOptions[0]?.ieee ?? '', light, groups[0]?.id ?? null);
     patch({ actions: [...spec.actions, a] });
   };
+  const missingMusic = spec.actions.some(a => a.type === 'spotify_play' && !a.uri);
 
   const handleSave = async () => {
     setSaving(true);
@@ -162,7 +161,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           <div key={a.id} className={card}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs uppercase tracking-wider text-neutral-500">
-                {i + 1}. {a.type === 'device' ? 'Device' : a.type === 'group' ? 'Group' : 'Wait'}
+                {i + 1}. {ACTION_LABEL[a.type]}
               </span>
               <div className="flex items-center gap-1">
                 <button type="button" className={iconBtn} disabled={i === 0} onClick={() => moveAction(i, -1)} aria-label="Move up"><ArrowUp size={16} /></button>
@@ -174,9 +173,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          {(['device', 'group', 'delay'] as const).map(t => (
+          {(['device', 'group', 'fade', 'delay', 'spotify_play', 'spotify_ctrl'] as const).map(t => (
             <button key={t} type="button" onClick={() => addAction(t)} className={addBtn}>
-              <Plus size={14} /> {t === 'device' ? 'Device' : t === 'group' ? 'Group' : 'Wait'}
+              <Plus size={14} /> {ACTION_LABEL[t]}
             </button>
           ))}
         </div>
@@ -205,7 +204,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
       {/* PREVIEW */}
       <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-3 text-xs space-y-1.5">
-        {!previewable ? (
+        {missingMusic ? (
+          <p className="text-amber-400">Pick some music for the Play music action.</p>
+        ) : !previewable ? (
           <p className="text-neutral-500">Add a name and at least one action to see when it will run.</p>
         ) : pv.error ? (
           <p className="text-red-400 whitespace-pre-line">{pv.error}</p>
@@ -239,109 +240,6 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
             className="px-4 py-2 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">Delete</button>
         )}
       </div>
-    </div>
-  );
-}
-
-interface ActionFieldsProps {
-  action: Action;
-  onChange: (a: Action) => void;
-  deviceOptions: { ieee: string; name: string; hasColorTemp: boolean }[];
-  groups: GroupInfo[];
-}
-
-function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsProps) {
-  if (action.type === 'delay') return <DelayFields action={action} onChange={onChange} />;
-
-  const selectedDevice = action.type === 'device' ? deviceOptions.find(d => d.ieee === action.device) : undefined;
-  const showColorTemp = action.type === 'group' || !!selectedDevice?.hasColorTemp;
-
-  return (
-    <>
-      {action.type === 'device' ? (
-        <select className={input} value={action.device} onChange={e => onChange({ ...action, device: e.target.value })}>
-          {!selectedDevice && <option value={action.device}>{action.device ? `Missing device (${action.device})` : 'Pick a device'}</option>}
-          {deviceOptions.map(d => <option key={d.ieee} value={d.ieee}>{d.name}</option>)}
-        </select>
-      ) : (
-        <select className={input} value={action.group} onChange={e => onChange({ ...action, group: parseInt(e.target.value) })}>
-          {!groups.some(g => g.id === action.group) && <option value={action.group}>{groups.length ? `Missing group (${action.group})` : 'No groups exist'}</option>}
-          {groups.map(g => <option key={g.id} value={g.id}>{g.friendly_name}</option>)}
-        </select>
-      )}
-      <PayloadFields value={action.set} showColorTemp={showColorTemp} onChange={set => onChange({ ...action, set })} />
-      <label className="flex items-center gap-2 text-xs text-neutral-500">
-        <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
-        Stop the routine if this fails
-      </label>
-    </>
-  );
-}
-
-type DelayAction = Extract<Action, { type: 'delay' }>;
-
-/** The unit is the user's choice, kept locally: deriving it from the value made "120 seconds"
- *  flip to "2 minutes" mid-typing. It starts as the largest unit that divides the value. */
-function DelayFields({ action, onChange }: { action: DelayAction; onChange: (a: Action) => void }) {
-  const [unit, setUnit] = useState(() => (action.seconds % 3600 === 0 ? 3600 : action.seconds % 60 === 0 ? 60 : 1));
-  const maxInUnit = 43200 / unit;
-  return (
-    <div className="flex gap-2">
-      <NumberField min={1 / unit} max={maxInUnit} className={input} value={Math.round((action.seconds / unit) * 100) / 100}
-        onChange={n => onChange({ ...action, seconds: Math.max(1, Math.min(43200, Math.round(n * unit))) })} />
-      <select className={`${input} w-32`} value={unit} onChange={e => {
-        const next = parseInt(e.target.value);
-        setUnit(next);
-        // keep the number, change what it means: "5 minutes" -> "5 hours"
-        onChange({ ...action, seconds: Math.max(1, Math.min(43200, Math.round((action.seconds / unit) * next))) });
-      }}>
-        <option value={1}>seconds</option>
-        <option value={60}>minutes</option>
-        <option value={3600}>hours</option>
-      </select>
-    </div>
-  );
-}
-
-function PayloadFields({ value, onChange, showColorTemp }: { value: SetPayload; onChange: (v: SetPayload) => void; showColorTemp: boolean }) {
-  const set = (k: keyof SetPayload, v: SetPayload[keyof SetPayload]) => {
-    const next = { ...value, [k]: v };
-    if (v === null || v === undefined) delete next[k];
-    onChange(next);
-  };
-  const pct = value.brightness != null ? Math.round((value.brightness / 254) * 100) : null;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-1.5">
-        {([['ON', 'On'], ['OFF', 'Off'], ['TOGGLE', 'Toggle'], [null, 'Leave as is']] as const).map(([v, text]) => (
-          <button key={text} type="button" className={chip((value.state ?? null) === v)} onClick={() => set('state', v)}>{text}</button>
-        ))}
-      </div>
-      <OptionalNumber label="Brightness (%)" value={pct} min={1} max={100} defaultValue={100}
-        onChange={v => set('brightness', v == null ? null : Math.round((v / 100) * 254))} />
-      {showColorTemp && (
-        <OptionalNumber label="Colour temperature (mired, 150 cool – 500 warm)" value={value.color_temp ?? null} min={150} max={500} defaultValue={370}
-          onChange={v => set('color_temp', v)} />
-      )}
-      <OptionalNumber label="Transition (seconds)" value={value.transition ?? null} min={0} max={3600} defaultValue={2}
-        onChange={v => set('transition', v)} />
-    </div>
-  );
-}
-
-function OptionalNumber({ label: text, value, min, max, defaultValue, onChange }: {
-  label: string; value: number | null; min: number; max: number; defaultValue: number; onChange: (v: number | null) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <label className="flex items-center gap-2 text-xs text-neutral-400 flex-1">
-        <input type="checkbox" checked={value != null} onChange={e => onChange(e.target.checked ? defaultValue : null)} />
-        {text}
-      </label>
-      {value != null && (
-        <NumberField min={min} max={max} className={`${input} w-24`} value={value} onChange={onChange} />
-      )}
     </div>
   );
 }

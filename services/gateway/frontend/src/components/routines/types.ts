@@ -86,7 +86,36 @@ export interface SetPayload {
 export type Action =
   | { id: string; type: 'device'; device: string; set: SetPayload; stop_on_error: boolean }
   | { id: string; type: 'group'; group: number; set: SetPayload; stop_on_error: boolean }
-  | { id: string; type: 'delay'; seconds: number; stop_on_error: boolean };
+  | { id: string; type: 'delay'; seconds: number; stop_on_error: boolean }
+  | {
+      id: string; type: 'fade'; device: string | null; group: number | null;
+      to_brightness: number; from_brightness: number | null;      // 0-254; 0 = fade to off
+      to_color_temp: number | null; from_color_temp: number | null;  // mireds
+      duration_s: number; method: 'native' | 'stepped'; wait: boolean; stop_on_error: boolean;
+    }
+  | {
+      id: string; type: 'spotify_play'; speaker: string; uri: string; title: string | null;
+      volume: number | null; ramp_to: number | null; ramp_s: number | null; shuffle: boolean | null; stop_on_error: boolean;
+    }
+  | {
+      id: string; type: 'spotify_ctrl'; cmd: 'pause' | 'resume' | 'next' | 'previous' | 'volume';
+      speaker: string | null; volume: number | null; stop_on_error: boolean;
+    };
+
+export const ACTION_LABEL: Record<Action['type'], string> = {
+  device: 'Device', group: 'Group', delay: 'Wait', fade: 'Fade', spotify_play: 'Play music', spotify_ctrl: 'Music control',
+};
+
+// Colour temperature: Z2M uses mireds; people think in Kelvin (2700 K warm, 6500 K daylight).
+export const miredToKelvin = (m: number) => Math.round(1_000_000 / m / 10) * 10;
+export const kelvinToMired = (k: number) => Math.min(500, Math.max(150, Math.round(1_000_000 / k)));
+
+export interface MusicResult {
+  kind: 'playlist' | 'album' | 'artist' | 'track';
+  name: string;
+  subtitle: string;
+  uri: string;
+}
 
 export interface RoutineSpec {
   name: string;
@@ -117,7 +146,7 @@ export type RunStatus =
 export interface RunStep {
   id: string;
   type: string;
-  status: 'ok' | 'partial' | 'failed' | 'skipped' | 'cancelled';
+  status: 'ok' | 'partial' | 'failed' | 'skipped' | 'cancelled' | 'running';
   started_at?: string;
   ms?: number;
   detail?: Record<string, unknown>;

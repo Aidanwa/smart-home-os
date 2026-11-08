@@ -68,15 +68,21 @@ export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
 }
 
 const STEP_STYLE: Record<RunStep['status'], string> = {
-  ok: 'text-green-400', partial: 'text-amber-400', failed: 'text-red-400', skipped: 'text-neutral-500', cancelled: 'text-neutral-500',
+  ok: 'text-green-400', partial: 'text-amber-400', failed: 'text-red-400', running: 'text-blue-400', skipped: 'text-neutral-500', cancelled: 'text-neutral-500',
 };
 
 function StepRow({ step }: { step: RunStep }) {
   const d = step.detail ?? {};
   const target = (d.device ?? d.group) as string | undefined;
-  const what = step.type === 'delay'
-    ? `Wait ${d.seconds ?? ''}s`
+  const what =
+    step.type === 'delay' ? `Wait ${d.seconds ?? ''}s`
+    : step.type === 'fade' ? `Fade ${String(d.target ?? '')} to ${Math.round(Number(d.to_brightness ?? 0) / 2.54)}% over ${Math.round(Number(d.duration_s ?? 0) / 60 * 10) / 10} min (${String(d.method ?? '')})`
+    : step.type === 'spotify_play' ? `Play ${String(d.playing ?? '')} on ${String(d.speaker ?? '')}`
+    : step.type === 'spotify_ctrl' ? `${String(d.cmd ?? '')} on ${String(d.speaker ?? '')}`
     : `${target ?? step.type}${d.sent ? ` → ${Object.entries(d.sent as Record<string, unknown>).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
+  const notes = ['message', 'ramp', 'ramp_stopped', 'stopped_early', 'note']
+    .filter(k => typeof d[k] === 'string')
+    .map(k => (k === 'ramp_stopped' ? `Ramp stopped: ${d[k]}` : k === 'stopped_early' ? `Stopped early: ${d[k]}` : String(d[k])));
   return (
     <div className="flex gap-2 border-t border-neutral-800 pt-2">
       <span className={`w-16 shrink-0 font-medium ${STEP_STYLE[step.status]}`}>{step.status}</span>
@@ -85,6 +91,7 @@ function StepRow({ step }: { step: RunStep }) {
         {step.error && <p className="text-red-400 break-words">{step.error}</p>}
         {typeof d.reason === 'string' && <p className="text-neutral-500">{d.reason}</p>}
         {Array.isArray(d.did_not_follow) && <p className="text-amber-400 break-words">Didn't follow: {d.did_not_follow.join(', ')}</p>}
+        {notes.map(n => <p key={n} className="text-neutral-500 break-words">{n}</p>)}
         {step.ms != null && step.type !== 'delay' && <p className="text-neutral-600">{step.ms} ms</p>}
       </div>
     </div>
