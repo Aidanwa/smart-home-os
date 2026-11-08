@@ -141,7 +141,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, timezone, previ
             <label className={label}>Catch-up window (minutes)</label>
             <input type="number" min={0} max={1440} className={input} value={spec.grace_minutes}
               onChange={e => patch({ grace_minutes: Math.max(0, Math.min(1440, parseInt(e.target.value) || 0)) })} />
-            <p className="text-xs text-neutral-500 mt-1">If the hub was down at the scheduled time, still run when it's back, up to this late.</p>
+            <p className="text-xs text-neutral-500 mt-1">If the hub was down at the scheduled time, still run when it's back, up to this late. Runs up to 30 seconds late always go ahead, even at 0.</p>
           </div>
         </div>
       </details>
