@@ -83,15 +83,15 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
       </div>
 
       {/* Primary Navigation Tabs */}
-      <div className="flex md:flex-col gap-1 w-full justify-around md:justify-start">
+      <div className="flex md:flex-col gap-1 flex-[4] min-w-0 md:flex-none md:w-full md:justify-start">
         {navItems.map(({ id, icon: Icon, label }) => {
           const isActive = activeTab === id;
           return (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`group relative flex items-center p-3 md:py-3 w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
-                isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 gap-3'
+              className={`group relative flex flex-col md:flex-row items-center gap-1 px-1 py-2 md:p-3 flex-1 min-w-0 md:flex-none md:w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
+                isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 md:gap-3'
               } ${isActive ? 'bg-neutral-900 text-neutral-100 border-neutral-800' : 'bg-transparent text-text-neutral-500 border-transparent text-neutral-500 hover:bg-neutral-900/40 hover:text-neutral-300'}`}
             >
               <span className="relative">
@@ -118,14 +118,14 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
       </div>
 
       {/* Settings Tab Anchored Natively at Bottom Layer */}
-      <div className="md:mt-auto space-y-1 w-full flex md:flex-col justify-end">
+      <div className="md:mt-auto space-y-1 flex flex-1 min-w-0 md:flex-none md:w-full md:flex-col">
         {(() => {
           const isActive = activeTab === 'settings';
           return (
             <button
               onClick={() => setActiveTab('settings')}
-              className={`group relative flex items-center p-3 md:py-3 w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
-                isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 gap-3'
+              className={`group relative flex flex-col md:flex-row items-center gap-1 px-1 py-2 md:p-3 flex-1 min-w-0 md:flex-none md:w-full rounded-xl active:scale-[0.98] border focus:outline-none focus:ring-0 focus-visible:outline-none outline-none select-none ${
+                isSidebarCollapsed ? 'justify-center md:px-3' : 'justify-center md:justify-start md:px-4 md:gap-3'
               } ${isActive ? 'bg-neutral-900 text-neutral-100 border-neutral-800' : 'bg-transparent text-text-neutral-500 border-transparent text-neutral-500 hover:bg-neutral-900/40 hover:text-neutral-300'}`}
             >
               <Settings size={20} className={isActive ? 'text-blue-400' : ''} />
