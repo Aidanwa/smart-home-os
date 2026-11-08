@@ -101,7 +101,7 @@ Every trigger and action gets a short `id` (e.g. `"t1"`, `"a3"`) so run logs and
 {"id":"t4","type":"device","device":"0x…","attribute":"temperature","op":"lt","value":18,"rearm":1.5}
 {"id":"t5","type":"device","device":"0x…","attribute":"action","op":"eq","value":"on_press"}
 ```
-- Device trigger `op` is one of `eq | ne | gt | gte | lt | lte | changes`. Values are device-native (temperature is always °C; the editor converts to °F per user, `ui_settings.temp_unit`).
+- Device trigger `op` is one of `eq | ne | gt | gte | lt | lte | changes`. Values are device-native (temperature is always °C; the editor always shows and accepts °F).
 - `rearm` (numeric ops only) is a hysteresis margin: `lt 18, rearm 1.5` fires at 17.9 and not again until the reading has risen to 19.5 or above. Added 2026-11-08 for noisy sensors and heater-style routines.
 - `action` (remote buttons) is an event attribute: every matching report fires, since the twin keeps the last value. `changes` on it means "any press". `for_s` isn't allowed on it.
 

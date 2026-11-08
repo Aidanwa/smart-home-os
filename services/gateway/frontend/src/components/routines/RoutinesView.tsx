@@ -3,10 +3,10 @@ import { Copy, History, Pencil, Play, Plus, Workflow } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
 import { useGroups } from '../../hooks/useGroups';
-import { useDeviceAttributes, useRoutines, useTempUnit } from '../../hooks/useRoutines';
+import { useDeviceAttributes, useRoutines } from '../../hooks/useRoutines';
 import { RoutineEditor } from './RoutineEditor';
 import { RunHistory } from './RunHistory';
-import type { Routine, RoutineSpec } from './types';
+import type { Routine, RoutineSpec, TempUnit } from './types';
 import { STATUS_STYLE, emptyRoutine, formatInTz, relativeTime, summarizeRoutine } from './types';
 
 const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-lg p-4 sm:p-6 gap-4';
@@ -22,7 +22,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, duplicate, fetchRuns, preview } = useRoutines();
   const { groups } = useGroups();
   const attributes = useDeviceAttributes();
-  const [tempUnit, setTempUnit] = useTempUnit();
+  const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
   const ctx = { attributes, tempUnit };
   const [panel, setPanel] = useState<Panel>(null);
   const [notice, setNotice] = useState<{ id: string; text: string; bad: boolean } | null>(null);
@@ -53,12 +53,6 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
           <p className="text-xs text-neutral-500 mt-1">Times are in {timezone}.</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-        <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-neutral-800" role="group" aria-label="Temperature unit">
-          {(['F', 'C'] as const).map(u => (
-            <button key={u} type="button" onClick={() => setTempUnit(u)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium ${tempUnit === u ? 'bg-neutral-700 text-white' : 'text-neutral-500'}`}>°{u}</button>
-          ))}
-        </div>
         <button type="button" onClick={() => setPanel({ kind: 'edit', routine: null })}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shrink-0">
           <Plus size={16} /> New

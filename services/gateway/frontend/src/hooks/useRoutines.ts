@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AttributeMap, MusicResult, Routine, RoutineRun, RoutineSpec, TempUnit } from '../components/routines/types';
+import type { AttributeMap, MusicResult, Routine, RoutineRun, RoutineSpec } from '../components/routines/types';
 import { formatApiError } from '../components/routines/types';
 
 export interface PreviewResult {
@@ -100,22 +100,6 @@ export function useDeviceAttributes() {
     call('/api/routines/attributes').then(res => res.ok && setAttributes(res.data as AttributeMap));
   }, []);
   return attributes;
-}
-
-/** Per-user °F/°C preference for temperature thresholds (stored in ui_settings.temp_unit). */
-export function useTempUnit(): [TempUnit, (u: TempUnit) => void] {
-  const [unit, setUnit] = useState<TempUnit>('F');
-  useEffect(() => {
-    call('/api/platform/preferences').then(res => {
-      const saved = (res.data as { ui_settings?: { temp_unit?: TempUnit } } | null)?.ui_settings?.temp_unit;
-      if (saved === 'C' || saved === 'F') setUnit(saved);
-    });
-  }, []);
-  const save = (u: TempUnit) => {
-    setUnit(u);
-    call('/api/platform/preferences', { method: 'PUT', body: JSON.stringify({ ui_settings: { temp_unit: u } }) });
-  };
-  return [unit, save];
 }
 
 /** Count of failed/partial/missed/interrupted runs since this user last looked at Routines.
