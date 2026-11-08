@@ -105,14 +105,15 @@ export function SettingsView() {
       </header>
 
       {/* Sub-tab Navigation Switcher */}
-      <div className="flex border-b border-neutral-800 mb-6 gap-6 text-sm font-medium">
+      {/* Scrolls sideways on narrow screens instead of pushing the page wider */}
+      <div className="flex border-b border-neutral-800 mb-6 gap-6 text-sm font-medium overflow-x-auto overflow-y-hidden">
         {['account', 'home', 'agent', 'connections', 'admin'].map((tab) => (
-          <button 
+          <button
             key={tab}
-            onClick={() => setSettingsTab(tab as any)} 
-            className={`pb-3 transition-colors relative capitalize ${settingsTab === tab ? 'text-blue-400 border-b-2 border-blue-400 font-semibold' : 'text-neutral-500 hover:text-neutral-300'}`}
+            onClick={() => setSettingsTab(tab as any)}
+            className={`pb-3 transition-colors relative capitalize shrink-0 whitespace-nowrap ${settingsTab === tab ? 'text-blue-400 border-b-2 border-blue-400 font-semibold' : 'text-neutral-500 hover:text-neutral-300'}`}
           >
-            {tab === 'connections' ? 'External Connections' : `${tab} Setup`}
+            {tab}
           </button>
         ))}
       </div>
