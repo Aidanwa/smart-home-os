@@ -101,10 +101,11 @@ services:
     image: postgres:15-alpine
     container_name: home_postgres
     restart: unless-stopped
-    # Using defaults prevents compose from crashing if the .env is missing during a quick boot
+    # No defaults: credentials must come from .env (the repo is public).
+    # POSTGRES_PASSWORD only matters when the data dir is first created; rotate with ALTER ROLE.
     environment:
-      POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_USER: ${DB_USER:?set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       POSTGRES_DB: home_os
     volumes:
       - ./volumes/postgres_data:/var/lib/postgresql/data
@@ -120,7 +121,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d home_os"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d home_os"]
       interval: 10s
       timeout: 5s
       retries: 5
