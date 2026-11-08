@@ -4,6 +4,8 @@ A self-hosted smart home platform: Zigbee devices (via Zigbee2MQTT) plus an LLM 
 
 ## Topology
 
+Host-specific values are placeholders because the repo is public: `<pi-host>`, `<tailnet>` (the `….ts.net` domain), `<pc-host>`, `<user>`, `<mqtt-user>`, `<pc-backup-dir>`. The real values are in `CLAUDE.local.md` (git-ignored, loaded automatically). Never commit real hostnames, usernames, local paths or credentials. Secrets belong in `.env` (git-ignored) or `user_secrets`.
+
 ```
 Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA + routine scheduler, TLS via Tailscale cert)
                      │  /api/agent/*  ── reverse-proxied (http/ws) ──► agent :8001 (FastAPI, LLM loop)
@@ -14,9 +16,9 @@ Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA + routine 
                      └─► MQTT broker (:1884, auth) + Zigbee2MQTT as host systemd services, NOT in compose
 ```
 
-- **Production** runs on the Pi 4 (4 GB, SD card, 64-bit Debian 12) at `zigbee-hub.tail1752d3.ts.net`, in `~/smart-home-os` (user `adams`). It moved there on 2026-11-07. The Pi also runs Mosquitto, Z2M, Pi-hole and Tailscale as host services. It also runs Spotify Soloist, an always-on Connect speaker named "Bedroom Speakers" on the 3.5mm jack, as its own compose project in `~/soloist`. That folder is outside this repo and has its own README. The app sees it only as a Spotify device, which the agent targets by name. librespot/raspotify don't work for this account because Spotify refuses their audio keys. Compose reaches the broker via `MQTT_HOST=host.docker.internal`, port 1884; 1883 is localhost-only. Keep things lightweight: the agent has a 1G memory limit (enforced, since the Pi boots with `cgroup_enable=memory`), Whisper is `tiny.en` int8 on CPU, and the DB pool is small. Don't add heavy dependencies casually. A Pi rebuild takes minutes, not seconds.
-- The gateway's cert pair is chosen by `TLS_HOST` in `.env` (it defaults to `awapc.tail1752d3.ts.net` for the PC). Setup, backups and restore are in [docs/raspberry-pi.md](docs/raspberry-pi.md). Root cron scripts on the Pi are copied from [deploy/pi/](deploy/pi/): nightly backup at 03:00 and the monthly cert renewal. Edit the copies there and re-`install` them on the Pi.
-- The PC (`awapc`) no longer runs the stack. Its old compose volumes are stale. SSH from the PC: `ssh adams@zigbee-hub` (key auth).
+- **Production** runs on the Pi 4 (4 GB, SD card, 64-bit Debian 12) at `<pi-host>.<tailnet>.ts.net`, in `~/smart-home-os` (user `<user>`). It moved there on 2026-11-07. The Pi also runs Mosquitto, Z2M, Pi-hole and Tailscale as host services. It also runs Spotify Soloist, an always-on Connect speaker named "Bedroom Speakers" on the 3.5mm jack, as its own compose project in `~/soloist`. That folder is outside this repo and has its own README. The app sees it only as a Spotify device, which the agent targets by name. librespot/raspotify don't work for this account because Spotify refuses their audio keys. Compose reaches the broker via `MQTT_HOST=host.docker.internal`, port 1884; 1883 is localhost-only. Keep things lightweight: the agent has a 1G memory limit (enforced, since the Pi boots with `cgroup_enable=memory`), Whisper is `tiny.en` int8 on CPU, and the DB pool is small. Don't add heavy dependencies casually. A Pi rebuild takes minutes, not seconds.
+- The gateway's cert pair is chosen by `TLS_HOST` in `.env` (required, with no default). Setup, backups and restore are in [docs/raspberry-pi.md](docs/raspberry-pi.md). Root cron scripts on the Pi are copied from [deploy/pi/](deploy/pi/): nightly backup at 03:00 and the monthly cert renewal. Edit the copies there and re-`install` them on the Pi.
+- The PC (`<pc-host>`) no longer runs the stack. Its old compose volumes are stale. SSH from the PC: `ssh smarthome-pi` (key auth; an alias in `~/.ssh/config`, see [docs/runningstuff.md](docs/runningstuff.md)).
 - Only the gateway is exposed (the agent publishes no host port). The agent is reached through the gateway's proxy at `http://agent:8001` and `ws://agent:8001` (hard-coded in [services/gateway/main.py](services/gateway/main.py)).
 
 ## Repo layout
@@ -38,9 +40,9 @@ docker compose up -d --build agent
 docker compose logs -f gateway           # or agent
 ```
 
-The app is at `https://zigbee-hub.tail1752d3.ts.net:8000`. To deploy, push from the PC, then on the Pi run `cd ~/smart-home-os && git pull && docker compose up -d --build gateway` (or `agent`). Build one service at a time: parallel builds have timed out on npm downloads. Rebuilding the gateway also restarts the agent (it `depends_on` the gateway); the agent is unreachable for about 40 s while Whisper loads, so "agent unreachable" proxy errors right after a deploy are expected. If the change includes agent code, deploy the agent first, then the gateway.
+The app is at `https://<pi-host>.<tailnet>.ts.net:8000`. To deploy, push from the PC, then on the Pi run `cd ~/smart-home-os && git pull && docker compose up -d --build gateway` (or `agent`). Build one service at a time: parallel builds have timed out on npm downloads. Rebuilding the gateway also restarts the agent (it `depends_on` the gateway); the agent is unreachable for about 40 s while Whisper loads, so "agent unreachable" proxy errors right after a deploy are expected. If the change includes agent code, deploy the agent first, then the gateway.
 
-`.env` (git-ignored, read by compose `env_file`) uses Docker service hostnames (`postgres`, `redis`, `gateway`, `zigbee-hub`). It **won't work for processes on the host** without overrides. [.env.example](.env.example) lists every variable the services read. Note that `CORS_ORIGINS` is currently unused because the origins are hard-coded in `main.py`.
+`.env` (git-ignored, read by compose `env_file`) uses Docker service hostnames (`postgres`, `redis`, `gateway`, `<pi-host>`). It **won't work for processes on the host** without overrides. [.env.example](.env.example) lists every variable the services read. Note that `CORS_ORIGINS` is currently unused because the origins are hard-coded in `main.py`.
 
 ### Import-path rules
 
@@ -53,7 +55,7 @@ Both services have a top-level package named `api`. That's fine because they're 
 - Check or apply in the running container (verified working):
   `docker exec home_gateway sh -c "cd /app/shared && uv run --no-sync alembic current"` (use `upgrade head` to apply).
 - New migration, the way `b3e1d7a9c204` was done (no tunnel needed): edit `shared/database/models.py`, hand-write the revision in `shared/alembic/versions/`, push, then on the Pi `docker compose build gateway` (the old container keeps serving), back up (`docker exec home_postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > ~/home_os_pre_X.sql.gz`), apply and verify with the new image (`docker compose run --rm -T --no-deps gateway sh -c "cd /app/shared && uv run --no-sync alembic upgrade head && uv run --no-sync alembic check"`), then `docker compose up -d gateway`. `alembic check` saying "No new upgrade operations detected" proves the migration matches the models. Migrations on the Pi need Aidan's OK.
-- Or autogenerate from the host. The container has the old model code until it's rebuilt. `env.py` reads `DATABASE_URL` and falls back to `postgresql+asyncpg://admin:password@localhost:5432/home_os`. Postgres publishes 5432 to the Pi's loopback only. To autogenerate from the PC, first tunnel to the Pi's DB with `ssh -N -L 5432:127.0.0.1:5432 adams@zigbee-hub` (the PC's own compose must be down), and set `DATABASE_URL` with the real credentials.
+- Or autogenerate from the host. The container has the old model code until it's rebuilt. `env.py` requires `DATABASE_URL` (there's no fallback; never put credentials in the repo, which is public). Postgres publishes 5432 to the Pi's loopback only. To autogenerate from the PC, first tunnel to the Pi's DB with `ssh -N -L 5432:127.0.0.1:5432 smarthome-pi` (the PC's own compose must be down), and set `DATABASE_URL` with the real credentials.
   `cd shared; uv run alembic revision --autogenerate -m "msg"`. Review the generated file before applying.
 - The current head is `b3e1d7a9c204` (routines + routine_runs, hand-written and checked with `alembic check`).
 

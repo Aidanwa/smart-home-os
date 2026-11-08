@@ -1,6 +1,6 @@
 # Running the whole stack on the Raspberry Pi 4
 
-The goal is to run everything on `zigbee-hub`, the Pi that already runs Mosquitto + Zigbee2MQTT, so the PC can be off.
+The goal is to run everything on `<pi-host>`, the Pi that already runs Mosquitto + Zigbee2MQTT, so the PC can be off.
 
 ## 0. Prerequisites (check these first)
 
@@ -19,7 +19,7 @@ sudo systemctl enable docker      # start on boot; compose services use restart:
 
 ## 2. Confirm the MQTT broker accepts non-localhost connections
 
-The containers reach the broker through the Docker bridge (`host.docker.internal` → `172.17.0.1`), not via localhost. On `zigbee-hub`, Mosquitto has `listener 1883 127.0.0.1` (anonymous, local only) and `listener 1884 0.0.0.0` (password auth). The containers must therefore use **1884 + `gateway_user`**, the same `MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD` the PC already uses. 1883 isn't reachable from inside Docker.
+The containers reach the broker through the Docker bridge (`host.docker.internal` → `172.17.0.1`), not via localhost. On `<pi-host>`, Mosquitto has `listener 1883 127.0.0.1` (anonymous, local only) and `listener 1884 0.0.0.0` (password auth). The containers must therefore use **1884 + `<mqtt-user>`**, the same `MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD` the PC already uses. 1883 isn't reachable from inside Docker.
 
 ## 3. Get the code + secrets onto the Pi
 
@@ -30,7 +30,7 @@ git clone <repo> ~/smart-home-os && cd ~/smart-home-os
 Copy these from the PC. They are git-ignored, so `scp` them over Tailscale:
 - `.env`: copy it **as-is**, then edit only the two lines below. **Keep `JWT_SECRET_KEY` identical**, because it's the key for every encrypted secret in the DB (Spotify tokens, API keys).
   ```
-  TLS_HOST=zigbee-hub.tail1752d3.ts.net
+  TLS_HOST=<pi-host>.<tailnet>.ts.net
   MQTT_HOST=host.docker.internal
   ```
 - `certs/`: or generate fresh ones on the Pi (next step).
@@ -38,16 +38,16 @@ Copy these from the PC. They are git-ignored, so `scp` them over Tailscale:
 ## 4. TLS cert (and renewal)
 
 ```sh
-sudo tailscale cert --cert-file certs/zigbee-hub.tail1752d3.ts.net.crt \
-                    --key-file  certs/zigbee-hub.tail1752d3.ts.net.key \
-                    zigbee-hub.tail1752d3.ts.net
+sudo tailscale cert --cert-file certs/<pi-host>.<tailnet>.ts.net.crt \
+                    --key-file  certs/<pi-host>.<tailnet>.ts.net.key \
+                    <pi-host>.<tailnet>.ts.net
 sudo chown $USER certs/*
 ```
 
 Tailscale certs last **90 days**. Add a monthly root cron job (`sudo crontab -e`) that renews the cert and restarts the gateway:
 
 ```
-0 4 1 * * cd /home/<user>/smart-home-os && tailscale cert --cert-file certs/zigbee-hub.tail1752d3.ts.net.crt --key-file certs/zigbee-hub.tail1752d3.ts.net.key zigbee-hub.tail1752d3.ts.net && docker restart home_gateway
+0 4 1 * * cd /home/<user>/smart-home-os && tailscale cert --cert-file certs/<pi-host>.<tailnet>.ts.net.crt --key-file certs/<pi-host>.<tailnet>.ts.net.key <pi-host>.<tailnet>.ts.net && docker restart home_gateway
 ```
 
 ## 5. Move the database (dump/restore, don't copy `volumes/`)
@@ -58,7 +58,7 @@ On the **PC** (PowerShell; use `-f` rather than `>`, because PowerShell redirect
 ```powershell
 docker exec home_postgres pg_dump -U <DB_USER> -Fc -f /tmp/home_os.dump home_os
 docker cp home_postgres:/tmp/home_os.dump .\home_os.dump
-scp .\home_os.dump <user>@zigbee-hub:~/smart-home-os/
+scp .\home_os.dump <user>@<pi-host>:~/smart-home-os/
 ```
 
 On the **Pi**:
@@ -79,14 +79,14 @@ docker compose ps
 docker compose logs -f gateway   # look for MQTT connected + bridge/devices received
 ```
 
-Then open `https://zigbee-hub.tail1752d3.ts.net:8000` and log in with your existing account.
+Then open `https://<pi-host>.<tailnet>.ts.net:8000` and log in with your existing account.
 
 **Stop the stack on the PC** (`docker compose down`) before or right after this. Two gateways on the same broker both work, but agents/UIs would be split across two databases.
 
 ## 7. Things that change with the host
 
-- **Spotify:** the redirect URI points at the host. Register `https://zigbee-hub.tail1752d3.ts.net:8000/...` (same path as today) in the Spotify developer app and update `SPOTIFY_REDIRECT_URI` in the Pi's `.env`.
-- **Bookmarks / phone home-screen shortcut:** the URL changes from `awapc...` to `zigbee-hub...`.
+- **Spotify:** the redirect URI points at the host. Register `https://<pi-host>.<tailnet>.ts.net:8000/...` (same path as today) in the Spotify developer app and update `SPOTIFY_REDIRECT_URI` in the Pi's `.env`.
+- **Bookmarks / phone home-screen shortcut:** the URL changes from the PC's address to the Pi's.
 - Whisper's `tiny.en` model is downloaded on first voice request (needs internet once). Expect a few seconds of transcription per utterance on the Pi's CPU.
 
 ## 8. Updating later
@@ -104,19 +104,19 @@ To avoid slow builds on the Pi you can cross-build on the PC with `docker buildx
 ## 9. Backups
 
 - **Pi, 03:00 nightly:** `/usr/local/bin/smarthome-backup.sh` (root cron) writes `~/backups/smarthome-YYYY-MM-DD.tar.gz` and keeps 14 days. Its log is `/var/log/smarthome-backup.log`. Each bundle contains `smarthome/home_os.dump` (every table, including routines and their run history) + `.env`, `zigbee2mqtt/` (data dir, no logs), `mosquitto/`, and `pihole/` (Teleporter zip).
-- **PC, at logon + 09:00:** the Task Scheduler task "SmartHome Backup Pull" runs `C:\Users\adams\Backups\smart-home-os\pull-backups.ps1`, which copies new bundles and keeps 30 days. It logs to `pull.log` in the same folder.
+- **PC, at logon + 09:00:** the Task Scheduler task "SmartHome Backup Pull" runs `<pc-backup-dir>\pull-backups.ps1`, which copies new bundles and keeps 30 days. It logs to `pull.log` in the same folder.
 - **Docker cleanup, Sundays 03:30:** `/usr/local/bin/docker-prune.sh` removes dangling images and build cache unused for 7+ days. Its log is `/var/log/docker-prune.log`.
 - **Cert, 04:00 on the 1st:** `/usr/local/bin/renew-tailscale-cert.sh` restarts the gateway only if the cert changed. Its log is `/var/log/tailscale-cert-renew.log`.
 
 ## 10. Restore after a dead SD card
 
-1. Flash Raspberry Pi OS Lite **64-bit**, hostname `zigbee-hub`, user `adams`, and enable SSH. Install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`). Remove the old `zigbee-hub` machine in the Tailscale admin first, so the name doesn't become `zigbee-hub-1`.
-2. Copy the newest bundle from `C:\Users\adams\Backups\smart-home-os\` to the Pi and unpack it: `mkdir ~/restore && tar -xzf smarthome-*.tar.gz -C ~/restore`.
+1. Flash Raspberry Pi OS Lite **64-bit**, hostname `<pi-host>`, user `<user>`, and enable SSH. Install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`). Remove the old `<pi-host>` machine in the Tailscale admin first, so the name doesn't become `<pi-host>-1`.
+2. Copy the newest bundle from `<pc-backup-dir>\` to the Pi and unpack it: `mkdir ~/restore && tar -xzf smarthome-*.tar.gz -C ~/restore`.
 3. **Mosquitto:** `sudo apt install mosquitto`, `sudo cp -a ~/restore/mosquitto/. /etc/mosquitto/`, `sudo systemctl restart mosquitto`.
 4. **Zigbee2MQTT:** install it per its docs (Node.js, clone into `/home/zigbee2mqtt/zigbee2mqtt`, systemd unit). **Before first start**, copy `~/restore/zigbee2mqtt/.` into its `data/` dir and `chown -R zigbee2mqtt:` it. Same coordinator stick means no re-pairing.
 5. **Pi-hole:** install it (`curl -sSL https://install.pi-hole.net | bash`), then import with `sudo pihole-FTL --teleporter ~/restore/pihole/*.zip`.
 6. **Stack:** run sections 1, 3, 4 and 6 above: Docker, clone, cert. Use `cp ~/restore/smarthome/.env ~/smart-home-os/.env` instead of copying from the PC. Before `up --build`, restore the DB as in section 5, with `~/restore/smarthome/home_os.dump` as the dump file.
-7. Re-create the cron jobs. The scripts are kept in the repo under [deploy/pi/](../deploy/pi/): `sudo install -m 755 deploy/pi/*.sh /usr/local/bin/`, then run `sudo crontab -e`:
+7. Re-create the cron jobs. The scripts are kept in the repo under [deploy/pi/](../deploy/pi/) and read host values from `/etc/smarthome-os.conf`. Create it first with `sudo install -m 644 deploy/pi/smarthome-os.conf.example /etc/smarthome-os.conf`, then set `OWNER` and `TLS_HOST` in it. Then `sudo install -m 755 deploy/pi/*.sh /usr/local/bin/` and `sudo crontab -e`:
    ```
    0 4 1 * * /usr/local/bin/renew-tailscale-cert.sh
    0 3 * * * /usr/local/bin/smarthome-backup.sh

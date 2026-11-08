@@ -5,13 +5,20 @@
 set -u
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-HOST=zigbee-hub.tail1752d3.ts.net
-DIR=/home/adams/smart-home-os/certs
+LOG=/var/log/tailscale-cert-renew.log
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+# Host-specific values live outside the (public) repo: see smarthome-os.conf.example.
+CONF=/etc/smarthome-os.conf
+[ -r "$CONF" ] && . "$CONF"
+if [ -z "${TLS_HOST:-}" ] || [ -z "${OWNER:-}" ]; then
+    log "ERROR: set TLS_HOST and OWNER in $CONF"
+    exit 1
+fi
+HOST=$TLS_HOST
+DIR=/home/$OWNER/smart-home-os/certs
 CRT="$DIR/$HOST.crt"
 KEY="$DIR/$HOST.key"
-LOG=/var/log/tailscale-cert-renew.log
-
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 
 mkdir -p "$DIR"
 before=$(sha256sum "$CRT" 2>/dev/null | cut -d' ' -f1)

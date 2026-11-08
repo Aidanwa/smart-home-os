@@ -44,3 +44,5 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+# Local, host-specific notes (repo is public)
+CLAUDE.local.md

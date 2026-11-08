@@ -39,8 +39,8 @@ services:
       uv run uvicorn main:app
       --host 0.0.0.0
       --port 8000
-      --ssl-keyfile=/app/certs/${TLS_HOST:-awapc.tail1752d3.ts.net}.key
-      --ssl-certfile=/app/certs/${TLS_HOST:-awapc.tail1752d3.ts.net}.crt
+      --ssl-keyfile=/app/certs/${TLS_HOST:?set TLS_HOST in .env}.key
+      --ssl-certfile=/app/certs/${TLS_HOST:?set TLS_HOST in .env}.crt
 
   # ----------------------------------------
   # 2. LLM Agent Logic

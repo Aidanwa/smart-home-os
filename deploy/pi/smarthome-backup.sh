@@ -5,13 +5,16 @@
 #   - Zigbee2MQTT data dir (network key, paired devices) minus logs
 #   - /etc/mosquitto (broker config + password file)
 #   - Pi-hole Teleporter export
-# Writes ~adams/backups/smarthome-YYYY-MM-DD.tar.gz (mode 600), keeps 14 days.
+# Writes ~$OWNER/backups/smarthome-YYYY-MM-DD.tar.gz (mode 600), keeps 14 days.
+# OWNER comes from /etc/smarthome-os.conf (see smarthome-os.conf.example).
 # Run from root's crontab; logs to /var/log/smarthome-backup.log.
 set -u
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 
-OWNER=adams
+CONF=/etc/smarthome-os.conf
+[ -r "$CONF" ] && . "$CONF"
+OWNER=${OWNER:-}
 DEST=/home/$OWNER/backups
 REPO=/home/$OWNER/smart-home-os
 Z2M_DATA=/home/zigbee2mqtt/zigbee2mqtt/data
@@ -21,6 +24,7 @@ STAMP=$(date +%F)
 OUT="$DEST/smarthome-$STAMP.tar.gz"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+if [ -z "$OWNER" ]; then log "ERROR: set OWNER in $CONF"; exit 1; fi
 failed=""
 
 STAGE=$(mktemp -d /tmp/smarthome-backup.XXXXXX)

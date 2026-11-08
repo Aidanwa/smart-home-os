@@ -21,7 +21,7 @@ flowchart TD
     subgraph Infrastructure["Data & Infrastructure"]
         Postgres[("PostgreSQL<br/>(Users, prefs, secrets, rooms,<br/>home, routines + run log)")]
         Redis[("Redis<br/>(Digital twin, device metadata,<br/>Spotify cache)")]
-        MQTT["MQTT Broker + Z2M<br/>(on Pi 'zigbee-hub', outside compose)"]
+        MQTT["MQTT Broker + Z2M<br/>(on Pi '<pi-host>', outside compose)"]
         Hardware["Zigbee Hardware<br/>(Lights, Sensors)"]
     end
 

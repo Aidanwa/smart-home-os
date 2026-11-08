@@ -28,7 +28,10 @@ target_metadata = Base.metadata
 # 3. DYNAMIC DATABASE URL
 # Override the sqlalchemy.url in alembic.ini with our environment variable
 # Fallback to localhost string for local testing if running outside docker
-db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://admin:password@localhost:5432/home_os")
+# Required, no fallback: credentials must never live in the repo.
+db_url = os.getenv("DATABASE_URL")
+if not db_url:
+    raise RuntimeError("Set DATABASE_URL, e.g. postgresql+asyncpg://<user>:<password>@localhost:5432/home_os")
 config.set_main_option("sqlalchemy.url", db_url)
 
 

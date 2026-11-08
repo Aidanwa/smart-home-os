@@ -1,12 +1,12 @@
-# Pulls nightly smart-home-os backup bundles from the Pi (zigbee-hub) to this folder.
+# Pulls nightly smart-home-os backup bundles from the Pi to the folder this script lives in.
 # Run by the Task Scheduler task "SmartHome Backup Pull" (at logon + daily 9:00, catches up if missed).
 # Read-only on the Pi: it only lists and copies files from ~/backups there.
 # Keeps 30 days of bundles here (the Pi itself keeps 14).
 
 $ErrorActionPreference = "Continue"
-$dir      = "C:\Users\adams\Backups\smart-home-os"
+$dir      = $PSScriptRoot      # keep this script in the backup folder
 $log      = Join-Path $dir "pull.log"
-$remote   = "adams@zigbee-hub"
+$remote   = "smarthome-pi"     # SSH alias in ~/.ssh/config (HostName + User of the Pi)
 $keepDays = 30
 $ssh      = "$env:WINDIR\System32\OpenSSH\ssh.exe"
 $scp      = "$env:WINDIR\System32\OpenSSH\scp.exe"

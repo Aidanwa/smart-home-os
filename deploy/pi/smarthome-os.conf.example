@@ -1,0 +1,4 @@
+# /etc/smarthome-os.conf: host-specific values for the Pi cron scripts. Not in git (the repo is public).
+#   sudo install -m 644 deploy/pi/smarthome-os.conf.example /etc/smarthome-os.conf   # then edit it
+OWNER=CHANGE_ME                    # Pi login user that owns ~/smart-home-os and ~/backups
+TLS_HOST=CHANGE_ME                 # e.g. <pi-host>.<tailnet>.ts.net, same as TLS_HOST in .env
