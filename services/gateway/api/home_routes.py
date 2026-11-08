@@ -1,6 +1,6 @@
 import httpx
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Optional
@@ -71,6 +71,7 @@ async def get_home(
 @router.post("", response_model=HomeResponse)
 async def create_home(
     data: HomeUpdate,
+    request: Request,
     session: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):
@@ -94,11 +95,13 @@ async def create_home(
     session.add(new_home)
     await session.commit()
     await session.refresh(new_home)
+    await request.app.state.scheduler.reload_all()  # the home timezone may have changed
     return new_home
 
 @router.put("", response_model=HomeResponse)
 async def update_home(
-    data: HomeUpdate, 
+    data: HomeUpdate,
+    request: Request,
     session: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):
@@ -130,12 +133,14 @@ async def update_home(
 
     await session.commit()
     await session.refresh(home)
+    await request.app.state.scheduler.reload_all()  # the home timezone may have changed
     
     # Return the database object so FastAPI can serialize it into HomeResponse
     return home
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_home(
+    request: Request,
     session: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):
@@ -146,4 +151,5 @@ async def delete_home(
     
     await session.delete(home)
     await session.commit()
+    await request.app.state.scheduler.reload_all()  # the home timezone may have changed
     return None

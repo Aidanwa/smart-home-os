@@ -3,7 +3,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useDevices } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { 
-  Radio, Workflow,
+  Radio,
   Lightbulb, Zap, Thermometer, ToggleRight, Box
 } from 'lucide-react';
 import { getDeviceCategory } from './lib/deviceUtils';
@@ -15,6 +15,7 @@ import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
 import { RoomsView } from './components/rooms/RoomsView';
+import { RoutinesView } from './components/routines/RoutinesView';
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
@@ -170,15 +171,7 @@ function AuthenticatedDashboard() {
 
         {activeTab === 'rooms' && <RoomsView devices={devices} />}
 
-        {activeTab === 'routines' && (
-          <div className="h-full flex items-center justify-center text-neutral-500">
-            <div className="text-center">
-              <Workflow className="mx-auto mb-4 opacity-50" size={48} />
-              <h2 className="text-xl font-medium text-neutral-300">Routine Orchestrator</h2>
-              <p className="text-xs text-neutral-500 mt-1 max-w-xs leading-relaxed">Create and plan automatic behaviors to synchronize your household schedules.</p>
-            </div>
-          </div>
-        )}
+        {activeTab === 'routines' && <RoutinesView devices={devices} />}
 
         {activeTab === 'settings' && <SettingsView />}
         

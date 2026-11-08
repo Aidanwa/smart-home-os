@@ -46,6 +46,9 @@ export function useDevices() {
           detail: data.groups 
         }));
       }
+      if (data.type === 'routine_run') {
+        window.dispatchEvent(new CustomEvent('onRoutineRun', { detail: data }));
+      }
       if (data.type === 'device_delete') {
         setDevices(prev => {
           const newDevices = { ...prev };

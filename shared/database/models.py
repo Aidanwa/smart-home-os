@@ -1,7 +1,7 @@
 # SQLAlchemy Tables
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint, Integer
+from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint, Integer, Index, Text, text, true
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -120,6 +120,54 @@ class Home(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class Routine(Base):
+    """A household automation: triggers -> (conditions) -> ordered actions.
+    triggers/conditions/actions are JSONB validated by services/gateway/scheduler/schema.py."""
+    __tablename__ = "routines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
+    # Whose credentials (Spotify, LLM) the routine's actions run with. Routines are visible to everyone.
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), default="single", server_default="single", nullable=False)
+    grace_minutes: Mapped[int] = mapped_column(Integer, default=5, server_default="5", nullable=False)
+    triggers: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RoutineRun(Base):
+    """One execution (or a recorded skip/miss) of a routine."""
+    __tablename__ = "routine_runs"
+    __table_args__ = (
+        Index("ix_routine_runs_routine_started", "routine_id", "started_at"),
+        # A scheduled occurrence can be recorded at most once, so catch-up can never double-fire.
+        Index(
+            "uq_routine_runs_occurrence", "routine_id", "trigger_id", "scheduled_for",
+            unique=True, postgresql_where=text("scheduled_for IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    routine_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("routines.id", ondelete="CASCADE"), nullable=False)
+    trigger_id: Mapped[str | None] = mapped_column(String(16))
+    trigger_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # running | success | partial | failed | skipped | missed | cancelled | interrupted
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    late_seconds: Mapped[int | None] = mapped_column(Integer)
+    trigger_detail: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
+    steps: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 

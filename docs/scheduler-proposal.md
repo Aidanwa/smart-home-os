@@ -1,6 +1,6 @@
 # Proposal: routines / scheduler
 
-Status: **design agreed 2026-11-08, not implemented.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
+Status: **design agreed 2026-11-08. Slices 0 and 1 implemented 2026-11-08; slice 2 next.** Builds on [scheduler-handoff.md](scheduler-handoff.md). Decisions marked **(decided)** were settled with Aidan; everything else is a default that can be changed during review.
 
 ## 1. Corrections to the handoff doc
 
@@ -132,7 +132,7 @@ The shapes are deliberately flat and use plain words so the agent can write them
 
 **Time and sun triggers**
 - The next occurrence is computed in the home timezone with `zoneinfo`.
-- **DST.** A time that doesn't exist on the spring-forward day runs at the first valid instant after it. A time that occurs twice in autumn runs once, at the first occurrence.
+- **DST.** A time that doesn't exist on the spring-forward day is shifted forward by the gap (02:30 runs at 03:30). A time that occurs twice in autumn runs once, at the first occurrence.
 - Sun times are recomputed for each date. If the sun doesn't rise or set that day (polar regions), that day is skipped and logged as `missed`.
 
 **Grace and catch-up (decided)**

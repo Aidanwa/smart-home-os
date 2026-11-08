@@ -18,6 +18,8 @@ from api.auth_routes import auth_router, platform_router
 from api.integration_routes import integrations_router
 from api.home_routes import router as home_router
 from api.zone_routes import router as zone_router
+from api.routine_routes import router as routine_router
+from scheduler.engine import Scheduler
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -53,10 +55,16 @@ async def lifespan(app: FastAPI):
     # Give the MQTT client a moment to establish connection
     await asyncio.sleep(0.5)
 
+    # 3. Routine scheduler (never raises; logs and stays inactive on failure)
+    scheduler = Scheduler(bus)
+    app.state.scheduler = scheduler
+    await scheduler.start()
+
     yield  # --- The API is now running and accepting requests ---
 
     # Shutdown
     logger.info("Shutting down Gateway...")
+    await scheduler.stop()
     await bus.stop()
 
 # Create FastAPI app
@@ -88,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(integrations_router)
     app.include_router(home_router)
     app.include_router(zone_router)
+    app.include_router(routine_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

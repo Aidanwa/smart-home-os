@@ -53,7 +53,7 @@ Both services have a top-level package named `api`. That's fine because they're 
   `docker exec home_gateway sh -c "cd /app/shared && uv run --no-sync alembic current"` (use `upgrade head` to apply).
 - New migration: edit `shared/database/models.py`, then autogenerate from the host. The container has the old model code until it's rebuilt. `env.py` reads `DATABASE_URL` and falls back to `postgresql+asyncpg://admin:password@localhost:5432/home_os`. Postgres publishes 5432 to the Pi's loopback only. To autogenerate from the PC, first tunnel to the Pi's DB with `ssh -N -L 5432:127.0.0.1:5432 adams@zigbee-hub` (the PC's own compose must be down), and set `DATABASE_URL` with the real credentials.
   `cd shared; uv run alembic revision --autogenerate -m "msg"`. Review the generated file before applying.
-- The current head is `52850728036c`.
+- The current head is `b3e1d7a9c204` (routines + routine_runs, hand-written and checked with `alembic check`).
 
 ### Dependencies
 
@@ -76,7 +76,8 @@ There are **no tests**. Use these checks:
 - **RPC** (`bus.rpc`): bridge requests correlate on an injected `transaction` id. Device `/set` correlates on **friendly_name**, meaning it resolves on that device's next state publish, so device RPCs are serialized per device with `_device_rpc_locks`. Timeout is 5s, mapped to HTTP 504. The listen loop catches and logs per-message exceptions. Keep it that way: an uncaught exception there kills the listener and the twin goes stale silently. Group `/set` is fire-and-forget.
 - **Realtime**: `/api/ws` pushes `{type: device_update | groups_update | device_delete}`. The frontend re-dispatches `groups_update` as a `window` CustomEvent named `onGroupsUpdate`.
 - **Auth**: a JWT in the HttpOnly cookie `access_token` (HS256, `JWT_SECRET_KEY`, 30 days). `get_current_user` lives in [services/gateway/api/auth.py](services/gateway/api/auth.py). The device router applies it router-wide, other routers apply it per route. No RBAC exists yet despite comments.
-- **Routers**: `routes.py` (devices/groups/bridge/ws), `auth_routes.py` (`/api/auth`, `/api/platform`), `integration_routes.py` (Spotify OAuth), `home_routes.py` (singleton home profile, geocodes via Nominatim and NWS grid), `zone_routes.py` (rooms/floor-plan, used by the frontend). `/api/platform/zones` and `/api/platform/placements/*` are older duplicates of the zone routes.
+- **Scheduler** ([services/gateway/scheduler/](services/gateway/scheduler/)): routines run inside the gateway, started in `lifespan` (`app.state.scheduler`). Design and slice plan: [docs/scheduler-proposal.md](docs/scheduler-proposal.md). `schema.py` is the source of truth for routine JSON (Pydantic, `extra=forbid`); `engine.py` holds only derived state (next fire per time trigger, active run per routine) and rebuilds it from Postgres at startup. Only the process holding a Postgres advisory lock schedules. Routes that change a routine must call `scheduler.reload(id)`; anything that can change the home timezone calls `reload_all()`. Every run is a `routine_runs` row; a unique index on (routine, trigger, scheduled_for) makes catch-up idempotent. Runs push `{type: routine_run}` over `/api/ws` (the frontend re-dispatches it as `onRoutineRun`).
+- **Routers**: `routes.py` (devices/groups/bridge/ws), `auth_routes.py` (`/api/auth`, `/api/platform`), `integration_routes.py` (Spotify OAuth), `home_routes.py` (singleton home profile, geocodes via Nominatim and NWS grid), `zone_routes.py` (rooms/floor-plan, used by the frontend), `routine_routes.py` (`/api/routines`). `/api/platform/zones` and `/api/platform/placements/*` are older duplicates of the zone routes.
 
 ## Agent internals
 
@@ -92,7 +93,7 @@ There are **no tests**. Use these checks:
 ## Frontend (`services/gateway/frontend`)
 
 React 19 + Vite 8 + TypeScript 6 + Tailwind v4 + shadcn (`radix-nova`, components in `src/components/ui`) + react-konva for the rooms canvas. The `@/` path alias maps to `src/`.
-- There's no router. Tabs are state in [src/App.tsx](services/gateway/frontend/src/App.tsx) (`home | agent | rooms | routines | settings`). Routines is a placeholder.
+- There's no router. Tabs are state in [src/App.tsx](services/gateway/frontend/src/App.tsx) (`home | agent | rooms | routines | settings`). Routines lives in `src/components/routines` (types there mirror `scheduler/schema.py`).
 - `AuthContext` monkey-patches `window.fetch` to log out on any 401, so plain `fetch` is fine. `authenticatedFetch` also exists.
 - Data hooks are in `src/hooks` (`useDevices`, `useGroups`, `useAgentChat`, `useVoiceInput`, `useSystemHealth`). The rooms feature is self-contained under `src/components/rooms` (`useRoomLayout` talks to `/api/zones`). Device placement coordinates are percentages (0–100) of the room's size.
 - Mobile layout is a priority (recent work). Check narrow widths when touching layout.
