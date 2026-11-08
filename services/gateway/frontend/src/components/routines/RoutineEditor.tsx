@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { NumberField } from './NumberField';
 import { ArrowDown, ArrowUp, Clock, Plus, Trash2 } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
@@ -195,8 +196,8 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           </div>
           <div>
             <label className={label}>Catch-up window (minutes)</label>
-            <input type="number" min={0} max={1440} className={input} value={spec.grace_minutes}
-              onChange={e => patch({ grace_minutes: Math.max(0, Math.min(1440, parseInt(e.target.value) || 0)) })} />
+            <NumberField integer min={0} max={1440} className={input} value={spec.grace_minutes}
+              onChange={grace_minutes => patch({ grace_minutes })} />
             <p className="text-xs text-neutral-500 mt-1">If the hub was down at a scheduled time, still run when it's back, up to this late. Runs up to 30 seconds late always go ahead, even at 0.</p>
           </div>
         </div>
@@ -250,21 +251,7 @@ interface ActionFieldsProps {
 }
 
 function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsProps) {
-  if (action.type === 'delay') {
-    const unit = action.seconds % 3600 === 0 ? 3600 : action.seconds % 60 === 0 ? 60 : 1;
-    return (
-      <div className="flex gap-2">
-        <input type="number" min={1} className={input} value={action.seconds / unit}
-          onChange={e => onChange({ ...action, seconds: Math.max(1, Math.min(43200, (parseFloat(e.target.value) || 1) * unit)) })} />
-        <select className={`${input} w-32`} value={unit}
-          onChange={e => onChange({ ...action, seconds: Math.min(43200, (action.seconds / unit) * parseInt(e.target.value)) })}>
-          <option value={1}>seconds</option>
-          <option value={60}>minutes</option>
-          <option value={3600}>hours</option>
-        </select>
-      </div>
-    );
-  }
+  if (action.type === 'delay') return <DelayFields action={action} onChange={onChange} />;
 
   const selectedDevice = action.type === 'device' ? deviceOptions.find(d => d.ieee === action.device) : undefined;
   const showColorTemp = action.type === 'group' || !!selectedDevice?.hasColorTemp;
@@ -288,6 +275,31 @@ function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsP
         Stop the routine if this fails
       </label>
     </>
+  );
+}
+
+type DelayAction = Extract<Action, { type: 'delay' }>;
+
+/** The unit is the user's choice, kept locally: deriving it from the value made "120 seconds"
+ *  flip to "2 minutes" mid-typing. It starts as the largest unit that divides the value. */
+function DelayFields({ action, onChange }: { action: DelayAction; onChange: (a: Action) => void }) {
+  const [unit, setUnit] = useState(() => (action.seconds % 3600 === 0 ? 3600 : action.seconds % 60 === 0 ? 60 : 1));
+  const maxInUnit = 43200 / unit;
+  return (
+    <div className="flex gap-2">
+      <NumberField min={1 / unit} max={maxInUnit} className={input} value={Math.round((action.seconds / unit) * 100) / 100}
+        onChange={n => onChange({ ...action, seconds: Math.max(1, Math.min(43200, Math.round(n * unit))) })} />
+      <select className={`${input} w-32`} value={unit} onChange={e => {
+        const next = parseInt(e.target.value);
+        setUnit(next);
+        // keep the number, change what it means: "5 minutes" -> "5 hours"
+        onChange({ ...action, seconds: Math.max(1, Math.min(43200, Math.round((action.seconds / unit) * next))) });
+      }}>
+        <option value={1}>seconds</option>
+        <option value={60}>minutes</option>
+        <option value={3600}>hours</option>
+      </select>
+    </div>
   );
 }
 
@@ -328,8 +340,7 @@ function OptionalNumber({ label: text, value, min, max, defaultValue, onChange }
         {text}
       </label>
       {value != null && (
-        <input type="number" min={min} max={max} className={`${input} w-24`} value={value}
-          onChange={e => onChange(Math.max(min, Math.min(max, parseFloat(e.target.value) || min)))} />
+        <NumberField min={min} max={max} className={`${input} w-24`} value={value} onChange={onChange} />
       )}
     </div>
   );

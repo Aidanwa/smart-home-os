@@ -3,6 +3,7 @@ import type { AttributeInfo, AttributeMap, Scalar, TempUnit, TriggerOp } from '.
 import { EVENT_ATTRIBUTES, displayUnit, formatValue, fromDisplay, toDisplay } from './types';
 import { attributeLabel, findInfo, opText } from './fieldLogic';
 import { input } from './styles';
+import { NumberField } from './NumberField';
 
 export function DeviceAttributePicker({ attributes, device, attribute, onPick }: {
   attributes: AttributeMap;
@@ -60,9 +61,10 @@ export function ValueInput({ info, value, onChange, tempUnit }: {
     const unit = displayUnit(info?.unit, tempUnit);
     return (
       <div className="flex items-center gap-2">
-        <input type="number" step="any" className={input}
-          value={typeof value === 'number' ? toDisplay(value, info?.unit, tempUnit) : ''}
-          onChange={e => e.target.value !== '' && onChange(fromDisplay(parseFloat(e.target.value), info?.unit, tempUnit))} />
+        <NumberField className={input}
+          value={typeof value === 'number' ? toDisplay(value, info?.unit, tempUnit) : null}
+          allowNegative={info?.unit === '°C' || (info?.value_min ?? 0) < 0}
+          onChange={n => onChange(fromDisplay(n, info?.unit, tempUnit))} />
         {unit && <span className="text-xs text-neutral-400 shrink-0 w-10">{unit}</span>}
       </div>
     );

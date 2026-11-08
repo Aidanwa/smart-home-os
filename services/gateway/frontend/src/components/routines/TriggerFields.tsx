@@ -4,6 +4,7 @@ import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDis
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, isNumericOp, opsFor } from './fieldLogic';
 import { card, chip, iconBtn, input } from './styles';
+import { NumberField } from './NumberField';
 
 export function DayChips({ days, onChange, allowNull = true }: { days: Day[] | null; onChange: (d: Day[] | null) => void; allowNull?: boolean }) {
   const on = days ?? DAYS;
@@ -68,11 +69,8 @@ function SunRow({ trigger, onChange, onRemove }: { trigger: SunTrigger; onChange
     <div className={card}>
       <RowHeader title="Sunrise / sunset" onRemove={onRemove} />
       <div className="flex flex-wrap items-center gap-2">
-        <input type="number" min={0} max={720} className={`${input} w-20`} value={mins}
-          onChange={e => {
-            const m = Math.max(0, Math.min(720, parseInt(e.target.value) || 0));
-            onChange({ ...trigger, offset_min: before ? -m : m });
-          }} />
+        <NumberField integer min={0} max={720} className={`${input} w-20`} value={mins}
+          onChange={m => onChange({ ...trigger, offset_min: before ? -m : m })} />
         <span className="text-sm text-neutral-400">min</span>
         <select className={`${input} w-28`} value={before ? 'before' : 'after'}
           onChange={e => onChange({ ...trigger, offset_min: e.target.value === 'before' ? -mins : mins })}>
@@ -98,8 +96,8 @@ function MinutesField({ text, seconds, onChange, hint }: { text: string; seconds
       </label>
       {seconds !== null && seconds > 0 && (
         <div className="flex items-center gap-2 mt-1.5">
-          <input type="number" min={0.1} step="any" className={`${input} w-24`} value={Math.round((seconds / 60) * 100) / 100}
-            onChange={e => onChange(Math.max(1, Math.min(86400, Math.round((parseFloat(e.target.value) || 0) * 60))))} />
+          <NumberField min={0.02} max={1440} className={`${input} w-24`} value={Math.round((seconds / 60) * 100) / 100}
+            onChange={m => onChange(Math.max(1, Math.min(86400, Math.round(m * 60))))} />
           <span className="text-xs text-neutral-400">minutes</span>
         </div>
       )}
@@ -162,11 +160,8 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
               </label>
               {trigger.rearm !== null && (
                 <div className="flex items-center gap-2 mt-1.5">
-                  <input type="number" min={0.1} step="any" className={`${input} w-24`} value={deltaToDisplay(trigger.rearm, unit, ctx.tempUnit)}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value);
-                      if (v > 0) onChange({ ...trigger, rearm: deltaFromDisplay(v, unit, ctx.tempUnit) });
-                    }} />
+                  <NumberField min={0.01} className={`${input} w-24`} value={deltaToDisplay(trigger.rearm, unit, ctx.tempUnit)}
+                    onChange={v => onChange({ ...trigger, rearm: deltaFromDisplay(v, unit, ctx.tempUnit) })} />
                   <span className="text-xs text-neutral-400">{displayUnit(unit, ctx.tempUnit)}</span>
                 </div>
               )}
