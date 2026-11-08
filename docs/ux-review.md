@@ -9,21 +9,21 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] **Failed commands are silent.** `sendCommand` ignores the response, so `device_control`'s 502/504 vanish. No pending state on toggles; rename and group add/remove give no feedback. Needs a pending state on the card plus an error toast.
 - [x] **Settings has no padding and can't scroll.** `App.tsx` renders `<SettingsView />` straight into the `overflow-hidden` `<main>` without the `overflow-y-auto p-6` wrapper other tabs have. Its five sub-tabs also overflow horizontally on phones. *(Fixed 2026-11-08: padded scrolling wrapper; short sub-tab labels that scroll sideways.)*
 - [x] **iOS zooms on every text field.** Inputs are `text-sm` (14px); Safari zooms on focus below 16px. Affects `routines/styles.ts` `input`, the chat box, settings, modals. Use `text-base` on mobile. *(Fixed 2026-11-08: one rule in `index.css` raises `text-sm`/`text-xs` fields to 16px on touch screens.)*
-- [ ] **Light sliders.** 1px track under an invisible range input; commits only on `mouseup`/`touchend`, so keyboard changes never send (`ColorLightCard.tsx`). Use the shadcn Slider with `onValueCommit`.
-- [ ] **Controls that do nothing.** "Power On Behavior" chips (`ColorLightCard.tsx`), firmware "Install" (`DeviceConfigDrawer.tsx`), the "Coming Soon" providers. The Admin tab is a placeholder (planned in todo.md); hide it until it has content.
+- [x] **Light sliders.** 1px track under an invisible range input; commits only on `mouseup`/`touchend`, so keyboard changes never send (`ColorLightCard.tsx`). Use the shadcn Slider with `onValueCommit`. *(Fixed 2026-11-08: Radix slider, 32px touch row, sends on release or key press, value shown beside it.)*
+- [x] **Controls that do nothing.** "Power On Behavior" chips (`ColorLightCard.tsx`), firmware "Install" (`DeviceConfigDrawer.tsx`), the "Coming Soon" providers. The Admin tab is a placeholder (planned in todo.md); hide it until it has content. *(Fixed 2026-11-08: chips and Coming Soon options removed; Install became "Install from Zigbee2MQTT"; Admin hidden.)*
 - [ ] **Add Room width/height clamp on every keystroke** (`AddRoomModal.tsx`). Use `NumberField`.
 
 ## Home / devices
 
-- [ ] Only the small power icon toggles; make the whole card the toggle and keep ⋯ for settings.
-- [ ] Classification disagrees: `getDeviceCategory` checks lights first, `DeviceRenderer` checks sensors first, so a device with brightness and temperature sits under Lights but renders as a sensor card.
-- [ ] Devices without `state` (remotes, motion/contact sensors) fall through to `BasicSwitchCard`, which shows a power button that sends `ON`, and their real readings (occupancy, contact, action) aren't shown.
-- [ ] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card.
+- [x] Only the small power icon toggles; make the whole card the toggle and keep ⋯ for settings. *(Done 2026-11-08.)*
+- [x] Classification disagrees: `getDeviceCategory` checks lights first, `DeviceRenderer` checks sensors first, so a device with brightness and temperature sits under Lights but renders as a sensor card. *(Fixed 2026-11-08: one `getDeviceKind` in `lib/deviceUtils.ts` drives both.)*
+- [x] Devices without `state` (remotes, motion/contact sensors) fall through to `BasicSwitchCard`, which shows a power button that sends `ON`, and their real readings (occupancy, contact, action) aren't shown. *(Fixed 2026-11-08: `SensorCard` (open/closed, motion, leak, temperature, tamper) and `RemoteCard` (last press); unknown devices get no power button.)*
+- [ ] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card. *(Low-battery badge done 2026-11-08; offline still open, Z2M doesn't publish `last_seen` here.)*
 - [ ] Home groups by device type although rooms exist. Grouping by room, with per-room and whole-house "All off", matches how it's used.
 - [ ] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown.
 - [ ] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted.
 - [ ] No loading or empty state (blank before the first fetch, nothing for zero devices).
-- [ ] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin.
+- [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(Now 2200–6500 K.)*
 
 ## Groups
 
@@ -53,7 +53,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 - [x] Jargon throughout: "Authenticate Dashboard Context", "Initialize", "Identity modifications pushed correctly", "Save Orchestrator Context", "Checking structural configuration context…". One plain-language pass. *(Done 2026-11-08: login, all Settings tabs, health popover, Rooms, delete/remove dialogs, chat empty state. The empty Admin tab is hidden.)*
 - [ ] Registering doesn't sign you in.
-- [ ] Spotify OAuth returns to the Home tab; the callback is only processed once Settings is opened (`SettingsView.tsx`), so linking looks like it failed. Disconnect has no confirm; "Connecting…" progress is styled as a green success.
+- [ ] ~~Spotify OAuth returns to the Home tab; the callback is only processed once Settings is opened (`SettingsView.tsx`), so linking looks like it failed.~~ (fixed with the URL tabs) Disconnect has no confirm; "Connecting…" progress is styled as a green success.
 - [ ] Home profile: only 7 US timezones; no feedback on whether the address geocoded (sun triggers depend on it); "Reset Configuration" uses `window.confirm` and doesn't warn that sun routines and Rooms break.
 - [ ] The personal API key field is shown (disabled) even when the system key is selected.
 - [ ] System health indicator is `hidden md:flex` and hover-only, so phones never see it. Messages are technical.
@@ -62,7 +62,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 ## Routines (in good shape)
 
 - [ ] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`).
-- [ ] Closing the editor sheet discards unsaved edits without asking.
+- [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
 - [ ] Icon buttons and chips are ~28px, below a 44px touch target.
 
 ## Cross-cutting
@@ -71,8 +71,8 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] Tooltips are hover-only (useless on touch) and icon buttons lack `aria-label`.
 - [ ] ~8 hand-rolled modals: none close on Escape, none trap focus. Move to shadcn `Dialog` / `AlertDialog`, which also replaces the `window.confirm` calls.
 - [ ] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above.
-- [ ] Tabs aren't in the URL: refresh always lands on Home, Back leaves the app, no deep links. A `#routines` hash is cheap.
-- [ ] No PWA manifest and no `viewport-fit=cover` / safe-area padding, so the bottom nav can sit under the iPhone home indicator.
+- [x] Tabs aren't in the URL: refresh always lands on Home, Back leaves the app, no deep links. A `#routines` hash is cheap. *(Done 2026-11-08; the Spotify sign-in return now lands on Settings, so the callback runs.)*
+- [ ] No PWA manifest and no `viewport-fit=cover` / safe-area padding, so the bottom nav can sit under the iPhone home indicator. *(Safe-area padding done 2026-11-08; manifest still open.)*
 
 ## Suggested order
 

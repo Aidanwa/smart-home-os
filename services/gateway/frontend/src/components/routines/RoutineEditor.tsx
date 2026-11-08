@@ -24,12 +24,18 @@ interface Props {
   onSave: (spec: RoutineSpec) => Promise<string | null>;
   onDelete?: () => Promise<void>;
   onCancel: () => void;
+  /** Told whenever the form starts or stops differing from what was saved. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const addBtn = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
 
-export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, onSave, onDelete, onCancel }: Props) {
+export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, onSave, onDelete, onCancel, onDirtyChange }: Props) {
   const [spec, setSpec] = useState<RoutineSpec>(initial);
+  // Snapshot once: the parent builds `initial` afresh on every render (and a new routine gets new ids).
+  const [initialJson] = useState(() => JSON.stringify(initial));
+  const dirty = JSON.stringify(spec) !== initialJson;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pv, setPv] = useState<{ result: PreviewResult | null; error: string | null }>({ result: null, error: null });

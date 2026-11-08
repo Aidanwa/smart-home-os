@@ -59,7 +59,7 @@ export function SettingsView() {
 
       if (res.ok) {
         setVaultStatus({ type: 'success', message: 'Spotify is linked. The agent and routines can now play music.' });
-        window.history.replaceState({}, document.title, window.location.pathname);
+        window.history.replaceState({}, document.title, window.location.pathname + '#settings');
       } else {
         const data = await res.json();
         setVaultStatus({ type: 'error', message: data.detail || 'Couldn’t link Spotify. Try again.' });

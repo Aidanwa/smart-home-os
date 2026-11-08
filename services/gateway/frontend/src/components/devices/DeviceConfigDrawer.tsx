@@ -160,9 +160,9 @@ export function DeviceConfigDrawer({
               <div className="flex items-center justify-between bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 col-span-2">
                 <div className="flex items-center gap-2 text-yellow-500">
                   <Download size={16} />
-                  <span className="font-medium text-sm">Firmware Update</span>
+                  <span className="font-medium text-sm">Firmware update available</span>
                 </div>
-                <button className="text-xs font-bold text-yellow-400 bg-yellow-500/20 px-3 py-1 rounded-lg">Install</button>
+                <span className="text-xs text-yellow-400/80">Install from Zigbee2MQTT</span>
               </div>
             )}
           </div>

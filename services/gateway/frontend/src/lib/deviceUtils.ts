@@ -1,11 +1,43 @@
 import type { DeviceState } from '../hooks/useDevices';
 
-export type DeviceCategory = 'Lights' | 'Smart Plugs' | 'Sensors' | 'Switches' | 'Other';
+export type DeviceCategory = 'Lights' | 'Smart Plugs' | 'Sensors' | 'Remotes' | 'Switches' | 'Other';
+
+/** What a device is, judged from the fields it reports. Both the Home sections and the card
+ *  renderer use this, so a device can't be listed as one thing and drawn as another. */
+export type DeviceKind = 'light' | 'plug' | 'climate' | 'sensor' | 'remote' | 'switch' | 'other';
+
+/** Event-style sensor readings, in the order a card shows them. */
+export const SENSOR_FIELDS = ['contact', 'occupancy', 'water_leak', 'smoke', 'vibration'] as const;
+
+export function getDeviceKind(state: DeviceState): DeviceKind {
+  if (state.brightness !== undefined || state.color_temp !== undefined) return 'light';
+  if (typeof state.state === 'string' && (state.power !== undefined || state.energy !== undefined)) return 'plug';
+  if (typeof state.state === 'string') return 'switch';
+  if (SENSOR_FIELDS.some((f) => state[f] !== undefined)) return 'sensor';
+  if (state.temperature !== undefined || state.humidity !== undefined) return 'climate';
+  if ('action' in state) return 'remote';
+  return 'other';
+}
+
+const CATEGORY: Record<DeviceKind, DeviceCategory> = {
+  light: 'Lights',
+  plug: 'Smart Plugs',
+  switch: 'Switches',
+  sensor: 'Sensors',
+  climate: 'Sensors',
+  remote: 'Remotes',
+  other: 'Other',
+};
 
 export function getDeviceCategory(state: DeviceState): DeviceCategory {
-  if (state.brightness !== undefined || state.color_temp !== undefined) return 'Lights';
-  if (state.power !== undefined || state.energy !== undefined) return 'Smart Plugs';
-  if (state.temperature !== undefined || state.humidity !== undefined) return 'Sensors';
-  if (state.state !== undefined) return 'Switches';
-  return 'Other';
+  return CATEGORY[getDeviceKind(state)];
 }
+
+/** Battery-powered devices that need attention soon. */
+export function isBatteryLow(state: DeviceState): boolean {
+  return state.battery_low === true || (typeof state.battery === 'number' && state.battery <= 15);
+}
+
+/** Colour temperature: Z2M speaks mired, people speak Kelvin. */
+export const miredToKelvin = (m: number) => Math.round(1_000_000 / m / 50) * 50;
+export const kelvinToMired = (k: number) => Math.round(1_000_000 / k);

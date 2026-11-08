@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'; // ADDED HOOKS
 import { GhostRoom } from './GhostRoom';
 import { ResizableRoom } from './ResizableRoom';
 import type { LogicalZone, DevicePlacement } from '../types';
+import { ftToPx } from '../constants';
 
 interface FloorStageProps {
   // ... (keep your existing props interface exactly as is)
@@ -31,18 +32,24 @@ export function FloorStage(props: FloorStageProps) {
   const [hasInitialized, setHasInitialized] = useState(false);
   const stageRef = useRef<any>(null);
 
-  // --- 2. NEW: Auto-Fit on mount for mobile ---
+  // --- 2. Fit the rooms to the screen once, when the real size is known ---
+  // (Shrinks to fit on phones; never zooms in past 100% on big screens.)
   useEffect(() => {
-    if (width > 0 && height > 0 && !hasInitialized) {
-      if (width < 768) {
-        const fitScale = width / 1200; 
-        setStageScale(fitScale);
-        // Center the scaled map roughly on screen
-        setStagePos({ x: width * 0.05, y: height * 0.1 });
-      }
-      setHasInitialized(true);
+    if (width <= 0 || height <= 0 || hasInitialized) return;
+    const all = [...props.zones, ...props.baseFloorZones];
+    if (all.length) {
+      const minX = Math.min(...all.map(z => ftToPx(z.pos_x)));
+      const minY = Math.min(...all.map(z => ftToPx(z.pos_y)));
+      const maxX = Math.max(...all.map(z => ftToPx(z.pos_x + z.width)));
+      const maxY = Math.max(...all.map(z => ftToPx(z.pos_y + z.height)));
+      const pad = 24;
+      const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+      const scale = Math.min(1, (width - 2 * pad) / bw, (height - 2 * pad) / bh);
+      setStageScale(scale);
+      setStagePos({ x: (width - bw * scale) / 2 - minX * scale, y: (height - bh * scale) / 2 - minY * scale });
     }
-  }, [width, height, hasInitialized]);
+    setHasInitialized(true);
+  }, [width, height, hasInitialized, props.zones, props.baseFloorZones]);
 
   // --- 3. NEW: Desktop Wheel Zoom ---
   const handleWheel = (e: any) => {

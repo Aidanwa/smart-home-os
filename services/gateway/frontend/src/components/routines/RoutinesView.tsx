@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Copy, History, Pencil, Play, Plus, Workflow } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
@@ -25,6 +25,15 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
   const ctx = { attributes, tempUnit };
   const [panel, setPanel] = useState<Panel>(null);
+  // Closing the editor by swiping, tapping outside or Escape asks first if there are unsaved edits.
+  // (Cancel, Save and Delete close it directly.)
+  const editorDirty = useRef(false);
+  const setEditorDirty = useCallback((d: boolean) => { editorDirty.current = d; }, []);
+  const closePanel = () => { editorDirty.current = false; setPanel(null); };
+  const requestClose = () => {
+    if (editorDirty.current && !window.confirm('Discard your changes to this routine?')) return;
+    closePanel();
+  };
   const [notice, setNotice] = useState<{ id: string; text: string; bad: boolean } | null>(null);
 
   const flash = (id: string, text: string, bad: boolean) => {
@@ -125,7 +134,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
         </div>
       )}
 
-      <Sheet open={panel !== null} onOpenChange={open => !open && setPanel(null)}>
+      <Sheet open={panel !== null} onOpenChange={open => !open && requestClose()}>
         <SheetContent className={sheetClass}>
           {panel?.kind === 'edit' && (
             <>
@@ -145,11 +154,12 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                 preview={preview}
                 onSave={async spec => {
                   const err = await save(spec, editing?.id);
-                  if (!err) setPanel(null);
+                  if (!err) closePanel();
                   return err;
                 }}
-                onDelete={editing ? async () => { await remove(editing.id); setPanel(null); } : undefined}
-                onCancel={() => setPanel(null)}
+                onDelete={editing ? async () => { await remove(editing.id); closePanel(); } : undefined}
+                onCancel={closePanel}
+                onDirtyChange={setEditorDirty}
               />
             </>
           )}

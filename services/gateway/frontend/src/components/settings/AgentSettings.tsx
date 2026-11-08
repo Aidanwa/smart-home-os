@@ -137,9 +137,7 @@ export function AgentSettings() {
               onChange={(e) => setProvider(e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-sm text-neutral-200 focus:outline-none focus:border-neutral-600 transition-colors"
             >
-              <option value="openai">OpenAI (Cloud)</option>
-              <option value="anthropic" disabled>Anthropic (Coming Soon)</option>
-              <option value="ollama" disabled>Ollama (Local - Coming Soon)</option>
+              <option value="openai">OpenAI</option>
             </select>
           </div>
 

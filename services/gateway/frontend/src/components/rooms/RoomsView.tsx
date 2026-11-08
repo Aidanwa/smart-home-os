@@ -78,10 +78,7 @@ export function RoomsView({
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
   const [stageSize, setStageSize] =
-    useState({
-      width: 1200,
-      height: 800,
-    });
+    useState({ width: 0, height: 0 });  // 0 until measured; the stage waits for it
 
   useEffect(() => {
     if (!container) return;
@@ -260,7 +257,7 @@ export function RoomsView({
             onChange={setCurrentFloor}
           />
 
-          {isLoading ? (
+          {isLoading || stageSize.width === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-neutral-500 text-sm animate-pulse">
                 Loading rooms…
@@ -268,6 +265,7 @@ export function RoomsView({
             </div>
           ) : (
             <FloorStage
+              key={currentFloor}  // re-fit the view when switching floors
               width={stageSize.width}
               height={stageSize.height}
               zones={zones}

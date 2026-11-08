@@ -1,10 +1,10 @@
 // services/gateway/frontend/src/App.tsx
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useDevices } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { 
   Radio,
-  Lightbulb, Zap, Thermometer, ToggleRight, Box
+  Lightbulb, Zap, Thermometer, ToggleRight, Box, Gamepad2
 } from 'lucide-react';
 import { getDeviceCategory } from './lib/deviceUtils';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
@@ -19,12 +19,33 @@ import { RoomsView } from './components/rooms/RoomsView';
 import { RoutinesView } from './components/routines/RoutinesView';
 import { useRoutineAlerts } from './hooks/useRoutines';
 
+const TABS = ['home', 'agent', 'rooms', 'routines', 'settings'] as const;
+type Tab = typeof TABS[number];
+
+/** The tab lives in the URL hash (#routines), so refresh, Back and links work. Spotify's
+ *  sign-in comes back with ?code=..., which Settings handles, so land there. */
+function tabFromUrl(): Tab {
+  if (new URLSearchParams(window.location.search).has('code')) return 'settings';
+  const h = window.location.hash.slice(1);
+  return (TABS as readonly string[]).includes(h) ? (h as Tab) : 'home';
+}
+
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
   const { devices, realtime, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'home' | 'agent' | 'rooms' | 'routines' | 'settings'>('home');
+  const [activeTab, setTabState] = useState<Tab>(tabFromUrl);
+  useEffect(() => {
+    const onHash = () => setTabState(tabFromUrl());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  // Each tab change is a history entry (via hashchange), so the phone's Back goes to the previous tab.
+  const setActiveTab = (tab: Tab) => {
+    if (tab === activeTab) return;
+    window.location.hash = tab;
+  };
   const routineAlerts = useRoutineAlerts(activeTab === 'routines');
   const [dashboardView, setDashboardView] = useState<'devices' | 'groups'>('devices');
   const [isPairing, setIsPairing] = useState(false);
@@ -97,7 +118,8 @@ function AuthenticatedDashboard() {
     const groups: Record<string, DeviceSection> = {
       'Lights': { id: 'lights', title: 'Lights', icon: <Lightbulb size={18} />, devices: [] },
       'Smart Plugs': { id: 'plugs', title: 'Smart Plugs', icon: <Zap size={18} />, devices: [] },
-      'Sensors': { id: 'sensors', title: 'Environment', icon: <Thermometer size={18} />, devices: [] },
+      'Sensors': { id: 'sensors', title: 'Sensors', icon: <Thermometer size={18} />, devices: [] },
+      'Remotes': { id: 'remotes', title: 'Remotes', icon: <Gamepad2 size={18} />, devices: [] },
       'Switches': { id: 'switches', title: 'Switches', icon: <ToggleRight size={18} />, devices: [] },
       'Other': { id: 'other', title: 'Other Devices', icon: <Box size={18} />, devices: [] }
     };
