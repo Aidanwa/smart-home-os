@@ -24,7 +24,7 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
   ] as const;
 
   return (
-    <nav className={`border-t md:border-t-0 md:border-r border-neutral-800 bg-neutral-950/80 backdrop-blur-md sticky bottom-0 md:top-0 z-40 md:h-screen flex md:flex-col p-2 md:p-4 justify-around md:justify-start gap-1 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'} w-full`}>
+    <nav className={`border-t md:border-t-0 md:border-r border-neutral-800 bg-neutral-950/80 backdrop-blur-md sticky bottom-0 md:top-0 z-40 md:h-screen shrink-0 flex md:flex-col p-2 md:p-4 justify-around md:justify-start gap-1 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'} w-full`}>
       
       {/* Brand Label & Control Header */}
       <div className={`hidden md:flex items-center mb-4 px-2 py-1 w-full ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
