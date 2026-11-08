@@ -13,6 +13,7 @@ import { GroupsView } from './components/groups/GroupsView';
 import { AgentChat } from './components/agent/AgentChat';
 import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
+import { ConnectionBanner } from './components/layout/ConnectionBanner';
 import { SettingsView } from './components/settings/SettingsView';
 import { RoomsView } from './components/rooms/RoomsView';
 import { RoutinesView } from './components/routines/RoutinesView';
@@ -20,7 +21,7 @@ import { useRoutineAlerts } from './hooks/useRoutines';
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
-  const { devices, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
+  const { devices, realtime, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'home' | 'agent' | 'rooms' | 'routines' | 'settings'>('home');
@@ -116,7 +117,8 @@ function AuthenticatedDashboard() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} />
 
       <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden w-full relative">
-        
+        <ConnectionBanner status={realtime} />
+
         {activeTab === 'home' && (
           // CHANGED: Moved the padding and scroll into the specific home container
           <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">

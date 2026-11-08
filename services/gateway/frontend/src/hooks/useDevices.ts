@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { openReconnectingSocket } from '../lib/reconnectingSocket';
 
 export interface DeviceState {
   state?: string;
@@ -10,31 +11,44 @@ export interface DeviceState {
   [key: string]: any;
 }
 
+/** 'lost' = was connected (or never managed to connect) and is retrying; states may be stale. */
+export type RealtimeStatus = 'connecting' | 'open' | 'lost';
+
 export function useDevices() {
   const { authenticatedFetch } = useAuth();
   const [devices, setDevices] = useState<Record<string, DeviceState>>({});
-  const wsRef = useRef<WebSocket | null>(null);
+  const [realtime, setRealtime] = useState<RealtimeStatus>('connecting');
 
-  // 1. Initial REST Fetch (Read Replica)
-  useEffect(() => {
+  // Snapshot of the digital twin. Replaces local state so devices removed while we were
+  // disconnected disappear too.
+  const loadDevices = useCallback(() => {
     authenticatedFetch('/api/devices')
       .then(res => res.json())
       .then(data => {
         if (data.devices) setDevices(data.devices);
       })
       .catch(console.error);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2. Real-Time WebSocket Connection (Event Pipe)
+  // 1. Initial REST fetch, in parallel with the socket for a fast first paint
+  useEffect(() => { loadDevices(); }, [loadDevices]);
+
+  // 2. Real-time event pipe; reconnects on its own (see lib/reconnectingSocket)
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    const sock = openReconnectingSocket('/api/ws', {
+      onOpen: (reconnected) => {
+        setRealtime('open');
+        if (reconnected) {
+          // Updates sent while we were away are gone: resync, and tell the other live views.
+          loadDevices();
+          window.dispatchEvent(new CustomEvent('onRealtimeReconnect'));
+        }
+      },
+      onClose: () => setRealtime('lost'),
+      onMessage: (raw) => handleMessage(JSON.parse(raw)),
+    });
+
+    function handleMessage(data: { type: string; device: string; state?: DeviceState; groups?: unknown }) {
       if (data.type === 'device_update') {
         setDevices(prev => ({
           ...prev,
@@ -56,16 +70,10 @@ export function useDevices() {
           return newDevices;
         });
       }
-    };
+    }
 
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      } else if (ws.readyState === WebSocket.CONNECTING) {
-        ws.onopen = () => ws.close();
-      }
-    };
-  }, []);
+    return () => sock.close();
+  }, [loadDevices]);
 
   // 3. Hardware Write Action
   // We use useCallback so this function reference is stable if passed to deeply nested cards
@@ -123,6 +131,7 @@ export function useDevices() {
 
   return {
     devices,
+    realtime,
     sendCommand,
     toggleDevice,
     renameDevice,

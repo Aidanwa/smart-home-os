@@ -5,7 +5,7 @@ import { ToolCallChip } from './ToolCallChip';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 
 export const AgentChat: React.FC = () => {
-  const { messages, isConnected, isStreaming, sendMessage, DeleteHistory } = useAgentChat();
+  const { messages, isConnected, gaveUp, isStreaming, sendMessage, DeleteHistory } = useAgentChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -35,7 +35,7 @@ export const AgentChat: React.FC = () => {
 
   const handleDelete = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isStreaming || !isConnected) return; 
+    if (isStreaming) return;
     DeleteHistory();
   };
 
@@ -60,9 +60,9 @@ export const AgentChat: React.FC = () => {
             {isConnected && (
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
             )}
-            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isConnected ? 'bg-green-500' : gaveUp ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`}></span>
           </span>
-          <span className="text-neutral-400">{isConnected ? 'Online' : 'Disconnected'}</span>
+          <span className="text-neutral-400">{isConnected ? 'Online' : gaveUp ? 'Disconnected' : 'Reconnecting…'}</span>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export const AgentChat: React.FC = () => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? "Listening... (Speak now)" : isProcessing ? "Transcribing..." : isConnected ? "Message your home agent..." : "Reconnecting..."}
+            placeholder={isListening ? "Listening... (Speak now)" : isProcessing ? "Transcribing..." : isConnected ? "Message your home agent..." : gaveUp ? "Disconnected: reopen the Agent tab to retry" : "Reconnecting..."}
             disabled={!isConnected || isStreaming || isListening || isProcessing}
             className={`w-full bg-neutral-800 border ${isListening ? 'border-red-500/50' : 'border-transparent'} focus:border-neutral-700 rounded-full pl-5 pr-24 py-3 text-sm focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50 transition-all text-neutral-100 placeholder:text-neutral-500`}
           />
@@ -158,7 +158,7 @@ export const AgentChat: React.FC = () => {
           </div>
         </div>
         {/* Delete History Button */}
-        <button type="button" onClick={handleDelete} disabled={!isConnected || isStreaming} className="shrink-0 p-3 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:bg-red-950/30 transition-colors">
+        <button type="button" onClick={handleDelete} disabled={isStreaming} className="shrink-0 p-3 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:bg-red-950/30 transition-colors">
           <Trash size={18} />
         </button>
       </form>

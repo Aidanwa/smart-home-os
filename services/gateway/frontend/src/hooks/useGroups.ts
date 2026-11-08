@@ -39,12 +39,15 @@ export function useGroups() {
     };
 
     window.addEventListener('onGroupsUpdate', handleGroupsSync as EventListener);
-    
+    // Group changes broadcast while the socket was down were missed: refetch.
+    window.addEventListener('onRealtimeReconnect', fetchGroups);
+
     // Cleanup the listener when the component unmounts
     return () => {
       window.removeEventListener('onGroupsUpdate', handleGroupsSync as EventListener);
+      window.removeEventListener('onRealtimeReconnect', fetchGroups);
     };
-  }, []);
+  }, [fetchGroups]);
 
   const createGroup = async (friendly_name: string) => {
     await authenticatedFetch('/api/groups', {

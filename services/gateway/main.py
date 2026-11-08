@@ -14,7 +14,7 @@ import websockets  # Replaces the invalid httpx websocket method
 
 from core.mqtt_bus import AsyncMqttBus
 from api.config import get_config
-from api.routes import router, ws_router
+from api.routes import router, ws_router, WS_KEEPALIVE_S, WS_KEEPALIVE_MSG
 from api.auth_routes import auth_router, platform_router
 from api.integration_routes import integrations_router
 from api.home_routes import router as home_router
@@ -142,54 +142,57 @@ def create_app() -> FastAPI:
     # B. Capture all streaming WebSocket connections cleanly
     @app.websocket("/api/agent/chat/stream")
     async def dynamic_agent_websocket_proxy(websocket: WebSocket):
-        await websocket.accept()
-        
-        # Guard type resolution explicitly to guarantee str type objects exclusively
         raw_cookie = websocket.headers.get("cookie")
-        
-        # Build dict ONLY if a valid non-empty string is present, otherwise force an explicit clean dict
-        additional_headers = {}
-        if raw_cookie and isinstance(raw_cookie, str) and raw_cookie.strip():
-            additional_headers["Cookie"] = str(raw_cookie)
-        
+        additional_headers = {"Cookie": raw_cookie} if raw_cookie and raw_cookie.strip() else None
+
+        # Connect to the agent *before* accepting the browser. If the agent is down (e.g. ~40 s
+        # of Whisper loading after a deploy), the browser's handshake fails and it retries with
+        # backoff, instead of seeing an "open" socket with nothing behind it.
         try:
-            # Connect downstream utilizing a safe dict structure that never passes None values
-            async with websockets.connect(
-                "ws://agent:8001/api/agent/chat/stream", 
-                additional_headers=additional_headers if additional_headers else None
-            ) as target_ws:
-                
-                async def client_to_agent():
-                    try:
-                        while True:
-                            msg = await websocket.receive_text()
-                            await target_ws.send(msg)
-                    except WebSocketDisconnect:
-                        pass
-                    except Exception:
-                        pass
-
-                async def agent_to_client():
-                    try:
-                        while True:
-                            msg = await target_ws.recv()
-                            await websocket.send_text(msg)
-                    except WebSocketDisconnect:
-                        pass
-                    except Exception:
-                        pass
-
-                # Handle bidirectional transportation loops concurrently
-                await asyncio.gather(client_to_agent(), agent_to_client())
-                
+            target_ws = await websockets.connect(
+                "ws://agent:8001/api/agent/chat/stream", additional_headers=additional_headers
+            )
         except Exception as e:
-            logger.error(f"Failed to mount agent tunnel link cross-stream proxy boundary: {str(e)}")
+            logger.warning(f"Agent chat proxy: agent unreachable ({e}); rejecting browser socket")
+            await websocket.close(code=1013)  # before accept() this rejects the handshake
+            return
+
+        await websocket.accept()
+        send_lock = asyncio.Lock()  # keepalives and agent output both write to the browser
+
+        async def client_to_agent():
+            while True:
+                await target_ws.send(await websocket.receive_text())
+
+        async def agent_to_client():
+            while True:
+                msg = await target_ws.recv()
+                async with send_lock:
+                    await websocket.send_text(msg)
+
+        async def keepalive():
+            while True:
+                await asyncio.sleep(WS_KEEPALIVE_S)
+                async with send_lock:
+                    await websocket.send_text(WS_KEEPALIVE_MSG)
+
+        tasks = [asyncio.create_task(c()) for c in (client_to_agent, agent_to_client, keepalive)]
+        try:
+            # Whichever side ends first (browser left, agent restarted, send failed) ends the
+            # session. With gather, an agent restart left the browser side open and "Online".
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await target_ws.close()
+            # Pass on the agent's auth (1008) / config (1011) refusals so the browser doesn't
+            # retry them in a loop; anything else is "service restart" (1012) and it reconnects.
+            code = target_ws.close_code if target_ws.close_code in (1008, 1011) else 1012
             try:
-                await websocket.send_text("\n[System Error: Agent container websocket tunnel handshake failed.]")
-                await websocket.send_text("[DONE]")
-                await websocket.close(code=1011)
-            except:
-                pass
+                await websocket.close(code=code)
+            except Exception:
+                pass  # already closed by the browser
 
     # ----------------------------------------------------------------------
     # STATIC ASSET ROUTING & SPA FALLBACK SHELL

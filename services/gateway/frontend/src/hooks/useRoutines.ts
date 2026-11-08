@@ -47,7 +47,11 @@ export function useRoutines() {
     call('/api/routines').then(apply);
     const onRun = () => refresh();
     window.addEventListener('onRoutineRun', onRun);
-    return () => window.removeEventListener('onRoutineRun', onRun);
+    window.addEventListener('onRealtimeReconnect', onRun);  // runs finished while disconnected
+    return () => {
+      window.removeEventListener('onRoutineRun', onRun);
+      window.removeEventListener('onRealtimeReconnect', onRun);
+    };
   }, [apply, refresh]);
 
   const save = async (spec: RoutineSpec, id?: string) => {

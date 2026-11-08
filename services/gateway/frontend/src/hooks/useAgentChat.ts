@@ -1,6 +1,8 @@
 // services/gateway/frontend/src/hooks/useAgentChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { openReconnectingSocket } from '../lib/reconnectingSocket';
+import type { ReconnectingSocket } from '../lib/reconnectingSocket';
 
 export interface ChatMessage {
   id: string;
@@ -12,17 +14,28 @@ export interface ChatMessage {
   status?: 'pending' | 'completed';
 }
 
+// 1008: the agent refused the session (its auth error message was already shown);
+// 1011: its configuration is broken (e.g. no API key). Retrying can't fix either; the user
+// gets a fresh attempt by reopening the Agent tab.
+const retryable = (code: number) => code !== 1008 && code !== 1011;
+
 export function useAgentChat() {
   // Pruned userId argument: Account parameters are natively resolved via signed ambient tracking cookies
   const { authenticatedFetch } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [isStreaming, setIsStreamingState] = useState(false);
+  const streamingRef = useRef(false);  // readable from socket callbacks without a stale closure
+  const setIsStreaming = (v: boolean) => {
+    streamingRef.current = v;
+    setIsStreamingState(v);
+  };
+  const [gaveUp, setGaveUp] = useState(false);  // stopped retrying (see retryable)
+  const sockRef = useRef<ReconnectingSocket | null>(null);
 
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let isMounted = true; 
+    let sock: ReconnectingSocket | null = null;
+    let isMounted = true;
 
     const initializeChat = async () => {
       // Fetch the conversation history directly from the Agent container
@@ -52,25 +65,36 @@ export function useAgentChat() {
         console.error("Failed to safely load chat history:", err);
       }
 
-      // 2. Open the WebSocket connection utilizing ambient cookie propagation
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/agent/chat/stream`;
-      
-      ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      // 2. Open the socket; it reconnects on its own (agent restarts, phone sleep).
+      if (!isMounted) return;
+      sock = openReconnectingSocket('/api/agent/chat/stream', {
+        onOpen: () => {
+          if (!isMounted) return;
+          setIsConnected(true);
+          setGaveUp(false);
+        },
+        onClose: (code) => {
+          if (!isMounted) return;
+          setIsConnected(false);
+          setGaveUp(!retryable(code));
+          // A reply in flight is lost with the socket; say so instead of leaving a spinner.
+          if (streamingRef.current) {
+            setIsStreaming(false);
+            setMessages(prev => [
+              ...prev.map(m => (m.isStreaming ? { ...m, isStreaming: false } : m)),
+              { id: Date.now().toString(), text: 'Lost the connection to the agent, so that reply may be cut off.', sender: 'system' },
+            ]);
+          }
+        },
+        shouldRetry: retryable,
+        onMessage: handleMessage,
+      });
+      sockRef.current = sock;
+    };
 
-      ws.onopen = () => {
-        if (isMounted) setIsConnected(true);
-      };
-      
-      ws.onclose = () => {
-        if (isMounted) setIsConnected(false);
-      };
-      
-      ws.onmessage = (event) => {
+    const handleMessage = (data: string) => {
         if (!isMounted) return;
-        const data = event.data;
-        
+
         if (data === '[DONE]') {
           setIsStreaming(false);
           setMessages(prev => {
@@ -83,8 +107,10 @@ export function useAgentChat() {
           return;
         }
 
-        if (data.startsWith('[System Error:') || data.startsWith('[Auth Error:')) {
-           setMessages(prev => [...prev, { id: Date.now().toString(), text: data, sender: 'system' }]);
+        // The agent prefixes these with "\n", so trim before matching.
+        const trimmed = data.trimStart();
+        if (/^\[(System|Auth|Configuration) Error:/.test(trimmed)) {
+           setMessages(prev => [...prev, { id: Date.now().toString(), text: trimmed, sender: 'system' }]);
            setIsStreaming(false);
            return;
         }
@@ -134,7 +160,6 @@ export function useAgentChat() {
             return [...prev, { id: Date.now().toString(), text: data, sender: 'agent', isStreaming: true }];
           }
         });
-      };
     };
 
     const initializeAgent = async () => {
@@ -153,20 +178,20 @@ export function useAgentChat() {
 
     return () => {
       isMounted = false;
-      if (ws) ws.close();
+      sock?.close();
+      sockRef.current = null;
     };
-  }, [authenticatedFetch]); // Monitored stable dependencies safely tracking environment shifts
+  }, [authenticatedFetch]);
 
   const sendMessage = useCallback((text: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (sockRef.current?.send(text)) {
       setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'user' }]);
       setIsStreaming(true);
-      wsRef.current.send(text);
     }
   }, []);
 
   const DeleteHistory = useCallback(async () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isStreaming) {
+    if (!streamingRef.current) {  // plain REST call; doesn't need the socket
       try {
         const res = await authenticatedFetch(`/api/agent/chat/history`, { method: 'DELETE' });
         if (res.ok) {
@@ -181,5 +206,5 @@ export function useAgentChat() {
     }
   }, []);
 
-  return { messages, isConnected, isStreaming, sendMessage, DeleteHistory };
+  return { messages, isConnected, gaveUp, isStreaming, sendMessage, DeleteHistory };
 }

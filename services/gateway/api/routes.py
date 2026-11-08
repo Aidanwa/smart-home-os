@@ -22,6 +22,12 @@ from api.auth import get_current_user, get_ws_authenticated_user
 
 logger = logging.getLogger(__name__)
 
+# App-level keepalive for browser WebSockets (/api/ws and the agent chat proxy). Browsers can't
+# see protocol pings, so the frontend watches for this message and reconnects after ~60 s of
+# silence (frontend/src/lib/reconnectingSocket.ts). Keep the literal in sync with KEEPALIVE there.
+WS_KEEPALIVE_S = 25
+WS_KEEPALIVE_MSG = '{"type":"ping"}'
+
 # Change this line in services/gateway/api/routes.py
 router = APIRouter(prefix="/api", tags=["Devices"], dependencies=[Depends(get_current_user)])
 
@@ -584,11 +590,18 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
         
-    bus = websocket.app.state.bus 
+    bus = websocket.app.state.bus
     queue = bus.subscribe()
     try:
         while True:
-            msg = await queue.get()
+            try:
+                msg = await asyncio.wait_for(queue.get(), timeout=WS_KEEPALIVE_S)
+            except asyncio.TimeoutError:
+                # Quiet house: send a keepalive so the browser can tell a live socket from a
+                # half-open one (phone slept, network changed) and reconnect. A failed send
+                # here also drops a dead client's subscriber queue.
+                await websocket.send_text(WS_KEEPALIVE_MSG)
+                continue
             await websocket.send_json(msg)
     except WebSocketDisconnect:
         pass
