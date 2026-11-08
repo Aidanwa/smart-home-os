@@ -12,7 +12,7 @@ export function NoRoomSelectedModal({ onClose }: NoRoomSelectedModalProps) {
         <div className="flex items-center justify-between p-4 border-b border-neutral-800 bg-neutral-900/50">
           <div className="flex items-center gap-2 text-amber-400 font-medium">
             <AlertCircle size={18} />
-            <h2>Placement Error</h2>
+            <h2>Pick a room first</h2>
           </div>
           <button
             onClick={onClose}
@@ -23,7 +23,7 @@ export function NoRoomSelectedModal({ onClose }: NoRoomSelectedModalProps) {
         </div>
 
         <div className="p-5 text-neutral-300 text-sm leading-relaxed">
-          Please select a room on the canvas first before attempting to place a device. Click any room to highlight it, then try again.
+          Tap a room on the floor plan to select it, then tap the device again to put it in that room.
         </div>
 
         <div className="p-4 border-t border-neutral-800 bg-neutral-950 flex justify-end">
@@ -31,7 +31,7 @@ export function NoRoomSelectedModal({ onClose }: NoRoomSelectedModalProps) {
             onClick={onClose}
             className="px-4 py-2 bg-neutral-100 hover:bg-white text-neutral-900 text-sm font-medium rounded-lg transition-colors"
           >
-            Understood
+            OK
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   LucideHome,
@@ -73,7 +73,9 @@ export function RoomsView({
   //
   // Stage sizing
   //
-  const containerRef = useRef<HTMLDivElement>(null);
+  // A callback ref (state, not useRef): the canvas div only mounts after the home
+  // check finishes, so an effect that ran once on first render never saw it.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
   const [stageSize, setStageSize] =
     useState({
@@ -82,6 +84,7 @@ export function RoomsView({
     });
 
   useEffect(() => {
+    if (!container) return;
     const observer =
       new ResizeObserver((entries) => {
         const entry = entries[0];
@@ -94,12 +97,9 @@ export function RoomsView({
         });
       });
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-
+    observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [container]);
 
   //
   // Clear selection when floor changes
@@ -170,8 +170,7 @@ export function RoomsView({
     return (
       <div className="w-full h-full bg-neutral-950 flex items-center justify-center">
         <span className="text-neutral-500 text-sm animate-pulse">
-          Checking structural configuration
-          context…
+          Loading…
         </span>
       </div>
     );
@@ -186,13 +185,13 @@ export function RoomsView({
         </div>
 
         <h3 className="text-neutral-200 font-semibold text-base">
-          Home Context Not Initialized
+          Set up your home first
         </h3>
 
         <p className="text-neutral-500 text-sm max-w-sm leading-relaxed">
-          You must create and save a baseline
-          profile in Home Settings before
-          designing room layout.
+          Add your home profile in Settings → Home
+          (floors and basement) to start
+          drawing rooms.
         </p>
       </div>
     );
@@ -233,7 +232,7 @@ export function RoomsView({
               className="flex items-center gap-1.5 px-3 h-8 rounded bg-emerald-600/20 text-emerald-400 text-xs font-medium disabled:opacity-50 transition-colors"
             >
               <Save size={14} />
-              {isSaving ? 'Saving…' : 'Autosaving soon...'}
+              {isSaving ? 'Saving…' : 'Save now'}
             </button>
           )}
 
@@ -251,7 +250,7 @@ export function RoomsView({
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* Canvas Area */}
-        <div ref={containerRef} className="flex-1 relative overflow-hidden bg-neutral-950" 
+        <div ref={setContainer} className="flex-1 min-h-0 relative overflow-hidden bg-neutral-950" 
           style={{ backgroundImage: 'radial-gradient(circle, #262626 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
           
           <FloorSwitcher
@@ -264,7 +263,7 @@ export function RoomsView({
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-neutral-500 text-sm animate-pulse">
-                Loading spatial data…
+                Loading rooms…
               </span>
             </div>
           ) : (
@@ -300,7 +299,7 @@ export function RoomsView({
                 <Plus size={24} />
               </div>
               <span className="text-neutral-500 text-sm bg-neutral-950/50 px-2 rounded">
-                No rooms plotted. Click "Add Room" to begin.
+                No rooms on this floor yet. Tap “Add Room” to draw one.
               </span>
             </div>
           )}

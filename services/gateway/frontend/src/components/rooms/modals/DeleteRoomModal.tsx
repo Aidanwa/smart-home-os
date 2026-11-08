@@ -5,7 +5,7 @@ export function DeleteRoomModal({ roomName, onClose, onConfirm }: { roomName: st
         <div>
           <h2 className="text-white font-semibold text-lg">Delete Room?</h2>
           <p className="text-neutral-400 text-sm mt-1 leading-relaxed">
-            Are you sure you want to delete <strong className="text-neutral-200">{roomName}</strong>? This will remove the spatial zone, but devices inside will not be deleted from the network.
+            Are you sure you want to delete <strong className="text-neutral-200">{roomName}</strong>? It’s removed from the floor plan. Its devices aren’t affected; they just become unplaced.
           </p>
         </div>
         <div className="flex gap-3">

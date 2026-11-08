@@ -45,7 +45,7 @@ export function DevicePanel({ devices, placements, zones, onDeviceClick }: Devic
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-neutral-950 border-l border-neutral-800 flex flex-col items-center py-4 shrink-0 transition-all duration-300">
+      <div className="w-full md:w-12 bg-neutral-950 border-t md:border-t-0 md:border-l border-neutral-800 flex md:flex-col items-center justify-end md:justify-start px-2 md:px-0 py-1 md:py-4 shrink-0 transition-all duration-300">
         <button onClick={() => setIsCollapsed(false)} className="p-2 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-md transition-colors">
           <PanelRightOpen size={18} />
         </button>
@@ -54,9 +54,10 @@ export function DevicePanel({ devices, placements, zones, onDeviceClick }: Devic
   }
 
   return (
-    <div className="w-64 bg-neutral-950 border-l border-neutral-800 flex flex-col h-full shrink-0 transition-all duration-300">
+    // Phones: a strip under the floor plan, at most 40% of the height. Desktop: a sidebar.
+    <div className="w-full md:w-64 max-h-[40%] md:max-h-none bg-neutral-950 border-t md:border-t-0 md:border-l border-neutral-800 flex flex-col md:h-full shrink-0 transition-all duration-300">
       <div className="p-3 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/20">
-        <h2 className="text-sm font-semibold text-neutral-200">Device Roster</h2>
+        <h2 className="text-sm font-semibold text-neutral-200">Devices</h2>
         <button onClick={() => setIsCollapsed(true)} className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-md transition-colors">
           <PanelRightClose size={16} />
         </button>
