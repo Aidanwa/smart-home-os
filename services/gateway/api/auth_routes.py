@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from collections import deque
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel, Field
@@ -67,8 +70,37 @@ async def register_user(request: UserAuthRequest, db: AsyncSession = Depends(get
     logger.info(f"New user registered with username: {request.username} and ID: {new_user.id}")
     return {"status": "success", "message": f"Identity '{request.username}' initialized successfully."}
 
+LOGIN_RATE_LIMIT = 10        # attempts...
+LOGIN_RATE_WINDOW = 60.0     # ...per this many seconds, per client IP
+_login_attempts: dict[str, deque[float]] = {}
+
+def _check_login_rate(client_ip: str) -> None:
+    """Sliding-window limiter, in memory (single uvicorn worker). Counts every
+    attempt, successful or not. Resets on gateway restart, which is acceptable."""
+    now = time.monotonic()
+    cutoff = now - LOGIN_RATE_WINDOW
+
+    # Drop IPs whose window has fully expired so the dict can't grow unbounded.
+    for ip in [ip for ip, q in _login_attempts.items() if q[-1] < cutoff]:
+        del _login_attempts[ip]
+
+    attempts = _login_attempts.setdefault(client_ip, deque())
+    while attempts and attempts[0] < cutoff:
+        attempts.popleft()
+
+    if len(attempts) >= LOGIN_RATE_LIMIT:
+        retry_after = int(attempts[0] + LOGIN_RATE_WINDOW - now) + 1
+        logger.warning(f"Login rate limit hit for {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Try again in a minute.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    attempts.append(now)
+
 @auth_router.post("/login")
-async def login_user(request: UserAuthRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login_user(request: UserAuthRequest, response: Response, http_request: Request, db: AsyncSession = Depends(get_db)):
+    _check_login_rate(http_request.client.host if http_request.client else "unknown")
     result = await db.execute(select(User).where(User.username == request.username))
     user = result.scalar_one_or_none()
     

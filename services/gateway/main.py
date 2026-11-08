@@ -3,6 +3,7 @@ import logging
 import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -197,14 +198,18 @@ def create_app() -> FastAPI:
         
         app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
         
+        dist_root = Path(FRONTEND_DIST).resolve()
+
         @app.get("/{catchall:path}")
         async def serve_spa(catchall: str):
-            file_path = os.path.join(FRONTEND_DIST, catchall)
-            
-            if os.path.exists(file_path) and os.path.isfile(file_path):
+            # catchall is percent-decoded, so "..%2f" arrives as "../" and an absolute
+            # path would replace dist_root in a join. Resolve and require containment.
+            file_path = (dist_root / catchall).resolve()
+
+            if file_path.is_relative_to(dist_root) and file_path.is_file():
                 return FileResponse(file_path)
-                
-            return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+
+            return FileResponse(dist_root / "index.html")
     else:
         logger.warning(f"Frontend dist folder not found at {FRONTEND_DIST}. Running in API-only mode.")
         
