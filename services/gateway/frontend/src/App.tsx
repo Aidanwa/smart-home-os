@@ -143,9 +143,9 @@ function AuthenticatedDashboard() {
                     <DeviceCategorySection key={section.id} {...section} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} deleteDevice={deleteDevice} />
                   ))}
                 </div>
-                {/* DRAGGABLE FAB CONTROL OVERLAY PANEL */}
+                {/* DRAGGABLE FAB: absolute to <main> (not fixed), so on phones it stays above the bottom nav */}
                 <div 
-                  className="fixed z-50 select-none touch-none"
+                  className="absolute z-30 select-none touch-none"
                   style={{
                     right: `${fabPos.right}px`,
                     bottom: `${fabPos.bottom}px`,
