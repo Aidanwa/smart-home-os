@@ -14,7 +14,12 @@ from scheduler.schema import (DelayAction, DeviceAction, FadeAction, GroupAction
                               SpotifyCtrlAction, SpotifyPlayAction)
 
 GROUP_VERIFY_SECONDS = 3.0
-OVERRIDE_TOLERANCE = 15     # brightness units a stepped fade allows before deciding someone changed the light
+# Manual-change detection for stepped fades. Bulbs report their in-between level during a
+# transition and the final value arrives seconds late (Hue: ~5 s), so a report is only "someone
+# changed it" if it's outside every level we sent in the last REPORT_LAG_S, by OVERRIDE_TOLERANCE,
+# on two checks in a row.
+OVERRIDE_TOLERANCE = 10
+REPORT_LAG_S = 8.0
 MIN_STEP_SECONDS = 2.0
 MIN_RAMP_STEP_SECONDS = 15.0  # be gentle with the Spotify API
 
@@ -140,7 +145,7 @@ class _FadeTarget:
     is_on: bool | None  # None = unknown (group with no reporting members)
     brightness: int | None
     color_temp: int | None
-    overridden: object  # async (last_brightness) -> bool
+    overridden: object  # async (lo, hi) -> bool: is the reported level outside the plausible range?
 
 
 async def _fade_target(ctx: RunContext, a: FadeAction) -> _FadeTarget:
@@ -153,12 +158,12 @@ async def _fade_target(ctx: RunContext, a: FadeAction) -> _FadeTarget:
         async def send(p):
             await device_control.set_device(bus, a.device, p, verify_state=False)
 
-        async def overridden(last):
+        async def overridden(lo, hi):
             now = await _twin(bus, a.device) or {}
             if str(now.get("state", "ON")).upper() == "OFF":
                 return True
             b = now.get("brightness")
-            return isinstance(b, (int, float)) and abs(b - last) > OVERRIDE_TOLERANCE
+            return isinstance(b, (int, float)) and not (lo <= b <= hi)
 
         on = str(st.get("state", "")).upper() == "ON"
         return _FadeTarget(st.get("friendly_name", a.device), send, on,
@@ -171,7 +176,7 @@ async def _fade_target(ctx: RunContext, a: FadeAction) -> _FadeTarget:
     async def send(p):
         await device_control.set_group(bus, name, p)
 
-    async def overridden(_last):  # someone switched the whole group off
+    async def overridden(_lo, _hi):  # someone switched the whole group off
         now = [s for s in [await _twin(bus, m) for m in members] if s and "state" in s]
         return bool(now) and all(str(s["state"]).upper() == "OFF" for s in now)
 
@@ -215,9 +220,17 @@ async def _fade(ctx: RunContext, a: FadeAction):
         interval = max(MIN_STEP_SECONDS, a.duration_s / 50)
         n = max(1, round(a.duration_s / interval))
         last = b0
+        sent = [(time.monotonic(), b0)]
+        suspicious = 0
         for i in range(1, n + 1):
-            if i > 1 and await t.overridden(last):
-                return "ok", {**detail, "stopped_early": f"someone changed the light (step {i - 1} of {n})"}
+            if i > 1:
+                now = time.monotonic()
+                window = [b for ts, b in sent if now - ts <= REPORT_LAG_S]
+                window += [b for ts, b in sent if now - ts > REPORT_LAG_S][-1:]  # the transition still finishing
+                lo, hi = min(window) - OVERRIDE_TOLERANCE, max(window) + OVERRIDE_TOLERANCE
+                suspicious = suspicious + 1 if await t.overridden(lo, hi) else 0
+                if suspicious >= 2:
+                    return "ok", {**detail, "stopped_early": f"someone changed the light (step {i - 1} of {n})"}
             frac = i / n
             if i == n and a.to_brightness == 0:
                 p = {"state": "OFF", "transition": interval}
@@ -227,6 +240,7 @@ async def _fade(ctx: RunContext, a: FadeAction):
                 if a.to_color_temp and ct0:
                     p["color_temp"] = round(ct0 + (a.to_color_temp - ct0) * frac)
             await t.send(p)
+            sent.append((time.monotonic(), last))
             await asyncio.sleep(interval)
         return "ok", {**detail, "steps": n}
 
