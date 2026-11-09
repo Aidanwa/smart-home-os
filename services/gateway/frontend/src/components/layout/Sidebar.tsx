@@ -4,7 +4,8 @@ import {
   Home, Sparkles, Workflow, Settings, 
   PanelLeftClose, PanelLeft, Map,
 } from 'lucide-react';
-import { useSystemHealth } from '../../hooks/useSystemHealth';
+import type { SystemHealth } from '../../hooks/useSystemHealth';
+import { HealthDetails, HealthDot } from './HealthStatus';
 
 interface SidebarProps {
   activeTab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings';
@@ -12,11 +13,11 @@ interface SidebarProps {
   badges?: Partial<Record<'home' | 'agent' | 'rooms' | 'routines', number>>;
   /** A plain dot with its own label, e.g. a new reply from the assistant. */
   dots?: Partial<Record<'home' | 'agent' | 'rooms' | 'routines', string>>;
+  health: SystemHealth;
 }
 
-export function Sidebar({ activeTab, setActiveTab, badges = {}, dots = {} }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, badges = {}, dots = {}, health }: SidebarProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const healthStatus = useSystemHealth();
 
   const navItems = [
     { id: 'home', icon: Home, label: 'Home' },
@@ -36,42 +37,11 @@ export function Sidebar({ activeTab, setActiveTab, badges = {}, dots = {} }: Sid
           </h1>
         )}
         <div className="flex items-center gap-3">
-          {/* Luminous System Health Indicator */}
-          <div className="relative group flex items-center justify-center cursor-help">
-            <div className="relative flex h-2.5 w-2.5">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                healthStatus === 'healthy' ? 'bg-green-400' : healthStatus === 'checking' ? 'bg-yellow-400' : 'bg-red-400'
-              }`} />
-              <div className={`relative inline-flex rounded-full h-2.5 w-2.5 transition-all duration-300 ${
-                healthStatus === 'healthy' 
-                  ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.8)]' 
-                  : healthStatus === 'checking' 
-                  ? 'bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)]' 
-                  : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]'
-              }`} />
-            </div>
-
-            {/* Custom Telemetry Hover Box */}
-            <div className="absolute left-full ml-4 top-0 translate-y-0 hidden group-hover:block bg-neutral-900/95 border border-neutral-800 text-neutral-200 p-4 rounded-xl shadow-2xl z-50 w-80 backdrop-blur-md transition-all duration-200 text-left">
-              <h3 className="text-sm font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
-                <span>Hub status</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${
-                  healthStatus === 'healthy' 
-                    ? 'bg-green-500/10 text-green-400' 
-                    : healthStatus === 'checking' 
-                    ? 'bg-yellow-500/10 text-yellow-400' 
-                    : 'bg-red-500/10 text-red-400'
-                }`}>
-                  {healthStatus}
-                </span>
-              </h3>
-              <p className="text-xs text-neutral-400 leading-relaxed font-sans">
-                {healthStatus === 'healthy' && "Everything is working."}
-                {healthStatus === 'checking' && "Checking…"}
-                {healthStatus === 'mqtt is unhealthy' && "The hub can’t reach the Zigbee network, so devices won’t respond. Check the Mosquitto service, or restart the Pi."}
-                {healthStatus === 'smart home os is unhealthy' && "The hub is up but reporting an error. Check the gateway logs."}
-                {healthStatus === 'unhealthy' && "Can’t reach the hub. Check your Wi-Fi and that Tailscale is connected."}
-              </p>
+          {/* Hub status: hover on desktop. Phones get a tappable dot in the Home header. */}
+          <div className="relative group flex items-center justify-center cursor-help" aria-label={`Hub status: ${health.title}`}>
+            <HealthDot level={health.level} />
+            <div className="absolute left-full ml-4 top-0 hidden group-hover:block bg-neutral-900/95 border border-neutral-800 text-neutral-200 p-4 rounded-xl shadow-2xl z-50 w-80 backdrop-blur-md text-left">
+              <HealthDetails health={health} />
             </div>
           </div>
 

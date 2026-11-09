@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import Any, List
 import asyncio
+import httpx
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -582,6 +583,31 @@ async def get_bridge_health(bus=Depends(get_mqtt_bus)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/status")
+async def get_system_status(bus=Depends(get_mqtt_bus)):
+    """
+    One check for the dashboard's status dot: is Zigbee answering, and is the assistant up?
+    zigbee: ok | unhealthy (Z2M says so) | no_response (Z2M or the MQTT broker is down)
+    agent:  ok | down (e.g. the ~40 s Whisper load after a deploy)
+    """
+    async def zigbee() -> str:
+        try:
+            res = await bus.rpc("zigbee2mqtt/bridge/request/health_check", {})
+            return "ok" if (res.get("data") or {}).get("healthy") else "unhealthy"
+        except Exception:
+            return "no_response"
+
+    async def agent() -> str:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                return "ok" if (await client.get("http://agent:8001/")).status_code == 200 else "down"
+        except Exception:
+            return "down"
+
+    z, a = await asyncio.gather(zigbee(), agent())
+    return {"zigbee": z, "agent": a}
 
 
 @router.post("/bridge/permit_join")

@@ -19,6 +19,8 @@ import { AgentChatProvider, useAgentChat } from './hooks/useAgentChat';
 import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ConnectionBanner } from './components/layout/ConnectionBanner';
+import { HealthButton } from './components/layout/HealthStatus';
+import { useSystemHealth } from './hooks/useSystemHealth';
 import { SettingsView } from './components/settings/SettingsView';
 import { RoomsView } from './components/rooms/RoomsView';
 import { RoutinesView } from './components/routines/RoutinesView';
@@ -60,6 +62,7 @@ function Nav(props: ComponentProps<typeof Sidebar>) {
 function AuthenticatedDashboard() {
   const { devices, loadState, reloadDevices, realtime, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
   const { user } = useAuth();
+  const health = useSystemHealth();  // one poll, shared by the sidebar and the phone header
   
   const [activeTab, setTabState] = useState<Tab>(tabFromUrl);
   useEffect(() => {
@@ -155,7 +158,7 @@ function AuthenticatedDashboard() {
     <div className="flex flex-col-reverse md:flex-row h-[100dvh] bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
       
       {/* Decoupled High-Speed Modular Navigation System */}
-      <Nav activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} />
+      <Nav activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} health={health} />
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden w-full relative">
         <ConnectionBanner status={realtime} />
@@ -167,7 +170,11 @@ function AuthenticatedDashboard() {
           // CHANGED: Moved the padding and scroll into the specific home container
           <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">
             <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-              <h1 className="text-2xl font-medium tracking-tight">Welcome back, {user?.username}</h1>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <h1 className="text-2xl font-medium tracking-tight truncate">Welcome back, {user?.username}</h1>
+                {/* Phones have no sidebar, so the hub status dot lives here. */}
+                <div className="md:hidden -mr-2"><HealthButton health={health} /></div>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 {/* Grouping only applies to the device list; groups have their own order. */}
                 {dashboardView === 'devices' && (

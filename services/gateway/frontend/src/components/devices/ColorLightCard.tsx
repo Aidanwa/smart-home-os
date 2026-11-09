@@ -15,7 +15,7 @@ interface Props {
 }
 
 /** A slider with a big touch target that sends only when you let go (or on each key press). */
-function LightSlider({ label, icon, value, min, max, step, track, onChange, onCommit, valueText, shown }: {
+export function LightSlider({ label, icon, value, min, max, step, track, onChange, onCommit, valueText, shown }: {
   label: string;
   icon: React.ReactNode;
   value: number;

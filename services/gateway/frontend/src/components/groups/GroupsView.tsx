@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Settings2, X, Pencil, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Trash2, Settings2, X, Pencil, Check, Layers, Power, Sun, Loader2, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, ConfirmDialog } from '../ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/sheet';
 import { useGroups } from '../../hooks/useGroups';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { DeviceState } from '../../hooks/useDevices';
 import { DeviceRenderer } from '../devices/DeviceRenderer';
+import { LightSlider } from '../devices/ColorLightCard';
 
 interface Props {
   devices: Record<string, DeviceState>;
@@ -14,23 +16,79 @@ interface Props {
   deleteDevice: (name: string, label?: string) => void;
 }
 
-const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
-  <div className="relative flex items-center justify-center group/tooltip">
-    {children}
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-neutral-800 text-neutral-200 text-xs rounded opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all whitespace-nowrap pointer-events-none z-[100] border border-neutral-700 shadow-xl">
-      {text}
+type Member = [key: string, state: DeviceState];
+
+function membersOf(group: GroupInfo, devices: Record<string, DeviceState>): Member[] {
+  return Object.entries(devices)
+    .filter(([name, state]) => state.ieee_address
+      ? group.members.some(m => m.ieee_address === state.ieee_address)
+      : group.members.some(m => m.name === name))
+    .sort(([a, sa], [b, sb]) => (sa.friendly_name ?? a).localeCompare(sb.friendly_name ?? b));
+}
+
+/** On/off and brightness of a group, worked out from its members' last reported state. */
+function groupState(members: Member[]) {
+  const switchable = members.filter(([, s]) => s.state === 'ON' || s.state === 'OFF');
+  const on = switchable.filter(([, s]) => s.state === 'ON');
+  const dimmable = members.filter(([, s]) => typeof s.brightness === 'number');
+  const lit = on.filter(([, s]) => typeof s.brightness === 'number');
+  const brightness = lit.length
+    ? Math.max(1, Math.round(lit.reduce((sum, [, s]) => sum + (s.brightness as number), 0) / lit.length / 254 * 100))
+    : null;
+  const summary = switchable.length === 0
+    ? (members.length ? `${members.length} device${members.length === 1 ? '' : 's'}` : 'No devices')
+    : on.length === 0 ? 'All off'
+    : on.length === switchable.length ? `All on${brightness ? ` · ${brightness}%` : ''}`
+    : `${on.length} of ${switchable.length} on${brightness ? ` · ${brightness}%` : ''}`;
+  return { anyOn: on.length > 0, canSwitch: switchable.length > 0, canDim: dimmable.length > 0, brightness, summary };
+}
+
+/** Group brightness, sent to the whole group when you let go. Follows the members otherwise. */
+function GroupBrightness({ name, value, onCommit }: { name: string; value: number; onCommit: (pct: number) => void }) {
+  const [v, setV] = useState(value);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) { setSeen(value); setV(value); }  // follow the bulbs when they change elsewhere
+  return (
+    // Keep slider taps from opening the group.
+    <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      <LightSlider
+        label={`${name} brightness`}
+        icon={<Sun size={14} />}
+        value={v} min={1} max={100} step={1}
+        track="bg-gradient-to-r from-neutral-800 to-white"
+        onChange={setV}
+        onCommit={onCommit}
+        valueText={`${v}%`}
+      />
     </div>
-  </div>
-);
+  );
+}
+
+function PowerButton({ name, on, busy, onClick, size = 'md' }: { name: string; on: boolean; busy: boolean; onClick: () => void; size?: 'md' | 'lg' }) {
+  return (
+    <button
+      type="button"
+      aria-label={on ? `Turn off ${name}` : `Turn on ${name}`}
+      aria-pressed={on}
+      disabled={busy}
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      className={`${size === 'lg' ? 'size-12' : 'size-11'} shrink-0 flex items-center justify-center rounded-full border transition-colors disabled:cursor-wait ${
+        on ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/25' : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-700 hover:text-white'
+      }`}
+    >
+      {busy ? <Loader2 size={18} className="animate-spin" /> : <Power size={18} />}
+    </button>
+  );
+}
 
 export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   const { groups, createGroup, deleteGroup, addDeviceToGroup, removeDeviceFromGroup, sendGroupCommand, renameGroup } = useGroups();
-  
+
   const [newGroupName, setNewGroupName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [managingGroup, setManagingGroup] = useState<GroupInfo | null>(null);
-
-  const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const [openGroup, setOpenGroup] = useState<number | null>(null);  // the detail sheet, by group id
+  const [managing, setManaging] = useState(false);                    // add/remove devices, over the sheet
+  const [editingName, setEditingName] = useState(false);
   const [editNameDraft, setEditNameDraft] = useState('');
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
   // Requests in flight, keyed by what they act on, so buttons can't be tapped twice.
@@ -43,15 +101,9 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
     }
   };
 
-  // Keep modal accurate when background WebSocket changes trickle into useGroups()
-  useEffect(() => {
-    if (managingGroup) {
-      const updated = groups.find(g => g.friendly_name === managingGroup.friendly_name);
-      if (updated) setManagingGroup(updated);
-    }
-  }, [groups, managingGroup]);
-
   const visibleGroups = groups.filter(g => !g.friendly_name.includes('default_bind'));
+  // Looked up by id each render, so the sheet follows renames and membership changes.
+  const current = openGroup !== null ? visibleGroups.find(g => g.id === openGroup) ?? null : null;
 
   const handleCreateGroup = () => {
     if (newGroupName.trim()) {
@@ -61,196 +113,209 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
     }
   };
 
-  const handleRenameSubmit = (oldName: string) => {
-    if (editNameDraft.trim() && editNameDraft !== oldName) {
-      renameGroup(oldName, editNameDraft.trim());
-    }
-    setEditingGroup(null);
-  };
+  const setPower = (group: string, on: boolean) =>
+    track(`set:${group}`, () => sendGroupCommand(group, { state: on ? 'ON' : 'OFF' }, `turn ${on ? 'on' : 'off'} ${group}`));
+  const setBrightness = (group: string, pct: number) =>
+    sendGroupCommand(group, { brightness: Math.round(pct / 100 * 254) }, `dim ${group}`);
 
-  const confirmDelete = () => {
-    if (groupToDelete) {
-      deleteGroup(groupToDelete);
-      setGroupToDelete(null);
+  const submitRename = async () => {
+    const name = editNameDraft.trim();
+    setEditingName(false);
+    if (current && name && name !== current.friendly_name) {
+      await renameGroup(current.friendly_name, name);
     }
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500 overflow-x-hidden max-w-full pb-10">
-      
+    <div className="space-y-6 animate-in fade-in duration-500 overflow-x-hidden max-w-full pb-10">
+
       {/* Header & Create Group */}
-      <div className="flex justify-between items-center bg-neutral-900/50 p-4 rounded-2xl border border-neutral-800 shadow-sm">
-        <div>
+      <div className="flex justify-between items-center gap-3 bg-neutral-900/50 p-4 rounded-2xl border border-neutral-800 shadow-sm">
+        <div className="min-w-0">
           <h2 className="text-lg font-medium text-white">Groups</h2>
           <p className="text-sm text-neutral-400">Control multiple devices together</p>
         </div>
         {!isCreating ? (
-          <Tooltip text="Create a group">
-            <button 
-              onClick={() => setIsCreating(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0"
-            >
-              <Plus size={16} /> <span className="hidden sm:inline">New Group</span>
-            </button>
-          </Tooltip>
+          <button
+            onClick={() => setIsCreating(true)}
+            title="Create a group"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 min-h-10 rounded-xl text-sm font-medium transition-colors shrink-0"
+          >
+            <Plus size={16} /> <span className="hidden sm:inline">New group</span><span className="sr-only sm:hidden">New group</span>
+          </button>
         ) : (
           <div className="flex items-center gap-2">
-            <input 
+            <input
               autoFocus
               value={newGroupName}
               onChange={(e) => setNewGroupName(e.target.value)}
               placeholder="e.g. Living Room"
+              aria-label="New group name"
               className="bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white w-32 sm:w-auto"
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateGroup(); if (e.key === 'Escape') setIsCreating(false); }}
             />
-            <Tooltip text="Save new group">
-              <button onClick={handleCreateGroup} className="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-xl text-sm font-medium text-white transition-colors">Save</button>
-            </Tooltip>
-            <Tooltip text="Cancel creation">
-              <button onClick={() => setIsCreating(false)} className="bg-neutral-800 hover:bg-neutral-700 px-3 py-2 rounded-xl text-sm font-medium text-white transition-colors">Cancel</button>
-            </Tooltip>
+            <button onClick={handleCreateGroup} className="bg-blue-600 hover:bg-blue-500 px-3 min-h-10 rounded-xl text-sm font-medium text-white transition-colors">Save</button>
+            <button onClick={() => setIsCreating(false)} className="bg-neutral-800 hover:bg-neutral-700 px-3 min-h-10 rounded-xl text-sm font-medium text-white transition-colors">Cancel</button>
           </div>
         )}
       </div>
 
-      {/* Group Sections */}
-      {visibleGroups.map(group => {
-        const activeDevicesInGroup = Object.entries(devices).filter(([name, state]) => {
-          if (state.ieee_address) {
-            return group.members.some(m => m.ieee_address === state.ieee_address);
-          }
-          return group.members.some(m => m.name === name);
-        });
+      {/* Group cards: tap to see every device in the group */}
+      {visibleGroups.length === 0 ? (
+        <div className="p-8 text-center bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
+          No groups yet. Tap <strong className="text-neutral-300">New group</strong> to make one.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleGroups.map(group => {
+            const members = membersOf(group, devices);
+            const g = groupState(members);
+            const name = group.friendly_name;
+            return (
+              <div
+                key={group.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${name}: ${g.summary}. Open the group`}
+                onClick={() => setOpenGroup(group.id)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenGroup(group.id); } }}
+                className={`relative p-4 rounded-2xl border cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                  g.anyOn ? 'bg-neutral-900 border-neutral-700' : 'bg-neutral-900/40 border-neutral-800 hover:bg-neutral-900/70'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`size-11 shrink-0 rounded-xl flex items-center justify-center ${g.anyOn ? 'bg-yellow-500/10 text-yellow-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                    <Layers size={20} strokeWidth={2.5} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-neutral-100 truncate">{name}</p>
+                    <p className="text-xs text-neutral-400 truncate">{g.summary}</p>
+                  </div>
+                  {g.canSwitch
+                    ? <PowerButton name={name} on={g.anyOn} busy={busy.has(`set:${name}`)} onClick={() => setPower(name, !g.anyOn)} />
+                    : <ChevronRight size={18} className="text-neutral-600" aria-hidden />}
+                </div>
+                {g.anyOn && g.canDim && g.brightness !== null && (
+                  <div className="mt-3">
+                    <GroupBrightness name={name} value={g.brightness} onCommit={pct => setBrightness(name, pct)} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-        return (
-          <div key={group.id} className="space-y-4">
-            {/* Group Header */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 pb-2 border-b border-neutral-800/50 group/header">
-              
-              {/* Title & Rename Input */}
-              <div className="flex items-center gap-2">
-                {editingGroup === group.friendly_name ? (
+      {/* Group detail: every device in the group, with the group's own controls on top.
+          A Sheet (not a Dialog) so a device's settings drawer can open on top of it. */}
+      <Sheet open={!!current} onOpenChange={o => { if (!o) { setOpenGroup(null); setEditingName(false); } }}>
+        <SheetContent
+          // Escape while renaming cancels the rename instead of closing the group.
+          onEscapeKeyDown={e => { if (editingName) { e.preventDefault(); setEditingName(false); } }}
+          className="bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden w-full sm:max-w-2xl p-0 gap-0">
+          {current && (() => {
+            const members = membersOf(current, devices);
+            const g = groupState(members);
+            const name = current.friendly_name;
+            return (<>
+              <SheetHeader className="p-4 pr-14 border-b border-neutral-800 gap-3 text-left">
+                <SheetDescription className="text-xs uppercase tracking-wider text-neutral-500">Group</SheetDescription>
+                {editingName ? (
                   <div className="flex items-center gap-2">
                     <input
                       autoFocus
                       value={editNameDraft}
+                      aria-label="Group name"
                       onChange={(e) => setEditNameDraft(e.target.value)}
-                      className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-xl font-medium tracking-tight focus:outline-none focus:border-blue-500 text-neutral-200 w-40 sm:w-48"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && editingGroup) handleRenameSubmit(editingGroup);
-                        if (e.key === 'Escape') setEditingGroup(null);
-                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitRename(); }}
+                      className="min-w-0 flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-xl font-medium focus:outline-none focus:border-blue-500 text-neutral-100"
                     />
-                    <Tooltip text="Confirm rename">
-                      <button 
-                        onClick={() => editingGroup && handleRenameSubmit(editingGroup)} 
-                        className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10 transition-colors"
-                      >
-                        <Check size={18} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip text="Cancel editing">
-                      <button 
-                        onClick={() => setEditingGroup(null)} 
-                        className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-800 transition-colors"
-                      >
-                        <X size={18} />
-                      </button>
-                    </Tooltip>
+                    <button onClick={submitRename} aria-label="Save name" className="size-10 flex items-center justify-center rounded-lg text-green-400 hover:bg-green-500/10"><Check size={18} /></button>
+                    <button onClick={() => setEditingName(false)} aria-label="Cancel rename" className="size-10 flex items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800"><X size={18} /></button>
                   </div>
                 ) : (
-                  <>
-                    <h3 className="text-xl font-medium tracking-tight text-neutral-200">{group.friendly_name}</h3>
-                    <Tooltip text="Rename group">
-                      <button
-                        onClick={() => {
-                          setEditingGroup(group.friendly_name);
-                          setEditNameDraft(group.friendly_name);
-                        }}
-                        className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                    </Tooltip>
-                  </>
+                  <div className="flex items-center gap-1 min-w-0">
+                    <SheetTitle className="text-xl font-medium text-white truncate">{name}</SheetTitle>
+                    <button onClick={() => { setEditNameDraft(name); setEditingName(true); }} aria-label="Rename group" className="size-10 shrink-0 flex items-center justify-center rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800"><Pencil size={16} /></button>
+                  </div>
                 )}
-              </div>
-              
-              {/* Group Controls */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Tooltip text={`Turn all ${group.friendly_name} devices ON`}>
-                  <button disabled={busy.has(`set:${group.friendly_name}`)} onClick={() => track(`set:${group.friendly_name}`, () => sendGroupCommand(group.friendly_name, { state: 'ON' }, `turn on ${group.friendly_name}`))} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors">All On</button>
-                </Tooltip>
-                <Tooltip text={`Turn all ${group.friendly_name} devices OFF`}>
-                  <button disabled={busy.has(`set:${group.friendly_name}`)} onClick={() => track(`set:${group.friendly_name}`, () => sendGroupCommand(group.friendly_name, { state: 'OFF' }, `turn off ${group.friendly_name}`))} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors sm:mr-2">All Off</button>
-                </Tooltip>
-                <Tooltip text="Add or remove devices">
-                  <button onClick={() => setManagingGroup(group)} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
-                    <Settings2 size={18} />
+
+                <div className="flex items-center gap-3">
+                  {g.canSwitch && <PowerButton size="lg" name={name} on={g.anyOn} busy={busy.has(`set:${name}`)} onClick={() => setPower(name, !g.anyOn)} />}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-neutral-200">{g.summary}</p>
+                    {g.canSwitch && <p className="text-xs text-neutral-500">{g.anyOn ? 'Tap to turn everything off' : 'Tap to turn everything on'}</p>}
+                  </div>
+                  <button onClick={() => setManaging(true)} className="flex items-center gap-1.5 px-3 min-h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm font-medium text-neutral-200">
+                    <Settings2 size={16} /> <span>Devices</span>
                   </button>
-                </Tooltip>
-                <Tooltip text="Delete this group">
-                  <button onClick={() => setGroupToDelete(group.friendly_name)} className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
+                  <button onClick={() => setGroupToDelete(name)} aria-label="Delete this group" className="size-10 shrink-0 flex items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10">
                     <Trash2 size={18} />
                   </button>
-                </Tooltip>
-              </div>
-            </div>
+                </div>
+                {g.anyOn && g.canDim && g.brightness !== null && (
+                  <GroupBrightness name={name} value={g.brightness} onCommit={pct => setBrightness(name, pct)} />
+                )}
+              </SheetHeader>
 
-            {/* Devices in Group Grid */}
-            {activeDevicesInGroup.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {activeDevicesInGroup.map(([name, state]) => (
-                  <DeviceRenderer key={name} name={state.friendly_name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} deleteDevice={deleteDevice} />
-                ))}
+              <div className="p-4">
+                {members.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {members.map(([key, state]) => (
+                      <DeviceRenderer key={key} name={state.friendly_name} state={state} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} deleteDevice={deleteDevice} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm space-y-3">
+                    <p>No devices in this group yet.</p>
+                    <button onClick={() => setManaging(true)} className="inline-flex items-center gap-1.5 px-3 min-h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm font-medium text-neutral-200">
+                      <Plus size={16} /> Add devices
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="p-8 text-center bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
-                No devices in this group yet. Click the options icon to add some.
-              </div>
-            )}
-          </div>
-        );
-      })}
+            </>);
+          })()}
+        </SheetContent>
+      </Sheet>
 
-      {/* Manage Group Modal */}
-      <Dialog open={!!managingGroup} onOpenChange={o => !o && setManagingGroup(null)}>
+      {/* Add or remove devices */}
+      <Dialog open={!!current && managing} onOpenChange={o => !o && setManaging(false)}>
         <DialogContent className="p-0 flex flex-col">
-          {managingGroup && (<>
+          {current && (<>
             <div className="p-4 pr-14 border-b border-neutral-800">
-              <DialogTitle className="truncate">{managingGroup.friendly_name}</DialogTitle>
+              <DialogTitle className="truncate">{current.friendly_name}</DialogTitle>
               <DialogDescription>Add or remove devices.</DialogDescription>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto overflow-x-hidden space-y-2 rounded-b-2xl">
               {Object.entries(devices)
+                .filter(([key]) => key !== 'bridge')
                 .sort(([a, sa], [b, sb]) => (sa.friendly_name ?? a).localeCompare(sb.friendly_name ?? b))
                 .map(([deviceName, state]) => {
                 const target = state.ieee_address || state.friendly_name;
                 const working = busy.has(`member:${target}`);
-                const isInGroup = state.ieee_address 
-                  ? managingGroup.members.some(m => m.ieee_address === state.ieee_address)
-                  : managingGroup.members.some(m => m.name === deviceName);
+                const isInGroup = state.ieee_address
+                  ? current.members.some(m => m.ieee_address === state.ieee_address)
+                  : current.members.some(m => m.name === deviceName);
 
                 return (
-                  <div key={deviceName} className="flex items-center justify-between p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50">
-                    <span className="text-sm font-medium text-neutral-200">{state.friendly_name}</span>
-                    <Tooltip text={isInGroup ? "Remove device from group" : "Add device to group"}>
-                      <button
-                        disabled={working}
-                        onClick={() => {
-                          const group = managingGroup.friendly_name;
-                          const label = state.friendly_name ?? deviceName;
-                          track(`member:${target}`, () => isInGroup
-                            ? removeDeviceFromGroup(group, target, label)
-                            : addDeviceToGroup(group, target, label));
-                        }}
-                        className={`min-w-[4.5rem] disabled:opacity-60 disabled:cursor-wait px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          isInGroup ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
-                        }`}
-                      >
-                        {working ? (isInGroup ? 'Removing…' : 'Adding…') : isInGroup ? 'Remove' : 'Add'}
-                      </button>
-                    </Tooltip>
+                  <div key={deviceName} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50">
+                    <span className="text-sm font-medium text-neutral-200 truncate">{state.friendly_name}</span>
+                    <button
+                      disabled={working}
+                      onClick={() => {
+                        const group = current.friendly_name;
+                        const label = state.friendly_name ?? deviceName;
+                        track(`member:${target}`, () => isInGroup
+                          ? removeDeviceFromGroup(group, target, label)
+                          : addDeviceToGroup(group, target, label));
+                      }}
+                      className={`min-w-[4.5rem] min-h-10 shrink-0 disabled:opacity-60 disabled:cursor-wait px-3 rounded-lg text-xs font-medium transition-colors ${
+                        isInGroup ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
+                      }`}
+                    >
+                      {working ? (isInGroup ? 'Removing…' : 'Adding…') : isInGroup ? 'Remove' : 'Add'}
+                    </button>
                   </div>
                 );
               })}
@@ -266,7 +331,13 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
         description={<>Delete the group <strong className="text-white">{groupToDelete}</strong>? The devices in it aren’t affected.</>}
         confirmLabel="Delete"
         destructive
-        onConfirm={confirmDelete}
+        onConfirm={() => {
+          if (groupToDelete) {
+            deleteGroup(groupToDelete);
+            setOpenGroup(null);
+            setGroupToDelete(null);
+          }
+        }}
       />
     </div>
   );
