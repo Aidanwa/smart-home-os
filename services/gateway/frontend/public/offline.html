@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Smart Home</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #0a0a0a; color: #e5e5e5;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; gap: 14px;
+      padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); }
+    img { width: 72px; height: 72px; border-radius: 16px; opacity: .85; }
+    h1 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+    p { margin: 0; max-width: 22rem; font-size: 15px; line-height: 1.5; color: #a3a3a3; }
+    button { margin-top: 10px; min-height: 44px; padding: 0 22px; border-radius: 12px;
+      border: 1px solid #404040; background: #262626; color: #fafafa; font: inherit; font-size: 15px; }
+    button:active { background: #333; }
+    small { color: #737373; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/icon.svg" alt="" />
+    <h1>Can't reach the hub</h1>
+    <p>Check that you're on Wi-Fi or data and that Tailscale is connected. If it is, the Pi may be restarting; that takes a minute or two.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+    <small id="status">Trying again automatically…</small>
+  </main>
+  <script>
+    // Reload as soon as the hub answers again.
+    async function check() {
+      try {
+        const r = await fetch('/api/system/status', { cache: 'no-store' });
+        if (r.status < 500) location.reload();
+      } catch { /* still unreachable */ }
+    }
+    setInterval(check, 10000);
+    addEventListener('online', check);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  </script>
+</body>
+</html>

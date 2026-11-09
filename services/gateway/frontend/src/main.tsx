@@ -14,3 +14,10 @@ createRoot(document.getElementById('root')!).render(
     <Toaster position="top-center" theme="dark" richColors closeButton />
   </StrictMode>,
 )
+
+// The installed app's service worker (public/sw.js): only shows an offline page when the hub is unreachable.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}

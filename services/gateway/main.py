@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import json
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,9 @@ from api.integration_routes import integrations_router
 from api.home_routes import router as home_router
 from api.zone_routes import router as zone_router
 from api.routine_routes import router as routine_router
+
+# The installed app's manifest (frontend/public); Python doesn't know the extension.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 from scheduler.engine import Scheduler
 
 # Configure the logging format and level
