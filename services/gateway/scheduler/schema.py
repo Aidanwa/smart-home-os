@@ -298,6 +298,7 @@ class AgentAction(_Strict):
     id: ShortId
     type: Literal["agent"]
     prompt: str = Field(min_length=1, max_length=1000)
+    notify: Literal["owner", "everyone"] | None = None  # send the agent's reply as a push notification
     stop_on_error: bool = False
 
 

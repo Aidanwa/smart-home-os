@@ -365,6 +365,19 @@ export function AgentFields({ action, onChange }: { action: AgentAction; onChang
       <textarea className={`${input} min-h-24`} maxLength={1000} value={action.prompt}
         placeholder="e.g. Pick calm music that suits today's weather and play it on Bedroom Speakers."
         onChange={e => onChange({ ...action, prompt: e.target.value })} />
+      <div>
+        <p className="text-xs text-neutral-400 mb-1.5">Send its reply as a notification</p>
+        <div className="flex flex-wrap gap-2">
+          {([[null, 'No'], ['owner', 'To the owner'], ['everyone', 'To everyone']] as const).map(([to, text]) => (
+            <button key={text} type="button" className={chip((action.notify ?? null) === to)} onClick={() => onChange({ ...action, notify: to })}>
+              {text}
+            </button>
+          ))}
+        </div>
+        {action.notify && (
+          <p className="text-xs text-neutral-500 mt-1.5">The agent is told its reply goes to a phone, so it keeps it short. Tapping the notification opens this routine’s history.</p>
+        )}
+      </div>
       <p className="text-xs text-amber-400/90">
         Uses the AI: costs tokens and can do things a little differently each time. Runs at most {AGENT_RUNS_PER_HOUR}× per hour for this routine;
         extra triggers skip this step. Its reply and everything it did show in History.

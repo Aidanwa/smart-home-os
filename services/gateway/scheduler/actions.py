@@ -333,10 +333,25 @@ async def _agent(ctx: RunContext, a: AgentAction):
         used = await store.count_agent_steps(ctx.routine_id, datetime.now(timezone.utc) - timedelta(hours=1))
         if used >= AGENT_RUNS_PER_HOUR:
             return "skipped", {"reason": f"limit reached: the agent runs at most {AGENT_RUNS_PER_HOUR}x per hour per routine"}
-    res = await agent_client.run_agent(ctx.owner_id, a.prompt, ctx.routine_name)
+    res = await agent_client.run_agent(ctx.owner_id, a.prompt, ctx.routine_name, notify=a.notify is not None)
     detail = {"prompt": a.prompt, "reply": res.get("reply", ""), "tool_calls": res.get("tool_calls", [])}
     if res.get("status") != "success":
         raise StepFailed(res.get("message") or "The agent didn't finish", detail)
+    if a.notify is None:
+        return "ok", detail
+    # The agent did its job; a delivery problem makes the step partial, not failed.
+    reply = detail["reply"].strip()
+    if not reply:
+        detail["notify_error"] = "The agent's reply was empty, so nothing was sent"
+        return "partial", detail
+    users = [ctx.owner_id] if a.notify == "owner" else await push.users_with_devices()
+    url = f"/#routines/history/{ctx.routine_id}" if ctx.routine_id else "/"
+    sent = await push.send(users, ctx.routine_name or "Home", reply, url=url, urgency="high")
+    detail["notified"] = {"to": a.notify, **sent}
+    if sent["sent"] == 0:
+        detail["notify_error"] = ("No device has notifications turned on" if sent["devices"] == 0
+                                  else "The push service didn't accept the notification")
+        return "partial", detail
     return "ok", detail
 
 

@@ -117,7 +117,7 @@ Built 2026-11-08 (design history is in git: the old `docs/scheduler-proposal.md`
   - **delay:** up to 12 h.
   - **fade:** `native` hands one transition to the bulb; `stepped` sends steps and stops if someone changes the light. Bulbs report in-between levels and the final value arrives about 5 s late, so a "manual change" means outside every level sent in the last 7 s; on suspicion the fade holds a step before deciding. Fades pass `verify_state=False`. `wait=false` lets later actions run alongside, and the run finishes when the fade does.
   - **spotify_play / spotify_ctrl:** go through the agent as the owner. Volume and shuffle are set before playback. The optional volume ramp stops if the volume is changed by hand or playback stops.
-  - **agent** ("Ask the agent"): an LLM run, capped at `AGENT_RUNS_PER_HOUR = 2` per routine (counted from the run log). Over the cap, the step is `skipped` and the run `partial`.
+  - **agent** ("Ask the agent"): an LLM run, capped at `AGENT_RUNS_PER_HOUR = 2` per routine (counted from the run log). Over the cap, the step is `skipped` and the run `partial`. With `notify` (`owner`/`everyone`) the reply is pushed to phones and the agent gets `ROUTINE_RUN_NOTIFY_NOTE` (write for a phone) instead of the "nobody is reading" note; an empty reply or failed delivery makes the step `partial`.
 - **API:** [api/routine_routes.py](services/gateway/api/routine_routes.py) under `/api/routines`:
   - CRUD, `/{id}/enabled`, `/{id}/run`, `/{id}/runs`, `/{id}/duplicate`.
   - `/preview`: next fire times plus warnings.

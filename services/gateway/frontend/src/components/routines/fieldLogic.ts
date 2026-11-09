@@ -71,7 +71,7 @@ export function newAction(type: Action['type'], id: string, firstDevice: string,
       id, type, speaker: DEFAULT_SPEAKER, uri: '', title: null, volume: null, ramp_to: null, ramp_s: null, shuffle: null, stop_on_error: false,
     };
     case 'spotify_ctrl': return { id, type, cmd: 'pause', speaker: null, volume: null, stop_on_error: false };
-    case 'agent': return { id, type, prompt: '', stop_on_error: false };
+    case 'agent': return { id, type, prompt: '', notify: null, stop_on_error: false };
     case 'notify': return { id, type, title: null, message: '', to: 'owner', stop_on_error: false };
   }
 }

@@ -111,6 +111,11 @@ function StepRow({ step }: { step: RunStep }) {
         {Array.isArray(d.did_not_follow) && <p className="text-amber-400 break-words">Didn't follow: {d.did_not_follow.join(', ')}</p>}
         {notes.map(n => <p key={n} className="text-neutral-500 break-words">{n}</p>)}
         {typeof d.reply === 'string' && d.reply && <p className="text-neutral-300 break-words whitespace-pre-line">“{d.reply}”</p>}
+        {typeof d.notify_error === 'string' && <p className="text-amber-400 break-words">Notification: {d.notify_error}</p>}
+        {!!d.notified && typeof d.notify_error !== 'string' && (() => {
+          const n = d.notified as { to: string; sent: number; devices: number };
+          return <p className="text-neutral-500">Sent as a notification to {n.to === 'everyone' ? 'everyone' : 'the owner'} ({n.sent} of {n.devices} device{n.devices === 1 ? '' : 's'})</p>;
+        })()}
         {Array.isArray(d.tool_calls) && (d.tool_calls as { name: string; ok: boolean | null; error?: string; arguments?: unknown }[]).map((c, i) => (
           <p key={i} className={`break-words ${c.ok === false ? 'text-red-400' : 'text-neutral-500'}`}>
             {c.ok === false ? '✗' : '✓'} {c.name} {c.arguments ? JSON.stringify(c.arguments).slice(0, 160) : ''}{c.error ? ` — ${c.error}` : ''}

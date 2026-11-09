@@ -24,7 +24,7 @@ Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, 
 Built, but nobody has seen it work for real yet:
 
 - **The firmware update badge** on device cards ("Update", "Scheduled", "42%"). No device has had an update waiting.
-- **Notifications** (built 2026-11-09): turning them on in the iPhone app, a test send, tapping one to open the app at the right page, routine failure/missed/partial alerts, the Notify action, and one-time reminders made by the agent ("remind me at 6 to take the bins out").
+- **Notifications** (built 2026-11-09): turning them on in the iPhone app, a test send, tapping one to open the app at the right page, routine failure/missed/partial alerts, the Notify action, Ask the agent replies sent as notifications, and one-time reminders made by the agent ("remind me at 6 to take the bins out").
 
 ## Testing
 
@@ -44,7 +44,6 @@ Ideas considered but not built:
 
 ### Notifications
 
-- A `notify` tool for "Ask the agent" routine runs ("every morning, summarise the weather and notify me").
 - Message templates with live values ("Freezer is {temperature}°").
 - The app icon badge (`setAppBadge`) for unseen routine problems.
 

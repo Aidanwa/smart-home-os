@@ -104,7 +104,7 @@ export type Action =
       id: string; type: 'spotify_ctrl'; cmd: 'pause' | 'resume' | 'next' | 'previous' | 'volume';
       speaker: string | null; volume: number | null; stop_on_error: boolean;
     }
-  | { id: string; type: 'agent'; prompt: string; stop_on_error: boolean }
+  | { id: string; type: 'agent'; prompt: string; notify?: 'owner' | 'everyone' | null; stop_on_error: boolean }
   | { id: string; type: 'notify'; title: string | null; message: string; to: 'owner' | 'everyone'; stop_on_error: boolean };
 
 export const AGENT_RUNS_PER_HOUR = 2;  // mirrors scheduler/schema.py

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import (ROUTINE_RUN_EXCLUDED_TOOLS, ROUTINE_RUN_NOTE, SYSTEM_PROMPT, TOOL_REGISTRY,
+from api.dependencies import (ROUTINE_RUN_EXCLUDED_TOOLS, ROUTINE_RUN_NOTE, ROUTINE_RUN_NOTIFY_NOTE, SYSTEM_PROMPT, TOOL_REGISTRY,
                               gateway_client, memory_manager, spotify_service, weather_service)
 from core.orchestrator import SmartHomeOrchestrator
 from core.provider_factory import build_llm_provider
@@ -89,6 +89,7 @@ async def run_tool(name: str, call: ToolCall, user_id: str = Depends(internal_us
 class AgentRun(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
     routine: str = ""
+    notify: bool = False  # the reply becomes a push notification (phrase it for a phone)
 
 
 def _tool_ok(output: str) -> tuple[bool, str | None]:
@@ -108,7 +109,7 @@ async def run_agent(body: AgentRun, user_id: str = Depends(internal_user), db: A
         llm_provider=llm, gateway_client=gateway_client, memory_manager=memory_manager,
         weather_service=weather_service, spotify_service=spotify_service,
         system_prompt_tmpl=SYSTEM_PROMPT, tool_map=TOOL_REGISTRY, ephemeral=True,
-        prompt_suffix=ROUTINE_RUN_NOTE.format(routine=body.routine or "unnamed"),
+        prompt_suffix=(ROUTINE_RUN_NOTIFY_NOTE if body.notify else ROUTINE_RUN_NOTE).format(routine=body.routine or "unnamed"),
         excluded_tools=ROUTINE_RUN_EXCLUDED_TOOLS,
     )
     reply, calls, pending = "", [], []

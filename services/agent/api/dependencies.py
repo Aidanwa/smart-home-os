@@ -100,6 +100,12 @@ ROUTINE_RUN_NOTE = (
     "\n\nYou are running unattended as part of the routine '{routine}'. Nobody is reading or listening "
     "and nobody can answer questions: act on the instruction with the tools, or say briefly why you didn't."
 )
+# Used instead when the routine sends the reply to the user's phone.
+ROUTINE_RUN_NOTIFY_NOTE = (
+    "\n\nYou are running unattended as part of the routine '{routine}'. Nobody can answer questions: act on "
+    "the instruction with the tools. Your final reply is sent to the user's phone as a push notification, so "
+    "write it for them: plain text, no markdown or lists, ideally under 250 characters."
+)
 
 async def get_orchestrator(db: AsyncSession = Depends(get_db)):
     """

@@ -51,11 +51,11 @@ def _tidy(message: str) -> str:
     return message.replace("Do not retry. ", "")
 
 
-async def run_agent(user_id, prompt: str, routine_name: str) -> dict:
+async def run_agent(user_id, prompt: str, routine_name: str, notify: bool = False) -> dict:
     """Run an instruction through the agent's LLM loop (no chat history, no memory writes).
     Returns {status, reply, tool_calls: [{name, arguments, ok, error?}], message?}."""
     try:
-        res = await _client.post("/internal/agent/run", json={"prompt": prompt, "routine": routine_name},
+        res = await _client.post("/internal/agent/run", json={"prompt": prompt, "routine": routine_name, "notify": notify},
                                  headers={"Authorization": f"Bearer {_token(user_id)}"}, timeout=120.0)
     except httpx.RequestError as e:
         raise AgentError(f"Agent unreachable ({type(e).__name__}); is the agent container running?")

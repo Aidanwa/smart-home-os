@@ -39,7 +39,8 @@ ACTIONS (in order):
  {"type":"spotify_play","speaker":"Bedroom Speakers","uri":"spotify:playlist:..." (get it with spot_search/spot_search_playlist),
   "title":str,"volume":0-100 or null,"ramp_to":0-100 or null,"ramp_s":seconds or null,"shuffle":true|false|null}
  {"type":"spotify_ctrl","cmd":"pause"|"resume"|"next"|"previous"|"volume","speaker":null,"volume":null}
- {"type":"agent","prompt":"plain-language instruction"}  (uses the LLM; max 2 runs/hour)
+ {"type":"agent","prompt":"plain-language instruction","notify":null|"owner"|"everyone"}  (uses the LLM; max 2 runs/hour;
+  notify sends the agent's reply as a push notification, e.g. "each morning, summarise the weather and tell me")
  {"type":"notify","title":str or null (null = routine name),"message":str,"to":"owner"|"everyone"}
   Push notification to the phone app. "owner" = the user you're talking to. E.g. "remind me at 6 to take
   the bins out" = one-time time trigger + notify; "tell me when the washer is done" = power trigger + notify.
