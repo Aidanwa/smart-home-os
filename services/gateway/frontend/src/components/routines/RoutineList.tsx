@@ -179,7 +179,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
                 </button>
               )}
               {open && (
-                <div className={`grid gap-2 lg:grid-cols-2 ${s.tone === 'off' ? 'opacity-70' : ''}`}>
+                <div className={`grid grid-cols-1 gap-2 lg:grid-cols-2 ${s.tone === 'off' ? 'opacity-70' : ''}`}>
                   {s.routines.map(r => (
                     <RoutineRow key={r.id} r={r} summary={summaries.get(r.id) ?? ''} timezone={timezone} attention={s.tone === 'attention'}
                       onOpen={() => onOpen(r)} onHistory={() => onHistory(r)} onRun={() => onRun(r)} onDuplicate={() => onDuplicate(r)} onToggle={() => onToggle(r)} />
@@ -223,7 +223,7 @@ function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun,
   }, [menuOpen]);
 
   return (
-    <article className={`relative flex items-stretch rounded-xl border bg-neutral-900 ${attention ? 'border-amber-900/70' : 'border-neutral-800'}`}>
+    <article className={`relative min-w-0 flex items-stretch rounded-xl border bg-neutral-900 ${attention ? 'border-amber-900/70' : 'border-neutral-800'}`}>
       {/* The body opens the editor */}
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left p-3 pr-2 rounded-l-xl hover:bg-neutral-800/40">
         <h3 className="font-medium text-neutral-100 truncate">{r.name}</h3>
