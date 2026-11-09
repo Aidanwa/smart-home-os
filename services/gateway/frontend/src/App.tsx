@@ -1,6 +1,6 @@
 // services/gateway/frontend/src/App.tsx
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type ComponentProps } from 'react';
 import { useDevices, type DeviceState } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
@@ -15,6 +15,7 @@ import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
 import { PairingButton } from './components/devices/PairingButton';
 import { AgentChat } from './components/agent/AgentChat';
+import { AgentChatProvider, useAgentChat } from './hooks/useAgentChat';
 import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ConnectionBanner } from './components/layout/ConnectionBanner';
@@ -47,6 +48,12 @@ function useStoredChoice<T extends string>(key: string, options: readonly T[], f
     try { localStorage.setItem(key, v); } catch { /* private mode */ }
   };
   return [value, set] as const;
+}
+
+/** The nav, with a dot on Agent when a reply arrived while you were on another tab. */
+function Nav(props: ComponentProps<typeof Sidebar>) {
+  const { unread } = useAgentChat();
+  return <Sidebar {...props} dots={unread ? { agent: 'New reply from the assistant' } : {}} />;
 }
 
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
@@ -143,10 +150,12 @@ function AuthenticatedDashboard() {
   const deviceCount = Object.keys(devices).filter(k => k !== 'bridge').length;
 
   return (
+    // The chat lives here, above the tabs, so a reply keeps coming while you look elsewhere.
+    <AgentChatProvider visible={activeTab === 'agent'}>
     <div className="flex flex-col-reverse md:flex-row h-[100dvh] bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
       
       {/* Decoupled High-Speed Modular Navigation System */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} />
+      <Nav activeTab={activeTab} setActiveTab={setActiveTab} badges={{ routines: routineAlerts }} />
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden w-full relative">
         <ConnectionBanner status={realtime} />
@@ -242,6 +251,7 @@ function AuthenticatedDashboard() {
         </ErrorBoundary>
       </main>
     </div>
+    </AgentChatProvider>
   );
 }
 

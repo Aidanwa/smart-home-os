@@ -1,4 +1,5 @@
 # services/agent/api/routes.py
+import asyncio
 import logging
 import json
 import jwt
@@ -14,7 +15,7 @@ from api.models import ChatResponse, HistoryResponse
 import tempfile
 
 from api.dependencies import get_orchestrator, stt_model
-from core.orchestrator import SmartHomeOrchestrator
+from core.orchestrator import SmartHomeOrchestrator, tool_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -78,27 +79,94 @@ async def chat_stream(
         return
 
     logger.debug(f"WebSocket agent loop initialized for verified profile: {user_id}")
-    
+
+    # A reply still running from an earlier connection (the tab was closed or the phone slept):
+    # tell this one, and tell it again when that reply lands in the history.
+    earlier = _active_runs.get(user_id)
+    if earlier and not earlier.task.done():
+        earlier.listeners.add(websocket)
+        await _send(websocket, json.dumps({"type": "run_active"}))
+
     try:
         while True:
             user_text = await websocket.receive_text()
-            async for chunk in orchestrator.process_intent_stream(user_id, user_text):
-                if chunk["type"] == "text_chunk":
-                    await websocket.send_text(chunk["content"])
-                elif chunk["type"] == "tool_call":
-                    await websocket.send_text(json.dumps(chunk))
-            
-            await websocket.send_text("[DONE]")
-            
+            current = _active_runs.get(user_id)
+            busy = current is not None and not current.task.done()
+            if user_text == STOP_MESSAGE:
+                if busy:
+                    current.task.cancel()
+                continue
+            if busy:
+                await _send(websocket, json.dumps({"type": "busy"}))
+                continue
+            run = _Run(streamer=websocket)
+            _active_runs[user_id] = run
+            run.task = asyncio.create_task(_run_request(orchestrator, user_id, user_text, run))
     except WebSocketDisconnect:
         logger.info(f"WebSocket closed for profile context: {user_id}")
     except Exception as e:
-        logger.error(f"Internal Orchestration Processing Error: {str(e)}")
-        try:
-            await websocket.send_text(f"\n[System Error: {str(e)}]")
-            await websocket.send_text("[DONE]")
-        except:
-            pass
+        logger.error(f"Chat socket error: {e}")
+    finally:
+        # Any reply in flight keeps running and is saved to the history; it just stops streaming here.
+        for r in list(_active_runs.values()):
+            r.listeners.discard(websocket)
+            if r.streamer is websocket:
+                r.streamer = None
+
+
+# --- Replies run as tasks, so they finish (and reach the history) even if the browser leaves,
+# --- and the client's STOP_MESSAGE can cancel one.
+STOP_MESSAGE = "[STOP]"
+
+
+class _Run:
+    def __init__(self, streamer: WebSocket):
+        self.task: asyncio.Task | None = None
+        self.streamer: WebSocket | None = streamer      # gets the live text and tool events
+        self.listeners: set[WebSocket] = set()           # later connections, told when it's done
+
+
+_active_runs: Dict[str, _Run] = {}
+
+
+async def _send(ws: WebSocket, text: str) -> bool:
+    try:
+        await ws.send_text(text)
+        return True
+    except Exception:
+        return False
+
+
+async def _run_request(orchestrator: SmartHomeOrchestrator, user_id: str, user_text: str, run: _Run):
+    async def emit(text: str):
+        ws = run.streamer
+        if ws is not None and not await _send(ws, text):
+            run.streamer = None  # gone; keep working
+
+    stream = orchestrator.process_intent_stream(user_id, user_text)
+    stopped = False
+    try:
+        async for chunk in stream:
+            if chunk["type"] == "text_chunk":
+                await emit(chunk["content"])
+            elif chunk["type"] == "tool_call":
+                await emit(json.dumps(chunk))
+    except asyncio.CancelledError:
+        stopped = True
+        logger.info(f"Reply stopped by the user: {user_id}")
+    except Exception as e:
+        logger.exception("Internal Orchestration Processing Error")
+        await emit(f"\n[System Error: {str(e)}]")
+    finally:
+        await stream.aclose()  # if the stop landed between chunks, this settles the history
+        if stopped:
+            await emit(json.dumps({"type": "stopped"}))
+        await emit("[DONE]")
+        for ws in list(run.listeners):
+            await _send(ws, json.dumps({"type": "run_done"}))
+        if _active_runs.get(user_id) is run:
+            del _active_runs[user_id]
+
 
 @router.get("/chat/history", response_model=HistoryResponse)
 async def get_user_chat_history(
@@ -109,7 +177,18 @@ async def get_user_chat_history(
     try:
         orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
         history = orchestrator.memory.get_history(user_id)
-        return {"user_id": user_id, "messages": history}
+        # Mark each tool call with how it went, so reopened chats show failures too.
+        outcomes = {
+            m.get("call_id"): tool_outcome(m.get("output") or "")
+            for m in history if m.get("type") == "function_call_output"
+        }
+        messages = []
+        for m in history:
+            if m.get("type") == "function_call" and m.get("call_id") in outcomes:
+                ok, error = outcomes[m["call_id"]]
+                m = {**m, "ok": ok, "error": (error or "")[:300] or None}
+            messages.append(m)
+        return {"user_id": user_id, "messages": messages}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to pull historical timeline.")
     

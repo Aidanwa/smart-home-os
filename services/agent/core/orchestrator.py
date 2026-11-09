@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 from typing import Callable, List, Dict, Any, AsyncGenerator, Tuple
@@ -13,6 +14,24 @@ from shared.database.core import get_db
 from sqlalchemy.future import select
 from shared.database.models import Home
 
+
+def tool_outcome(output: str) -> tuple[bool, str | None]:
+    """Did a tool call work? Tools report failure as {"error": ...} or {"status": "error"|"partial_success", "message": ...}."""
+    try:
+        data = json.loads(output)
+    except Exception:
+        return True, None
+    if not isinstance(data, dict):
+        return True, None
+    if data.get("error"):
+        return False, str(data["error"])
+    if data.get("status") in ("error", "partial_success"):
+        return False, str(data.get("message") or data.get("status"))
+    return True, None
+
+
+STOPPED_OUTPUT = json.dumps({"error": "Stopped by the user before this finished; it may or may not have taken effect."})
+
 logger = logging.getLogger(__name__)
 
 # Tools whose calls change Spotify playback, so the cached "now playing" context must be refetched.
@@ -21,12 +40,12 @@ SPOTIFY_STATE_TOOLS = {"spot_play", "spot_ctrl", "spot_queue"}
 class SmartHomeOrchestrator:
     def __init__(
         self,
-        llm_provider: BaseLLMProvider,       
+        llm_provider: BaseLLMProvider,
         gateway_client: GatewayClient,
-        weather_service: WeatherService,    
+        weather_service: WeatherService,
         memory_manager: MemoryManager,
         spotify_service: SpotifyService,
-        system_prompt_tmpl: str, 
+        system_prompt_tmpl: str,
         tool_map: Dict[str, Callable],
         ephemeral: bool = False,
         prompt_suffix: str = "",
@@ -46,24 +65,24 @@ class SmartHomeOrchestrator:
         self.ephemeral = ephemeral
         self.prompt_suffix = prompt_suffix
         self.max_iterations = 5
-        
+
         # --- System-Level Caches ---
         self._system_weather_cache: str | None = None
         self._weather_last_fetched: datetime | None = None
         self._weather_cache_ttl = timedelta(hours=1)
 
     async def _build_system_prompt(
-        self, 
-        user_id: str, 
-        cached_weather: str | None = None, 
+        self,
+        user_id: str,
+        cached_weather: str | None = None,
         cached_spotify: str | None = None
     ) -> Tuple[str, str, str]:
-        
+
         home_context = await self.gateway.get_filtered_context(user_id)
 
         # 1. Fetch Home Profile for Timezone and Nickname
         tz_name = "UTC"
-        
+
         # Fast local DB fetch
         async for session in get_db():
             home = await session.scalar(select(Home).limit(1))
@@ -80,12 +99,12 @@ class SmartHomeOrchestrator:
         except Exception as e:
             logger.warning(f"Invalid timezone '{tz_name}', falling back to system local: {e}")
             now = datetime.now().astimezone()
-        
+
         if cached_weather is None:
-            if (self._system_weather_cache is None or 
-                self._weather_last_fetched is None or 
+            if (self._system_weather_cache is None or
+                self._weather_last_fetched is None or
                 (now - self._weather_last_fetched) > self._weather_cache_ttl):
-                
+
                 weather_response = await self.weather.get_weather(
                     user_id=user_id, type="hourly", time="now", loc="home"
                 )
@@ -97,7 +116,7 @@ class SmartHomeOrchestrator:
             current_weather = self._system_weather_cache
         else:
             current_weather = cached_weather
-            
+
         # Inject user_id to read specific user relational tokens
         if cached_spotify is None:
             current_spotify = await self.spotify.get_spotify_context(user_id=user_id)
@@ -114,7 +133,7 @@ class SmartHomeOrchestrator:
         else:
             memory_context = "No long-term memories recorded yet."
         time_str = now.strftime('%A, %B %d, %Y at %I:%M %p %Z')
-        
+
         # Build Instructions
         instructions = self.system_prompt_tmpl.format(
             homename=home_nickname,
@@ -124,7 +143,7 @@ class SmartHomeOrchestrator:
             spotifyinfo=current_spotify,
             timeinfo=time_str,
         ) + self.prompt_suffix
-        
+
         return instructions, current_weather, current_spotify
 
     def _tools_for(self, has_spotify: bool) -> list:
@@ -133,33 +152,53 @@ class SmartHomeOrchestrator:
     def _remember(self, user_id: str, message: dict):
         if not self.ephemeral:
             self.memory.add_message(user_id, message)
-    
+
     async def initialize_session(self, user_id: str) -> dict:
         """
-        Warms up the system-level caches (Weather, Home DB, Tools Schema) 
+        Warms up the system-level caches (Weather, Home DB, Tools Schema)
         when the user navigates to the Agent page so the first message is instant.
         """
         logger.debug(f"Initializing agent session and warming caches for user: {user_id}")
-        
-        # 1. Calling this will naturally trigger the TTL cache check for weather 
+
+        # 1. Calling this will naturally trigger the TTL cache check for weather
         #    and pre-warm the database connection for the Home profile.
         await self._build_system_prompt(
-            user_id=user_id, 
-            cached_weather=None, 
+            user_id=user_id,
+            cached_weather=None,
             cached_spotify=None
         )
 
         # 2. Pre-check Spotify credentials so the tools schema is ready instantly
         has_spotify = await self.spotify.check_credentials(user_id)
         self.tools_schema = self._tools_for(has_spotify)
-        
+
         return {"status": "success", "message": "Agent caches initialized."}
 
     async def process_intent_stream(self, user_id: str, user_text: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Runs one request. If the caller cancels it (the user pressed Stop), the history is left
+        valid for the next request: every tool call gets an output, and partial text is kept."""
+        progress: Dict[str, Any] = {"open_calls": {}, "text": ""}
+        try:
+            async for chunk in self._process_intent_stream(user_id, user_text, progress):
+                yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            self._settle_stopped(user_id, progress)
+            raise
+
+    def _settle_stopped(self, user_id: str, progress: Dict[str, Any]):
+        # The Responses API rejects a history with a function_call that has no output.
+        for call_id in list(progress["open_calls"]):
+            self._remember(user_id, {"type": "function_call_output", "call_id": call_id, "output": STOPPED_OUTPUT})
+        progress["open_calls"].clear()
+        if progress["text"]:
+            self._remember(user_id, {"role": "assistant", "content": progress["text"] + " … (stopped)"})
+            progress["text"] = ""
+
+    async def _process_intent_stream(self, user_id: str, user_text: str, progress: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         # 1. First Run: Pass None for caches to force a full fetch of all contexts
         instructions, cached_weather, cached_spotify = await self._build_system_prompt(
-            user_id=user_id, 
-            cached_weather=None, 
+            user_id=user_id,
+            cached_weather=None,
             cached_spotify=None
         )
 
@@ -170,11 +209,11 @@ class SmartHomeOrchestrator:
         logger.debug(f"Tools schema for user {user_id}: {[tool['name'] for tool in self.tools_schema]}")
         # 2. Retrieve Pruned History
         history = [] if self.ephemeral else self.memory.get_history(user_id)
-        
+
         # Start message array with System, then History, then the New Query
         current_messages = [{"role": "system", "content": instructions}]
         current_messages.extend(history)
-        
+
         new_msg = {"role": "user", "content": user_text}
         current_messages.append(new_msg)
         self._remember(user_id, new_msg)
@@ -189,12 +228,14 @@ class SmartHomeOrchestrator:
             )
 
             accumulated_text = ""
+            progress["text"] = ""
 
             async for chunk in stream:
                 if chunk["type"] == "text_chunk":
                     accumulated_text += chunk["content"]
+                    progress["text"] = accumulated_text
                     yield chunk
-                
+
                 elif chunk["type"] == "error":
                     yield {"type": "text_chunk", "content": f"\n[Error: {chunk['content']}]"}
                     return
@@ -204,48 +245,59 @@ class SmartHomeOrchestrator:
                         assistant_msg = {"role": "assistant", "content": accumulated_text}
                         current_messages.append(assistant_msg)
                         self._remember(user_id, assistant_msg)
-                        
+
                         logger.info(f"SYSTEM PROMPT:\n{current_messages[0]['content']}\n")
                         self.memory.pretty_print_history(user_id)
                     return
-                
+
                 elif chunk["type"] == "tool_calls":
                     tool_calls = chunk.get("message", [])
-                    
+
                     current_messages.extend(tool_calls)
+                    progress["text"] = ""  # text before tool calls isn't kept in history either
                     for msg in tool_calls:
                         self._remember(user_id, msg)
-                        
+                        if msg.get("call_id"):
+                            progress["open_calls"][msg["call_id"]] = msg.get("name")
+
                         yield {
-                            "type": "tool_call", 
-                            "name": msg.get("name", "Unknown Tool"), 
+                            "type": "tool_call",
+                            "call_id": msg.get("call_id"),
+                            "name": msg.get("name", "Unknown Tool"),
                             "arguments": msg.get("arguments", "{}"),
                             "status": "pending"
                         }
 
                     # Execute Tools
                     tool_results = await self._execute_tool_calls(user_id, tool_calls)
-                    
+
                     current_messages.extend(tool_results)
+                    outcomes = {}
                     for tr in tool_results:
                         self._remember(user_id, tr)
+                        progress["open_calls"].pop(tr.get("call_id"), None)
+                        outcomes[tr.get("call_id")] = tool_outcome(tr.get("output") or "")
                         # For callers that need outcomes (routine runs); the chat WS ignores this type.
                         yield {"type": "tool_result", "call_id": tr.get("call_id"), "output": tr.get("output")}
 
                     for msg in tool_calls:
+                        ok, error = outcomes.get(msg.get("call_id"), (True, None))
                         yield {
-                            "type": "tool_call", 
-                            "name": msg.get("name", "Unknown Tool"), 
+                            "type": "tool_call",
+                            "call_id": msg.get("call_id"),
+                            "name": msg.get("name", "Unknown Tool"),
                             "arguments": msg.get("arguments", "{}"),
-                            "status": "completed"
+                            "status": "completed",
+                            "ok": ok,
+                            "error": (error or "")[:300] or None,
                         }
-                    
+
                     # -> THE INVALIDATION ENGINE <-
                     # Check what domains the tools actually interacted with
                     # Only tools that change playback state; spot_info/spot_search* are read-only.
                     touched_spotify = any(call.get("name", "") in SPOTIFY_STATE_TOOLS for call in tool_calls)
-                    
-                    # Rebuild the prompt. 
+
+                    # Rebuild the prompt.
                     # If Spotify was touched, pass None to force a refetch. Otherwise pass the cache.
                     # Weather is always passed as cache because tools don't change the weather.
                     new_instructions, cached_weather, cached_spotify = await self._build_system_prompt(
@@ -253,11 +305,11 @@ class SmartHomeOrchestrator:
                         cached_weather=cached_weather,
                         cached_spotify=None if touched_spotify else cached_spotify
                     )
-                    
+
                     # Update the system prompt right before we restart the LLM generation
                     current_messages[0]["content"] = new_instructions
-                    
-                    break 
+
+                    break
 
         yield {"type": "text_chunk", "content": "\n[System: Max reasoning steps reached.]"}
 
@@ -270,12 +322,12 @@ class SmartHomeOrchestrator:
             try:
                 args = json.loads(call.get("arguments", "{}"))
                 tool_method = self.tool_map.get(tool_name)
-                
+
                 if not tool_method:
                     raise AttributeError(f"Tool '{tool_name}' is not registered.")
-                
+
                 result_data = await tool_method(user_id=user_id, **args)
-            
+
             except Exception as e:
                 result_data = {"error": str(e)}
 
@@ -284,5 +336,5 @@ class SmartHomeOrchestrator:
                 "call_id": tool_id,
                 "output": json.dumps(result_data)
             })
-            
+
         return results

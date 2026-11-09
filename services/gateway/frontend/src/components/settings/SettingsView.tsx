@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { HomeSettingsCard } from './HomeSettings';
 import { AgentSettings } from './AgentSettings';
+import { MemorySettings } from './MemorySettings';
 import { AccountSettings } from './AccountSettings'; // <-- Import new component
 
 const SpotifyLogo = () => (
@@ -121,7 +122,7 @@ export function SettingsView() {
       {/* Isolated Settings Modules */}
       {settingsTab === 'account' && <AccountSettings />}
       {settingsTab === 'home' && <HomeSettingsCard />}
-      {settingsTab === 'agent' && <AgentSettings />}
+      {settingsTab === 'agent' && <div className="space-y-6"><AgentSettings /><MemorySettings /></div>}
 
       {/* Section: Premium External Vault Binding */}
       {settingsTab === 'connections' && (

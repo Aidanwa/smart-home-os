@@ -33,13 +33,13 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 ## Agent chat
 
-- [ ] Replies render as raw text; markdown shows literal `**` and `-`.
-- [ ] Clear-history trash button sits next to Send with no label and no confirm.
-- [ ] Switching tabs unmounts the chat and kills an in-flight reply; input is disabled while streaming.
+- [x] Replies render as raw text; markdown shows literal `**` and `-`. *(Done 2026-11-09: `react-markdown` + `remark-gfm`, raw HTML ignored.)*
+- [~] Clear-history trash button sits next to Send with no label and no confirm. *(Won't do, 2026-11-09: Aidan is happy with it as it is. It did get a screen-reader label.)*
+- [x] Switching tabs unmounts the chat and kills an in-flight reply; input is disabled while streaming. *(Done 2026-11-09: the chat lives above the tabs, with a dot on Agent for a reply that arrived elsewhere; the agent finishes a reply even if the browser goes away and a reconnect picks it up; you can type while it answers, and Send becomes Stop.)*
 - [ ] Voice auto-sends the transcript unreviewed; mic denial and transcription failure only log to the console; recording never stops if no speech is detected; uses `alert()`.
-- [ ] Tool chips show raw names ("Spot Ctrl", "Rt Save"), always show a green check even on failure, and `JSON.parse(args)` can throw and crash the view (`ToolCallChip.tsx`).
+- [x] Tool chips show raw names ("Spot Ctrl", "Rt Save"), always show a green check even on failure, and `JSON.parse(args)` can throw and crash the view (`ToolCallChip.tsx`). *(Done 2026-11-09: plain-language labels, a red ✕ with the reason when a tool failed, also in reloaded history; bad arguments no longer crash it.)*
 - [ ] Empty state could offer suggestion chips.
-- [ ] The agent's memory facts (`agent_settings.user_memory`) can't be seen or edited anywhere in Settings.
+- [x] The agent's memory facts (`agent_settings.user_memory`) can't be seen or edited anywhere in Settings. *(Done 2026-11-09: Settings → Agent → "What the assistant remembers": edit, forget (with Undo), add; a save is refused if the agent changed the list meanwhile.)*
 
 ## Rooms
 

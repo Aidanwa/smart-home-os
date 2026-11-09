@@ -8,6 +8,7 @@ import json
 import logging
 
 import jwt
+from core.orchestrator import tool_outcome
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -91,17 +92,7 @@ class AgentRun(BaseModel):
 
 
 def _tool_ok(output: str) -> tuple[bool, str | None]:
-    try:
-        data = json.loads(output)
-    except Exception:
-        return True, None
-    if not isinstance(data, dict):
-        return True, None
-    if data.get("error"):
-        return False, str(data["error"])
-    if data.get("status") in ("error", "partial_success"):
-        return False, str(data.get("message") or data.get("status"))
-    return True, None
+    return tool_outcome(output)
 
 
 @router.post("/agent/run")

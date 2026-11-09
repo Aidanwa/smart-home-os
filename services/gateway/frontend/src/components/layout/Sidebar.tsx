@@ -10,9 +10,11 @@ interface SidebarProps {
   activeTab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings';
   setActiveTab: (tab: 'home' | 'agent' | 'rooms' | 'routines' | 'settings') => void;
   badges?: Partial<Record<'home' | 'agent' | 'rooms' | 'routines', number>>;
+  /** A plain dot with its own label, e.g. a new reply from the assistant. */
+  dots?: Partial<Record<'home' | 'agent' | 'rooms' | 'routines', string>>;
 }
 
-export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, badges = {}, dots = {} }: SidebarProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const healthStatus = useSystemHealth();
 
@@ -101,6 +103,9 @@ export function Sidebar({ activeTab, setActiveTab, badges = {} }: SidebarProps) 
                     aria-label={`${badges[id]} routine problem${badges[id] === 1 ? '' : 's'}`}>
                     {badges[id]! > 9 ? '9+' : badges[id]}
                   </span>
+                )}
+                {!badges[id] && !!dots[id] && (
+                  <span className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-blue-500 ring-2 ring-neutral-950" role="status" aria-label={dots[id]} />
                 )}
               </span>
               <span className={`text-[10px] md:text-sm font-medium ${isSidebarCollapsed ? 'hidden md:hidden' : 'block'}`}>
