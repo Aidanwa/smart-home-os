@@ -28,7 +28,7 @@ Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA + routine 
 - `services/gateway/`: the FastAPI API, MQTT bus, and SPA hosting. The frontend lives in `services/gateway/frontend/`.
 - `services/agent/`: the LLM orchestrator, providers, and tools.
 - `services/database/`: a vestigial workspace member. `init.sql` is empty, and the schema comes **only** from Alembic.
-- `docs/`: short human notes. [docs/todo.md](docs/todo.md) is the roadmap and known-bugs list; [docs/ux-review.md](docs/ux-review.md) is the frontend UX checklist with a ranked "What's next" queue.
+- `docs/`: short human notes. [docs/todo.md](docs/todo.md) is the one list of open work (ranked "Up next", known bugs, unconfirmed features, testing gaps, later ideas by area, and a "Decided against" list). Remove items when they're done, and don't re-propose anything under "Decided against".
 
 ## Running (Docker is the dev loop)
 
@@ -128,7 +128,7 @@ Built 2026-11-08 (design history is in git: the old `docs/scheduler-proposal.md`
   - `/activity` (all runs, newest first, `before` cursor, `problems` filter) and `/upcoming` (scheduled fires for the next `days`, from `Scheduler.upcoming_all`): the Activity page (`RoutineActivity.tsx`).
   - Fixed paths must be declared before `/{routine_id}`.
 - **Units:** values are device-native (temperature is always °C). The UI always shows and accepts °F and converts on the way in and out. Colour temperature is stored and sent in mired everywhere, and shown as **warmth %**: a percentage of that bulb's own range from Z2M's exposes (0% = coolest, 100% = warmest, so it rises with mired and comparisons keep their meaning). Helpers are in the frontend's `lib/colorTemp.ts`; groups use the union of their members' ranges.
-- **Next:** ntfy notifications (failure alerts, a `notify` action, reminders): see [docs/todo.md](docs/todo.md).
+- **Next:** notifications (failure alerts, a `notify` action, reminders), delivered by ntfy or web push to the installed app (not yet decided): see [docs/todo.md](docs/todo.md).
 
 ## Agent internals
 
@@ -168,6 +168,6 @@ React 19 + Vite 8 + TypeScript 6 + Tailwind v4 + shadcn (`radix-nova`, component
 
 - Device-RPC replies resolve on the device's *next* state publish from any source (a physical switch press counts too). Per-device locking prevents concurrent sets from clobbering each other. [core/device_control.py](services/gateway/core/device_control.py) (`set_device`) checks the reply's `state` against an ON/OFF request, re-sends once on a mismatch, and then raises (HTTP 502). Brightness, colour and TOGGLE still aren't matched, since they can't be matched reliably. New device/group control code should go through `device_control`, not `bus.rpc` directly.
 - `GatewayClient.rename_group` sends `new_name` as a query param, but the gateway expects a JSON body. The method is unregistered dead code.
-- Group member removal and MQTT errors: see KNOWN BUGS in [docs/todo.md](docs/todo.md). A lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes it (Z2M's members carry `ieee_address`/`endpoint`).
+- Group member removal and MQTT errors: see Known bugs in [docs/todo.md](docs/todo.md). A lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes it (Z2M's members carry `ieee_address`/`endpoint`).
 - Stepped fades can't tell a manual change to a level they passed in the last few seconds from bulb reporting lag; turning the light off always counts.
 - The six `rt_*` tool schemas add about 450 tokens to every chat message.

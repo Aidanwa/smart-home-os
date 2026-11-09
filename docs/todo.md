@@ -1,72 +1,102 @@
+# Roadmap and known issues
 
-# HIGH PRIORITY:
+The one list of open work: features, bugs, and testing gaps. Finished work isn't kept here; git history has it, and the old frontend UX checklist (`docs/ux-review.md`, merged into this file on 2026-11-09) is in `git log -- docs/ux-review.md`.
 
-## Notifications (ntfy)
+Items marked **(migration)** need a database schema change, which needs Aidan's OK before it's applied on the Pi.
 
-Routines are built (2026-11-08; see the Routines section of CLAUDE.md). The next step is push notifications via [ntfy](https://ntfy.sh): POST text to `https://<server>/<topic>` and the ntfy phone app shows it. It can be self-hosted as one small container on the Pi or used via ntfy.sh, and supports priority, tags and action buttons. On ntfy.sh the topic name is effectively the password, so use a long random topic or self-host with auth, and store it in `user_secrets`.
+## Up next
 
-- Failure alerts: push `failed`/`missed` routine runs (today they only show as the red badge on the Routines tab).
-- A `notify` routine action: "door left open 10 min → notify", "washer power < 5 W for 3 min → laundry done".
-- Agent reminders: "remind me at 6 to take the bins out" becomes a routine with a notify action. The agent's routine tools currently say reminders aren't supported.
+### 1. Notifications
 
-## Routines: smaller follow-ups
+Today a failed or missed routine only shows as the red badge on the Routines tab. The goal is a push to the phone:
 
-- Starter templates (wake-up, sunset lamp, all off).
-- Ideas considered but not built: stale-sensor guard ("no report from X for N hours"), rate-of-change triggers ("humidity +10 in 10 min"), webhook triggers, colour (`xy`/`hue`) in device actions, a run-as switch in the editor.
+- **Failure alerts:** push `failed` and `missed` routine runs.
+- **A `notify` routine action**, for example "door left open 10 min → notify" or "washer under 5 W for 3 min → laundry done".
+- **Agent reminders:** "remind me at 6 to take the bins out" becomes a routine with a notify action. The agent's routine tools currently say reminders aren't supported.
 
-## Admin controls (Settings > Admin page)
+There are two ways to deliver them, and choosing one is the first step:
 
-add admin account type with admin settings page that can edit all other users and permissions (no RBAC exists yet).
+| | ntfy | Web push to the installed app |
+|---|---|---|
+| On the phone | The ntfy app | Nothing extra: the home-screen app (iOS 16.4+) |
+| On the hub | One small container on the Pi, or the hosted ntfy.sh | Push keys (VAPID), a Python push library, and a table of each phone's subscription **(migration)** |
+| Privacy | Self-hosted with auth; on ntfy.sh the topic name is the password (keep it long and random, in `user_secrets`) | Goes through Apple's or Google's push service, encrypted end to end |
+| Extras | Priorities, tags, action buttons | Tapping the alert opens the app at the right tab |
 
-## UI / UX
+### 2. Routine tags or folders (migration)
 
-The detailed UX list, with what's done and a ranked queue, is [docs/ux-review.md](ux-review.md). The old mobile bugs here (bottom bar off-screen, Rooms canvas unusable on phones, chat layout) were fixed on 2026-11-08/09.
+User-made labels for grouping routines beyond the built-in "when it runs" and "room" groupings, e.g. "Morning", "Away", "Kids". Needs a new column on `routines`, the list's group-by dropdown gaining "Tag", and a tag field in the editor (and in the agent's `rt_save`).
 
-# BIG FEATURES:
+### 3. Routine starter templates
 
-## Adding agent logic
+Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, all off at bedtime.
 
-add more providers i.e. ollama, gemini, claude
+## Known bugs
 
-improve prompting?
+- **Group member removal sometimes uses the wrong group id** and the MQTT side logs an error. It works for the user, but it's noisy. Lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes one (Z2M's members carry `ieee_address`/`endpoint`).
+- `GatewayClient.rename_group` in the agent sends `new_name` as a query parameter where the gateway expects a JSON body. It's unregistered dead code; fix it or delete it.
 
-token tracking table and cost analytics - not that important right now
+## Not yet confirmed working
 
-add pricing display for each model when selecting models.
+These are built, but nobody has seen them work for real yet:
 
-Resolve user IP address and provide current user location to model.
+- **The firmware update badge** on device cards ("Update", "Scheduled", "42%"). No device has had an update waiting.
+- **Group power and brightness** on the Groups cards and sheet. They were never pressed in automated tests because they switch real lights.
+- **Voice on the iPhone after the 2026-11-09 changes:** auto-stop when you stop talking, giving up after 8 s with no speech, and the error toasts.
 
-Web search tool
+## Testing
 
-## Voice input
+- **`tests/ui`:** turn the throwaway headless-Chrome driver from 2026-11-09 into a checked-in test that opens each dialog, checks Escape and Cancel, and measures touch targets. It must never tap a device. In Rooms' View mode a tap on a marker switches a real light (and routines can chain off it), so hit-test first: `Konva.stages[0].getIntersection(point).name() === 'room-bg'`.
+- **The `tests/layout` overflow blind spot:** any `overflow: auto` box counts as a deliberate sideways scroller, and each tab's main area is one, so a row wider than the screen *inside* a tab passes. That's how the Routines long-name overflow got through. Only exempt boxes that are meant to scroll sideways.
 
-Need to create edge node containers for wakeword listening and tts stt responses.
+## Later, by area
 
-improve ui voice input to websocket instead of rest for faster processing.
+### Routines
 
-## rooms
+Ideas considered but not built:
+- a stale-sensor guard ("no report from X for N hours");
+- rate-of-change triggers ("humidity +10 in 10 min");
+- webhook triggers;
+- colour (`xy`/`hue`) in device actions;
+- a run-as switch in the editor.
 
-~~add sorting by room to devices page.~~ (done 2026-11-09: Home's "By room" grouping; Routines can group by room too)
+### Assistant (agent)
 
-inform agent of device state by room organization
+- More LLM providers: Claude, Gemini, local Ollama (only OpenAI exists; `core/provider_factory.py`).
+- A web search tool.
+- Tell the agent which room each device is in (the Rooms floor plan already knows).
+- Use the user's location, e.g. from their IP.
+- Token tracking with cost analytics, and prices shown next to each model in Settings.
+- Better prompting in general.
 
-## Digital Wardrobe Management
+### Voice
 
-create wardrobe table.
+- Edge devices around the house: always-listening wake word, with spoken replies (STT and TTS).
+- Faster voice input over a WebSocket instead of one upload per recording.
 
-add option to import csv with wardrobe to mass add rows to table, or add individually in UI.
+### Devices and Zigbee
 
-# SMALLER FEATURES:
+- Zigbee binding: pair a remote straight to a bulb so it works even if the hub is down.
+- Scenes for groups and rooms.
+- Power-on behaviour per bulb (what it does when power comes back). The old chips were removed because they did nothing; this would make them real.
+- Automatic or scheduled firmware updates. Manual install from the device drawer already works.
 
-Add zigbee binding devices options
+### Users and admin
 
-add scene integration options to groups/rooms
+- An admin account type with a Settings → Admin page to manage other users and their permissions. There's no role system (RBAC) yet, and the Admin tab is hidden until this exists.
 
-add power on behavior adjustment
+### Digital wardrobe
 
-automatic hardware updates for devices, like actually a version updates for the lightbulbs or whatever (manual install from the device drawer works since 2026-11-09; automatic/scheduled updates are still open)
+- A wardrobe table, filled one item at a time in the UI or in bulk from a CSV import.
 
-# KNOWN BUGS:
+## Decided against
 
-there is some issue with the group endpoints, it tries to remove the wrong group id, instead of using the actual id?
-I tried to fix this but now it's sometimes crashing mqtt. Not really sure. it works well enough though to be a real issue, and can be addressed later. the functionality works for the user and my application handles the logic fine. it's just the mqtt that throws some error.
+Dropped on purpose (2026-11-09), so they don't come back:
+
+- Chat suggestion chips in the empty chat.
+- An offline badge on device cards (the low-battery badge stays).
+- Placing devices in Rooms by dragging or with a room picker (the select-room-then-tap flow is fine).
+- An accessibility pass: focus rings, `aria-label`s, touch tooltips, Rooms toolbar sizes.
+- Classifying remotes that have never been pressed.
+- Warmth % in the agent's prompt.
+- A confirmation on chat's clear-history button.

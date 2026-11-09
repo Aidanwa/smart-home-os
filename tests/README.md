@@ -12,7 +12,7 @@ Opens each tab (Home, Agent, Rooms, Routines, Settings) of the deployed dashboar
 - any of the five nav tabs is missing or off-screen;
 - the Add device / pairing button covers the nav.
 
-Known gap: a box with `overflow: auto` counts as a sideways scroller, and each tab's scrolling area is one, so content too wide for the screen *inside* a tab can still pass (see Testing gaps in `docs/ux-review.md`).
+Known gap: a box with `overflow: auto` counts as a sideways scroller, and each tab's scrolling area is one, so content too wide for the screen *inside* a tab can still pass (see Testing in `docs/todo.md`).
 
 Run it after deploying a frontend change, from Git Bash at the repo root:
 
