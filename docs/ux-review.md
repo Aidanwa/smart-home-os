@@ -29,7 +29,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 ## Groups
 
 - [x] Manage modal Add/Remove has no pending state and refreshes ~1 s later, so a second tap undoes the first. The device list isn't sorted. *(Fixed 2026-11-08: buttons say Adding…/Removing… until the list refreshes; sorted by name.)*
-- [ ] No group brightness and no on/off state for the group.
+- [x] No group brightness and no on/off state for the group. *(Done 2026-11-09: Groups is a grid of cards showing "2 of 4 on · 60%", a power toggle (anything on → all off, else all on) and a brightness slider while any member is on; tapping a card opens a sheet with every device in the group, plus rename, add/remove and delete. Group brightness goes to the whole group, so bulbs that were off come on at that level. The power toggle and slider haven't been pressed in a test (they switch real lights).)*
 - [x] Tooltip "Create a new room or group" conflates groups with the Rooms tab.
 
 ## Agent chat
@@ -58,7 +58,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 - [x] ~~Spotify OAuth returns to the Home tab; the callback is only processed once Settings is opened (`SettingsView.tsx`), so linking looks like it failed.~~ (fixed with the URL tabs) Disconnect has no confirm; "Connecting…" progress is styled as a green success. *(Done 2026-11-09: Disconnect asks first and says what stops working; linking shows a spinner and a loading toast, then a success or error toast.)*
 - [x] Home profile: only 7 US timezones; no feedback on whether the address geocoded (sun triggers depend on it); "Reset Configuration" uses `window.confirm` and doesn't warn that sun routines and Rooms break. *(Done 2026-11-09: every IANA timezone, shown read-only with "Set from your address" when the weather service supplied it; a line under the address says whether it was found and whether weather works (US only); a toast warns if a save couldn't find it; the reset dialog lists what stops working. The gateway used to re-geocode on every save, even a nickname change; now only when the address changes or the last lookup failed.)*
 - [x] The personal API key field is shown (disabled) even when the system key is selected. *(Done 2026-11-09: it only appears when "Use the hub's API key" is off.)*
-- [ ] System health indicator is `hidden md:flex` and hover-only, so phones never see it. Messages are technical.
+- [x] System health indicator is `hidden md:flex` and hover-only, so phones never see it. Messages are technical. *(Done 2026-11-09: a tappable dot on the right of the Home header on phones; one `GET /api/system/status` covers Zigbee (Z2M health check, which also fails if the broker is down) and the assistant; plain-language problems; re-checks when the page wakes. It used to show green when Z2M answered "unhealthy".)*
 - [x] Log out asks for confirmation in a warning-styled modal; unnecessary friction. *(Removed 2026-11-08.)*
 
 ## Routines
@@ -89,9 +89,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 
 Dropped on 2026-11-09 (Aidan doesn't need them): the offline badge, Rooms placement by drag or picker, the accessibility pass (focus rings, `aria-label`s, touch tooltips, Rooms toolbar sizes), classifying never-pressed remotes, and warmth % in the agent's prompt.
 
-1. **Hub status on phones.** The health indicator (`useSystemHealth`, in the shell header) is `hidden md:flex` and opens on hover, so a phone never shows whether the hub, MQTT, Zigbee2MQTT or the agent is down. Show it on phones (e.g. a dot in the header that opens on tap) and reword its messages in plain language.
-2. **Groups: on/off state and brightness.** A group card has no on/off indicator (it's on if any member is on) and no brightness slider, so dimming a room means each bulb in turn. Z2M takes brightness on a group `/set`.
-3. **PWA manifest.** *(Aidan likes it; not yet. Notes for when we do it: manifest + icons + iOS meta tags, maybe a no-cache service worker for Android's install prompt; on iPhone the home-screen app needs its own sign-in, and Spotify linking should be done from the browser.)* Lets "Add to Home Screen" open the dashboard full-screen like an app (no browser bars), with its own icon and name. Without it, iOS opens a Safari tab. Only worth it if the dashboard is used from a phone home screen.
-4. **Chat suggestion chips.** The empty chat could offer a few tappable starters ("Turn off all lights", "What's on?", "Make a bedtime routine") so it's obvious what the assistant can do.
-5. **Routine tags/folders.** User-made labels to group routines beyond time/room. Needs a new column and a migration (Aidan's OK).
-6. **`tests/ui`.** Turn the throwaway headless-Chrome driver into a checked-in test that opens each dialog, checks Escape/Cancel and touch-target sizes, without ever tapping a device (Testing gaps).
+1. **PWA manifest.** *(Aidan likes it; not yet. Notes for when we do it: manifest + icons + iOS meta tags, maybe a no-cache service worker for Android's install prompt; on iPhone the home-screen app needs its own sign-in, and Spotify linking should be done from the browser.)* Lets "Add to Home Screen" open the dashboard full-screen like an app (no browser bars), with its own icon and name. Without it, iOS opens a Safari tab. Only worth it if the dashboard is used from a phone home screen.
+2. **Chat suggestion chips.** The empty chat could offer a few tappable starters ("Turn off all lights", "What's on?", "Make a bedtime routine") so it's obvious what the assistant can do.
+3. **Routine tags/folders.** User-made labels to group routines beyond time/room. Needs a new column and a migration (Aidan's OK).
+4. **`tests/ui`.** Turn the throwaway headless-Chrome driver into a checked-in test that opens each dialog, checks Escape/Cancel and touch-target sizes, without ever tapping a device (Testing gaps).
