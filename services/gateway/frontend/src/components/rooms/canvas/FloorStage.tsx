@@ -21,6 +21,8 @@ interface FloorStageProps {
   placements: DevicePlacement[];
   updateDevicePlacement: (ieee_address: string, zone_id: string | null, pos_x: number, pos_y: number) => void;
   onDeviceClick: (ieee_address: string) => void;
+  /** Edit mode: the selected room can be moved and resized. Otherwise the plan only pans. */
+  editable: boolean;
 }
 
 export function FloorStage(props: FloorStageProps) {
@@ -57,14 +59,14 @@ export function FloorStage(props: FloorStageProps) {
     const scaleBy = 1.1;
     const stage = e.target.getStage();
     const oldScale = stage.scaleX();
-    
+
     const mousePointTo = {
       x: stage.getPointerPosition().x / oldScale - stage.x() / oldScale,
       y: stage.getPointerPosition().y / oldScale - stage.y() / oldScale,
     };
 
     const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    
+
     // Prevent zooming too far in or out
     if (newScale < 0.1 || newScale > 5) return;
 
@@ -86,7 +88,7 @@ export function FloorStage(props: FloorStageProps) {
     // If two fingers are detected, calculate distance for zoom
     if (touch1 && touch2) {
       const stage = e.target.getStage();
-      
+
       const p1 = { x: touch1.clientX, y: touch1.clientY };
       const p2 = { x: touch2.clientX, y: touch2.clientY };
       const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
@@ -129,18 +131,18 @@ export function FloorStage(props: FloorStageProps) {
       ref={stageRef}
       width={width}
       height={height}
-      
+
       // --- 5. NEW: State Bindings & Panning ---
       x={stagePos.x}
       y={stagePos.y}
       scaleX={stageScale}
       scaleY={stageScale}
       draggable // Enables dragging the background!
-      
+
       onWheel={handleWheel}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      
+
       onDragEnd={(e) => {
         // Ensure we only save the drag position if we dragged the stage, not a room
         if (e.target === e.target.getStage()) {
@@ -148,7 +150,7 @@ export function FloorStage(props: FloorStageProps) {
         }
       }}
       // -----------------------------------------
-      
+
       onClick={(e) => {
         if (e.target === e.target.getStage()) {
           props.onSelectZone(null);
@@ -178,14 +180,14 @@ export function FloorStage(props: FloorStageProps) {
               roomPlacements={roomPlacements}
               devices={props.devices}
               updateDevicePlacement={props.updateDevicePlacement}
-              isSelected={zone.id === props.selectedZoneId}
-              
-              // ADD THIS LINE:
-              onDeviceClick={props.onDeviceClick} 
-              
-              onSelect={() =>
-                props.onSelectZone(props.selectedZoneId === zone.id ? null : zone.id)
-              }
+              isSelected={props.editable && zone.id === props.selectedZoneId}
+              editable={props.editable}
+              onDeviceClick={props.onDeviceClick}
+              onSelect={() => {
+                // Selecting only happens in edit mode. Tapping the selected room keeps it selected
+                // (tap empty space to deselect), so a tap before a drag doesn't drop the selection.
+                if (props.editable && props.selectedZoneId !== zone.id) props.onSelectZone(zone.id);
+              }}
               onDragEnd={(xFt, yFt) => props.onDragEnd(zone.id, xFt, yFt)}
               onTransformEnd={(xFt, yFt, wFt, hFt) =>
                 props.onTransformEnd(zone.id, xFt, yFt, wFt, hFt)

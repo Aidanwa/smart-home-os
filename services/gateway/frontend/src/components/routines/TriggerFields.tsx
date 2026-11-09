@@ -110,7 +110,6 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
   const info = findInfo(ctx.attributes, trigger.device, trigger.attribute);
   const isEvent = EVENT_ATTRIBUTES.includes(trigger.attribute);
   const ops = opsFor(info, trigger.attribute, true);
-  const unit = info?.unit;
 
   const pick = (device: string, attribute: string) => {
     const nextInfo = findInfo(ctx.attributes, device, attribute);
@@ -165,14 +164,14 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
             <div>
               <label className="flex items-center gap-2 text-xs text-neutral-400">
                 <input type="checkbox" checked={trigger.rearm !== null}
-                  onChange={e => onChange({ ...trigger, rearm: e.target.checked ? deltaFromDisplay(2, unit, ctx.tempUnit) : null })} />
+                  onChange={e => onChange({ ...trigger, rearm: e.target.checked ? deltaFromDisplay(2, info, ctx.tempUnit) : null })} />
                 Re-arm margin (ignore small wobbles)
               </label>
               {trigger.rearm !== null && (
                 <div className="flex items-center gap-2 mt-1.5">
-                  <NumberField min={0.01} className={`${input} w-24`} value={deltaToDisplay(trigger.rearm, unit, ctx.tempUnit)}
-                    onChange={v => onChange({ ...trigger, rearm: deltaFromDisplay(v, unit, ctx.tempUnit) })} />
-                  <span className="text-xs text-neutral-400">{displayUnit(unit, ctx.tempUnit)}</span>
+                  <NumberField min={0.01} className={`${input} w-24`} value={deltaToDisplay(trigger.rearm, info, ctx.tempUnit)}
+                    onChange={v => onChange({ ...trigger, rearm: deltaFromDisplay(v, info, ctx.tempUnit) })} />
+                  <span className="text-xs text-neutral-400">{displayUnit(info, ctx.tempUnit)}</span>
                 </div>
               )}
               <p className="text-xs text-neutral-600 mt-1">After firing, it won't fire again until the reading has moved back past the threshold by this much.</p>

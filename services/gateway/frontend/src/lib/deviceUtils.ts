@@ -37,7 +37,3 @@ export function getDeviceCategory(state: DeviceState): DeviceCategory {
 export function isBatteryLow(state: DeviceState): boolean {
   return state.battery_low === true || (typeof state.battery === 'number' && state.battery <= 15);
 }
-
-/** Colour temperature: Z2M speaks mired, people speak Kelvin. */
-export const miredToKelvin = (m: number) => Math.round(1_000_000 / m / 50) * 50;
-export const kelvinToMired = (k: number) => Math.round(1_000_000 / k);

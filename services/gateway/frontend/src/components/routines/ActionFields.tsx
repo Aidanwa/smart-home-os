@@ -2,15 +2,22 @@ import { useEffect, useState } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { searchMusic, useSpotifyDevices } from '../../hooks/useRoutines';
 import type { Action, MusicResult, SetPayload } from './types';
-import { AGENT_RUNS_PER_HOUR, kelvinToMired, miredToKelvin } from './types';
+import { AGENT_RUNS_PER_HOUR } from './types';
+import { type MiredRange, miredToWarmth, unionRange, warmthToMired } from '../../lib/colorTemp';
 import { NumberField } from './NumberField';
 import { chip, input } from './styles';
 
 export interface ActionFieldsProps {
   action: Action;
   onChange: (a: Action) => void;
-  deviceOptions: { ieee: string; name: string; hasColorTemp: boolean; hasBrightness: boolean }[];
+  deviceOptions: { ieee: string; name: string; hasColorTemp: boolean; hasBrightness: boolean; range: MiredRange }[];
   groups: GroupInfo[];
+}
+
+/** A group's warmth scale spans all its members' ranges. */
+function groupRange(group: GroupInfo | undefined, deviceOptions: ActionFieldsProps['deviceOptions']): MiredRange {
+  const members = new Set(group?.members.map(m => m.ieee_address));
+  return unionRange(deviceOptions.filter(d => d.hasColorTemp && members.has(d.ieee)).map(d => d.range));
 }
 
 export function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsProps) {
@@ -20,14 +27,17 @@ export function ActionFields({ action, onChange, deviceOptions, groups }: Action
   if (action.type === 'agent') return <AgentFields action={action} onChange={onChange} />;
   if (action.type === 'fade') {
     const targets = [
-      ...deviceOptions.filter(d => d.hasBrightness).map(d => ({ value: `d:${d.ieee}`, label: d.name })),
-      ...groups.map(g => ({ value: `g:${g.id}`, label: `${g.friendly_name} (group)` })),
+      ...deviceOptions.filter(d => d.hasBrightness).map(d => ({ value: `d:${d.ieee}`, label: d.name, range: d.range })),
+      ...groups.map(g => ({ value: `g:${g.id}`, label: `${g.friendly_name} (group)`, range: groupRange(g, deviceOptions) })),
     ];
     return <FadeFields action={action} onChange={onChange} targets={targets} />;
   }
 
   const selectedDevice = action.type === 'device' ? deviceOptions.find(d => d.ieee === action.device) : undefined;
   const showColorTemp = action.type === 'group' || !!selectedDevice?.hasColorTemp;
+  const range = action.type === 'device'
+    ? selectedDevice?.range
+    : groupRange(groups.find(g => g.id === action.group), deviceOptions);
 
   return (
     <>
@@ -42,7 +52,7 @@ export function ActionFields({ action, onChange, deviceOptions, groups }: Action
           {groups.map(g => <option key={g.id} value={g.id}>{g.friendly_name}</option>)}
         </select>
       )}
-      <PayloadFields value={action.set} showColorTemp={showColorTemp} onChange={set => onChange({ ...action, set })} />
+      <PayloadFields value={action.set} showColorTemp={showColorTemp} range={range} onChange={set => onChange({ ...action, set })} />
       <label className="flex items-center gap-2 text-xs text-neutral-500">
         <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
         Stop the routine if this fails
@@ -76,7 +86,7 @@ function DelayFields({ action, onChange }: { action: DelayAction; onChange: (a: 
   );
 }
 
-function PayloadFields({ value, onChange, showColorTemp }: { value: SetPayload; onChange: (v: SetPayload) => void; showColorTemp: boolean }) {
+function PayloadFields({ value, onChange, showColorTemp, range }: { value: SetPayload; onChange: (v: SetPayload) => void; showColorTemp: boolean; range?: MiredRange }) {
   const set = (k: keyof SetPayload, v: SetPayload[keyof SetPayload]) => {
     const next = { ...value, [k]: v };
     if (v === null || v === undefined) delete next[k];
@@ -94,8 +104,9 @@ function PayloadFields({ value, onChange, showColorTemp }: { value: SetPayload; 
       <OptionalNumber label="Brightness (%)" value={pct} min={1} max={100} defaultValue={100}
         onChange={v => set('brightness', v == null ? null : Math.round((v / 100) * 254))} />
       {showColorTemp && (
-        <OptionalNumber label="Colour temperature (mired, 150 cool – 500 warm)" value={value.color_temp ?? null} min={150} max={500} defaultValue={370}
-          onChange={v => set('color_temp', v)} />
+        <OptionalNumber label="Warmth (%, 0 coolest – 100 warmest)" min={0} max={100} defaultValue={75}
+          value={value.color_temp != null && range ? miredToWarmth(value.color_temp, range) : null}
+          onChange={v => set('color_temp', v == null || !range ? null : warmthToMired(v, range))} />
       )}
       <OptionalNumber label="Transition (seconds)" value={value.transition ?? null} min={0} max={3600} defaultValue={2}
         onChange={v => set('transition', v)} />
@@ -122,12 +133,15 @@ function OptionalNumber({ label: text, value, min, max, defaultValue, onChange }
 // ------------------------------------------------------------------ fade
 
 type FadeAction = Extract<Action, { type: 'fade' }>;
-export interface FadeTargetOption { value: string; label: string }  // "d:<ieee>" or "g:<id>"
+export interface FadeTargetOption { value: string; label: string; range: MiredRange }  // "d:<ieee>" or "g:<id>"
 
 export function FadeFields({ action, onChange, targets }: { action: FadeAction; onChange: (a: Action) => void; targets: FadeTargetOption[] }) {
   const current = action.device !== null ? `d:${action.device}` : `g:${action.group}`;
   const pct = (b: number) => Math.round((b / 254) * 100);
   const toBright = (p: number) => Math.round((p / 100) * 254);
+  const range = targets.find(t => t.value === current)?.range ?? unionRange([]);
+  const warm = (m: number) => miredToWarmth(m, range);
+  const toMired = (p: number) => warmthToMired(p, range);
   const [unit, setUnit] = useState(() => (action.duration_s % 60 === 0 ? 60 : 1));
 
   return (
@@ -172,23 +186,23 @@ export function FadeFields({ action, onChange, targets }: { action: FadeAction; 
 
       <label className="flex items-center gap-2 text-xs text-neutral-400">
         <input type="checkbox" checked={action.to_color_temp !== null}
-          onChange={e => onChange({ ...action, to_color_temp: e.target.checked ? kelvinToMired(4000) : null, from_color_temp: e.target.checked ? action.from_color_temp : null })} />
+          onChange={e => onChange({ ...action, to_color_temp: e.target.checked ? toMired(25) : null, from_color_temp: e.target.checked ? action.from_color_temp : null })} />
         Also fade the white tone
       </label>
       {action.to_color_temp !== null && (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">From (K, optional)</label>
-            <NumberField integer min={2000} max={6500} className={input}
-              value={action.from_color_temp !== null ? miredToKelvin(action.from_color_temp) : null}
-              onChange={k => onChange({ ...action, from_color_temp: kelvinToMired(k) })} />
+            <label className="block text-xs text-neutral-400 mb-1">From warmth (%, optional)</label>
+            <NumberField integer min={0} max={100} className={input}
+              value={action.from_color_temp !== null ? warm(action.from_color_temp) : null}
+              onChange={p => onChange({ ...action, from_color_temp: toMired(p) })} />
           </div>
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">To (K)</label>
-            <NumberField integer min={2000} max={6500} className={input} value={miredToKelvin(action.to_color_temp)}
-              onChange={k => onChange({ ...action, to_color_temp: kelvinToMired(k) })} />
+            <label className="block text-xs text-neutral-400 mb-1">To warmth (%)</label>
+            <NumberField integer min={0} max={100} className={input} value={warm(action.to_color_temp)}
+              onChange={p => onChange({ ...action, to_color_temp: toMired(p) })} />
           </div>
-          <p className="col-span-2 text-xs text-neutral-600">2200 K is candle-warm, 2700 K warm white, 4000 K neutral, 6500 K daylight.</p>
+          <p className="col-span-2 text-xs text-neutral-600">0% is the light's coolest white, 100% its warmest (candle-like).</p>
         </div>
       )}
 

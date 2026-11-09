@@ -6,6 +6,8 @@ import type { PreviewResult } from '../../hooks/useRoutines';
 import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, TempUnit, Trigger } from './types';
 import { ACTION_LABEL, formatInTz, joinConditions, nextId, splitConditions } from './types';
 import { ActionFields } from './ActionFields';
+import { findInfo } from './fieldLogic';
+import { miredRange } from '../../lib/colorTemp';
 import { NumberField } from './NumberField';
 import { TriggerRow } from './TriggerFields';
 import { ConditionRow } from './ConditionFields';
@@ -45,9 +47,13 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
     () =>
       Object.entries(devices)
         .filter(([, d]) => typeof d.state === 'string')
-        .map(([ieee, d]) => ({ ieee, name: (d.friendly_name as string) || ieee, hasColorTemp: d.color_temp !== undefined, hasBrightness: d.brightness !== undefined }))
+        .map(([ieee, d]) => ({
+          ieee, name: (d.friendly_name as string) || ieee,
+          hasColorTemp: d.color_temp !== undefined, hasBrightness: d.brightness !== undefined,
+          range: miredRange(findInfo(attributes, ieee, 'color_temp')),
+        }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [devices],
+    [devices, attributes],
   );
 
   // Live validation + next fire times, debounced. Only meaningful once there's a name and an action.

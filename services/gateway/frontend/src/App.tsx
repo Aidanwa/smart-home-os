@@ -1,16 +1,16 @@
 // services/gateway/frontend/src/App.tsx
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useDevices } from './hooks/useDevices';
+import { useState, useMemo, useEffect } from 'react';
+import { useDevices, type DeviceState } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { 
-  Radio,
+import {
   Lightbulb, Zap, Thermometer, ToggleRight, Box, Gamepad2
 } from 'lucide-react';
 import { getDeviceCategory } from './lib/deviceUtils';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
 import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
+import { PairingButton } from './components/devices/PairingButton';
 import { AgentChat } from './components/agent/AgentChat';
 import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
@@ -31,6 +31,21 @@ function tabFromUrl(): Tab {
   return (TABS as readonly string[]).includes(h) ? (h as Tab) : 'home';
 }
 
+/** A choice from a fixed list, remembered in localStorage (per device; harmless if unavailable). */
+function useStoredChoice<T extends string>(key: string, options: readonly T[], fallback: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return options.includes(v as T) ? (v as T) : fallback;
+    } catch { return fallback; }
+  });
+  const set = (v: T) => {
+    setValue(v);
+    try { localStorage.setItem(key, v); } catch { /* private mode */ }
+  };
+  return [value, set] as const;
+}
+
 // Heavy functional hooks are isolated into this sub-component to ensure they remain safely suspended from execution until authentication settles
 function AuthenticatedDashboard() {
   const { devices, realtime, toggleDevice, sendCommand, permitJoin, renameDevice, deleteDevice } = useDevices();
@@ -48,64 +63,9 @@ function AuthenticatedDashboard() {
     window.location.hash = tab;
   };
   const routineAlerts = useRoutineAlerts(activeTab === 'routines');
-  const [dashboardView, setDashboardView] = useState<'devices' | 'groups'>('devices');
-  const [isPairing, setIsPairing] = useState(false);
-  const [sortMode, setSortMode] = useState<'type' | 'alphabetical'>('type');
-
-  // DRAG ENGINE STATE: Tracks absolute pixel coordinates from bottom-right boundary lines
-  const [fabPos, setFabPos] = useState({ right: 24, bottom: 24 });
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // High-precision tracking references to monitor real displacement paths
-  const dragStartRef = useRef({ clientX: 0, clientY: 0 });
-  const posStartRef = useRef({ right: 24, bottom: 24 });
-  const totalMovementRef = useRef(0);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    setIsDragging(true);
-    totalMovementRef.current = 0;
-    dragStartRef.current = { clientX: e.clientX, clientY: e.clientY };
-    posStartRef.current = { ...fabPos };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isDragging) return;
-    
-    // Compute total coordinate delta trajectories
-    const deltaX = e.clientX - dragStartRef.current.clientX;
-    const deltaY = e.clientY - dragStartRef.current.clientY;
-    
-    // Accumulate total dragging displacement to separate a drag move from a normal touch tap
-    totalMovementRef.current += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
-    // Invert changes because position anchors to absolute right and bottom bounds
-    setFabPos({
-      right: Math.max(16, posStartRef.current.right - deltaX),
-      bottom: Math.max(16, posStartRef.current.bottom - deltaY)
-    });
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    setIsDragging(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    
-    // UX GUARD: Trigger pairing loops only if the movement radius was lower than a 5px vibration margin
-    if (totalMovementRef.current < 5) {
-      handleTogglePairing();
-    }
-  };
-
-  const handleTogglePairing = () => {
-    if (isPairing) {
-      permitJoin(false, 0);
-      setIsPairing(false);
-    } else {
-      permitJoin(true, 254);
-      setIsPairing(true);
-      setTimeout(() => setIsPairing(false), 254000); 
-    }
-  };
+  // Home's view and sort choices are remembered on this device.
+  const [dashboardView, setDashboardView] = useStoredChoice('home.view', ['devices', 'groups'] as const, 'devices');
+  const [sortMode, setSortMode] = useStoredChoice('home.sort', ['type', 'alphabetical'] as const, 'type');
 
   const displaySections = useMemo(() => {
     const activeDevices = Object.entries(devices)
@@ -113,7 +73,9 @@ function AuthenticatedDashboard() {
       .map(([name, state]) => ({ name, state }));
 
     if (sortMode === 'alphabetical') {
-      return [{ id: 'all', title: null, devices: activeDevices.sort((a, b) => a.name.localeCompare(b.name)) }] as DeviceSection[];
+      // Keys are IEEE addresses; sort by the name people see.
+      const label = (d: { name: string; state: DeviceState }) => (d.state.friendly_name as string | undefined) ?? d.name;
+      return [{ id: 'all', title: null, devices: activeDevices.sort((a, b) => label(a).localeCompare(label(b))) }] as DeviceSection[];
     }
 
     const groups: Record<string, DeviceSection> = {
@@ -150,45 +112,28 @@ function AuthenticatedDashboard() {
           <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">
             <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <h1 className="text-2xl font-medium tracking-tight">Welcome back, {user?.username}</h1>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Sorting only applies to the device list; groups have their own order. */}
+                {dashboardView === 'devices' && (
                 <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-neutral-800">
                   <button onClick={() => setSortMode('type')} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${sortMode === 'type' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}>By Type</button>
                   <button onClick={() => setSortMode('alphabetical')} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${sortMode === 'alphabetical' ? 'bg-neutral-800 text-white' : 'text-neutral-500'}`}>A-Z</button>
                 </div>
+                )}
                 <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-neutral-800">
                   <button onClick={() => setDashboardView('devices')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'devices' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Devices</button>
                   <button onClick={() => setDashboardView('groups')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'groups' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Groups</button>
                 </div>
+                <PairingButton devices={devices} permitJoin={permitJoin} />
               </div>
             </header>
 
             {dashboardView === 'devices' ? (
               <>
-                <div className="w-full">
+                <div className="w-full pb-6">
                   {displaySections.map(section => (
                     <DeviceCategorySection key={section.id} {...section} sendCommand={sendCommand} toggleDevice={toggleDevice} renameDevice={renameDevice} deleteDevice={deleteDevice} />
                   ))}
-                </div>
-                {/* DRAGGABLE FAB: absolute to <main> (not fixed), so on phones it stays above the bottom nav */}
-                <div 
-                  className="absolute z-30 select-none touch-none"
-                  style={{
-                    right: `${fabPos.right}px`,
-                    bottom: `${fabPos.bottom}px`,
-                    transition: isDragging ? 'none' : 'right 0.15s ease, bottom 0.15s ease'
-                  }}
-                >
-                  <button 
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    className={`flex items-center gap-3 px-5 py-3.5 rounded-full border shadow-2xl cursor-grab active:cursor-grabbing select-none focus:outline-none focus:ring-0 ${
-                      isDragging ? 'scale-105 border-neutral-500' : ''
-                    } ${isPairing ? 'bg-blue-900/40 border-blue-500 text-blue-400 backdrop-blur-md' : 'bg-neutral-900 border-neutral-700 text-neutral-300'}`}
-                  >
-                    <Radio size={20} className={isPairing ? 'animate-pulse' : ''} />
-                    <span className="text-sm font-medium">{isPairing ? 'Pairing Active...' : 'Add Device'}</span>
-                  </button>
                 </div>
               </>
             ) : (

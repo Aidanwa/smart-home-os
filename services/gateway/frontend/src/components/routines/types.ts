@@ -1,3 +1,4 @@
+import { miredDeltaToWarmth, miredRange, miredToWarmth, warmthDeltaToMired, warmthToMired } from '../../lib/colorTemp';
 // Mirrors services/gateway/scheduler/schema.py. Keep the two in sync.
 
 export type Day = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -111,9 +112,6 @@ export const ACTION_LABEL: Record<Action['type'], string> = {
   agent: 'Ask the agent',
 };
 
-// Colour temperature: Z2M uses mireds; people think in Kelvin (2700 K warm, 6500 K daylight).
-export const miredToKelvin = (m: number) => Math.round(1_000_000 / m / 10) * 10;
-export const kelvinToMired = (k: number) => Math.min(500, Math.max(150, Math.round(1_000_000 / k)));
 
 export interface MusicResult {
   kind: 'playlist' | 'album' | 'artist' | 'track';
@@ -211,24 +209,29 @@ export function describeDays(days: Day[] | null): string {
   return days.map(d => d[0].toUpperCase() + d.slice(1)).join(', ');
 }
 
-// ---------------------------------------------------------------- temperature units
-// Z2M always reports °C. With the °F preference, the editor shows/accepts °F and stores °C.
+// ---------------------------------------------------------------- display units
+// Values are stored device-native and converted only for display:
+// - Z2M always reports °C. With the °F preference, the editor shows/accepts °F and stores °C.
+// - Colour temperature is mired, shown as warmth: % of that bulb's range (lib/colorTemp).
 
 export type TempUnit = 'F' | 'C';
-const isCelsius = (unit?: string) => unit === '°C';
+/** What the conversions need to know about a reading (its AttributeInfo). */
+export type UnitInfo = Pick<AttributeInfo, 'unit' | 'value_min' | 'value_max'> | undefined;
+const isCelsius = (info: UnitInfo) => info?.unit === '°C';
+const isMired = (info: UnitInfo) => info?.unit === 'mired';
 const round = (v: number, dp: number) => Math.round(v * 10 ** dp) / 10 ** dp;
 
-export const displayUnit = (unit: string | undefined, pref: TempUnit) =>
-  isCelsius(unit) && pref === 'F' ? '°F' : unit ?? '';
-export const toDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
-  isCelsius(unit) && pref === 'F' ? round(v * 9 / 5 + 32, 1) : v;
-export const fromDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
-  isCelsius(unit) && pref === 'F' ? round((v - 32) * 5 / 9, 2) : v;
+export const displayUnit = (info: UnitInfo, pref: TempUnit) =>
+  isMired(info) ? '% warm' : isCelsius(info) && pref === 'F' ? '°F' : info?.unit ?? '';
+export const toDisplay = (v: number, info: UnitInfo, pref: TempUnit) =>
+  isMired(info) ? miredToWarmth(v, miredRange(info)) : isCelsius(info) && pref === 'F' ? round(v * 9 / 5 + 32, 1) : v;
+export const fromDisplay = (v: number, info: UnitInfo, pref: TempUnit) =>
+  isMired(info) ? warmthToMired(v, miredRange(info)) : isCelsius(info) && pref === 'F' ? round((v - 32) * 5 / 9, 2) : v;
 // Margins are differences, so no 32° offset.
-export const deltaToDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
-  isCelsius(unit) && pref === 'F' ? round(v * 9 / 5, 1) : v;
-export const deltaFromDisplay = (v: number, unit: string | undefined, pref: TempUnit) =>
-  isCelsius(unit) && pref === 'F' ? round(v * 5 / 9, 2) : v;
+export const deltaToDisplay = (v: number, info: UnitInfo, pref: TempUnit) =>
+  isMired(info) ? miredDeltaToWarmth(v, miredRange(info)) : isCelsius(info) && pref === 'F' ? round(v * 9 / 5, 1) : v;
+export const deltaFromDisplay = (v: number, info: UnitInfo, pref: TempUnit) =>
+  isMired(info) ? warmthDeltaToMired(v, miredRange(info)) : isCelsius(info) && pref === 'F' ? round(v * 5 / 9, 2) : v;
 
 // ---------------------------------------------------------------- summaries
 
@@ -241,20 +244,23 @@ export interface DescribeCtx {
   tempUnit: TempUnit;
 }
 
-export function formatValue(value: Scalar | null, unit: string | undefined, pref: TempUnit): string {
+export function formatValue(value: Scalar | null, info: UnitInfo, pref: TempUnit): string {
   if (value === null) return '';
-  if (typeof value === 'number') return `${toDisplay(value, unit, pref)}${displayUnit(unit, pref) ? ' ' + displayUnit(unit, pref) : ''}`;
+  if (typeof value === 'number') {
+    const u = displayUnit(info, pref);
+    return `${toDisplay(value, info, pref)}${u ? (u.startsWith('%') ? u : ' ' + u) : ''}`;
+  }
   return String(value);
 }
 
 function describeDeviceRef(device: string, attribute: string, op: TriggerOp, value: Scalar | null, ctx?: DescribeCtx) {
   const dev = ctx?.attributes[device];
   const name = dev?.friendly_name ?? device;
-  const unit = dev?.properties.find(p => p.property === attribute)?.unit;
+  const info = dev?.properties.find(p => p.property === attribute);
   if (EVENT_ATTRIBUTES.includes(attribute)) {
     return op === 'changes' ? `${name} button pressed` : `${name} ${String(value)}`;
   }
-  return `${name} ${attribute} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, unit, ctx?.tempUnit ?? 'F')}`;
+  return `${name} ${attribute} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, info, ctx?.tempUnit ?? 'F')}`;
 }
 
 export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {

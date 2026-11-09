@@ -115,7 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (res.ok) {
-        return { success: true, message: data.message };
+        // Sign straight in. If that somehow fails, the card asks them to sign in by hand.
+        const signedIn = await login(username, password);
+        return { success: true, message: signedIn.success ? undefined : data.message };
       }
       return { success: false, error: data.detail || 'Registration failed.' };
     } catch (err) {

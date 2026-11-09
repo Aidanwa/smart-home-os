@@ -156,13 +156,20 @@ export function DeviceConfigDrawer({
                 <span className="font-medium truncate">{new Date(state.last_seen).toLocaleString()}</span>
               </div>
             )}
-            {state.update_available && (
-              <div className="flex items-center justify-between bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 col-span-2">
-                <div className="flex items-center gap-2 text-yellow-500">
-                  <Download size={16} />
-                  <span className="font-medium text-sm">Firmware update available</span>
+            {/* Z2M's OTA status: update.state is idle | available | scheduled | updating */}
+            {(state.update?.state === 'available' || state.update?.state === 'updating' || state.update?.state === 'scheduled') && (
+              <div className="flex items-center justify-between gap-3 bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 col-span-2">
+                <div className="flex items-center gap-2 text-yellow-500 min-w-0">
+                  <Download size={16} className="shrink-0" />
+                  <span className="font-medium text-sm">
+                    {state.update.state === 'updating'
+                      ? `Updating firmware${typeof state.update.progress === 'number' ? ` (${Math.round(state.update.progress)}%)` : '…'}`
+                      : state.update.state === 'scheduled' ? 'Firmware update scheduled' : 'Firmware update available'}
+                  </span>
                 </div>
-                <span className="text-xs text-yellow-400/80">Install from Zigbee2MQTT</span>
+                {state.update.state === 'available' && (
+                  <span className="text-xs text-yellow-400/80 text-right">Install from Zigbee2MQTT</span>
+                )}
               </div>
             )}
           </div>

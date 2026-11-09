@@ -20,8 +20,8 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] Devices without `state` (remotes, motion/contact sensors) fall through to `BasicSwitchCard`, which shows a power button that sends `ON`, and their real readings (occupancy, contact, action) aren't shown. *(Fixed 2026-11-08: `SensorCard` (open/closed, motion, leak, temperature, tamper) and `RemoteCard` (last press); unknown devices get no power button.)*
 - [ ] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card. *(Low-battery badge done 2026-11-08; offline still open, Z2M doesn't publish `last_seen` here.)*
 - [ ] Home groups by device type although rooms exist. Grouping by room, with per-room and whole-house "All off", matches how it's used.
-- [ ] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown.
-- [ ] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted.
+- [x] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown. *(Done 2026-11-08: `PairingButton` in the Home header, countdown from Z2M's `permit_join_end`, a toast per joined device.)*
+- [x] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted. *(Fixed 2026-11-08: hidden on Groups; sort and view remembered; A-Z now sorts by name, not IEEE address.)*
 - [ ] No loading or empty state (blank before the first fetch, nothing for zero devices).
 - [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(Now 2200–6500 K.)*
 
@@ -45,23 +45,23 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 - [ ] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab.
 - [ ] Placement needs "select a room, then click a device in the sidebar", otherwise a "Placement Error" modal. Drag from the sidebar or a "which room?" picker is easier.
-- [ ] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle.
-- [ ] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
+- [x] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle. *(Done 2026-11-08: View/Edit toggle; only the selected room drags; double-tap renames.)*
+- [x] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Done 2026-11-08: a "Devices" bottom sheet in Edit mode; the "pick a room first" error modal became a hint in the list.)* *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
 - [x] Copy: "Autosaving soon..." rendered as a button; "F0" / "Floor 0" instead of `formatFloorName`; "Home Context Not Initialized" has no button to Settings → Home.
 
 ## Settings, login, shell
 
 - [x] Jargon throughout: "Authenticate Dashboard Context", "Initialize", "Identity modifications pushed correctly", "Save Orchestrator Context", "Checking structural configuration context…". One plain-language pass. *(Done 2026-11-08: login, all Settings tabs, health popover, Rooms, delete/remove dialogs, chat empty state. The empty Admin tab is hidden.)*
-- [ ] Registering doesn't sign you in.
+- [x] Registering doesn't sign you in. *(Fixed 2026-11-08.)*
 - [ ] ~~Spotify OAuth returns to the Home tab; the callback is only processed once Settings is opened (`SettingsView.tsx`), so linking looks like it failed.~~ (fixed with the URL tabs) Disconnect has no confirm; "Connecting…" progress is styled as a green success.
 - [ ] Home profile: only 7 US timezones; no feedback on whether the address geocoded (sun triggers depend on it); "Reset Configuration" uses `window.confirm` and doesn't warn that sun routines and Rooms break.
 - [ ] The personal API key field is shown (disabled) even when the system key is selected.
 - [ ] System health indicator is `hidden md:flex` and hover-only, so phones never see it. Messages are technical.
-- [ ] Log out asks for confirmation in a warning-styled modal; unnecessary friction.
+- [x] Log out asks for confirmation in a warning-styled modal; unnecessary friction. *(Removed 2026-11-08.)*
 
 ## Routines (in good shape)
 
-- [ ] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`).
+- [x] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`). *(Fixed 2026-11-08: everything is mired underneath and shown as warmth %, scaled to each bulb's range, on cards, actions, fades, triggers and conditions.)*
 - [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
 - [ ] Icon buttons and chips are ~28px, below a 44px touch target.
 

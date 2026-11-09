@@ -124,7 +124,7 @@ Built 2026-11-08 (design history is in git: the old `docs/scheduler-proposal.md`
   - `/spotify/devices` and `/spotify/search`.
   - `/alerts` and `/alerts/seen`: the tab's failure badge, using `ui_settings.routines_seen_at`.
   - Fixed paths must be declared before `/{routine_id}`.
-- **Units:** values are device-native (temperature is always °C). The UI always shows and accepts °F, converts on the way in and out, and shows colour temperature in Kelvin.
+- **Units:** values are device-native (temperature is always °C). The UI always shows and accepts °F, converts on the way in and out, Colour temperature is stored and sent in mired everywhere, and shown as **warmth %**: a percentage of that bulb's own range from Z2M's exposes (0% = coolest, 100% = warmest, so it rises with mired and comparisons keep their meaning). Helpers are in the frontend's `lib/colorTemp.ts`; groups use the union of their members' ranges.
 - **Next:** ntfy notifications (failure alerts, a `notify` action, reminders): see [docs/todo.md](docs/todo.md).
 
 ## Agent internals
@@ -148,6 +148,8 @@ React 19 + Vite 8 + TypeScript 6 + Tailwind v4 + shadcn (`radix-nova`, component
 - `AuthContext` monkey-patches `window.fetch` to log out on any 401, so plain `fetch` is fine. `authenticatedFetch` also exists.
 - Data hooks are in `src/hooks` (`useDevices`, `useGroups`, `useAgentChat`, `useVoiceInput`, `useSystemHealth`, and `useRoutines.ts`, which has `useRoutines`, `useDeviceAttributes`, `useSpotifyDevices`, `useRoutineAlerts` and `searchMusic`). The rooms feature is self-contained under `src/components/rooms` (`useRoomLayout` talks to `/api/zones`). Device placement coordinates are percentages (0–100) of the room's size.
 - Device cards: `getDeviceKind` in `src/lib/deviceUtils.ts` decides both the Home section and the card (light, plug, switch, sensor, climate, remote, other); change it there, not in the renderer. `BaseDeviceCard` makes the whole card the on/off button; inner controls need `data-control` (sliders) or `pointer-events-auto` to sit above it.
+- Feedback: device/group requests go through `request()` in `src/lib/api.ts`, which shows a `sonner` toast with the hub's error; `withPending`/`usePending` drive the card's busy spinner. `ErrorBoundary` wraps the app, each tab and each device card.
+- Rooms has View (pan/zoom only) and Edit modes. In Edit, only the selected room (and its devices) is draggable, so a drag elsewhere pans; on phones the device list is a bottom sheet (`DeviceSheet`).
 - Mobile layout is a priority (recent work). Check narrow widths when touching layout.
 - Number inputs: use `components/routines/NumberField.tsx`, not a controlled `<input type="number">` that parses and clamps on every keystroke (that mangles typing). It keeps the typed text while focused and clamps when you leave the box.
 - `vite.config.ts` proxies `/api` to `http://localhost:8000`, but the gateway now serves HTTPS, so `npm run dev` against the Docker gateway needs that target changed to `https://...` with `secure: false`. Also, the first proxy key `/api` shadows the later `/api/agent*` entries. The normal workflow is Docker anyway.

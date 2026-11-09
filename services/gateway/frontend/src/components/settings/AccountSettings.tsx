@@ -11,7 +11,6 @@ export function AccountSettings() {
   const [isEditing, setIsEditing] = useState(false);
 
   // Modal States
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -152,14 +151,14 @@ export function AccountSettings() {
       )}
 
       {/* Disconnect Session */}
-      <div className="bg-orange-900/40 border border-orange-800 p-6 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-base font-medium text-neutral-200">Log out</h2>
           <p className="text-xs text-neutral-500 mt-0.5">Sign out on this device. You’ll stay signed in everywhere else.</p>
         </div>
         <button 
-          onClick={() => setShowLogoutConfirm(true)} 
-          className="px-4 py-2 bg-orange-800 hover:bg-orange-700 text-neutral-300 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]"
+          onClick={logout}
+          className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]"
         >
           Log Out
         </button>
@@ -181,23 +180,6 @@ export function AccountSettings() {
 
       {/* ---------------- MODALS ---------------- */}
 
-      {/* Logout Confirmation */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-lg font-medium text-neutral-100">Log out?</h3>
-            <p className="text-sm text-neutral-400 leading-relaxed">You’ll need your username and password to sign back in on this device.</p>
-            <div className="flex gap-3 justify-end pt-2">
-              <button onClick={() => setShowLogoutConfirm(false)} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-xl transition-colors">
-                Cancel
-              </button>
-              <button onClick={logout} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-xl transition-colors active:scale-[0.99]">
-                Log out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Account Confirmation */}
       {showDeleteConfirm && (

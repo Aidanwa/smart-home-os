@@ -35,6 +35,8 @@ class DeviceState(BaseModel):
     vibration: Optional[bool] = None
     tamper: Optional[bool] = None
     action: Optional[str] = None
+    # Z2M OTA status: {"state": "idle"|"available"|"scheduled"|"updating", "progress", ...}
+    update: Optional[Dict[str, Any]] = None
 
     # Smart Plugs
     power: Optional[float] = None
@@ -88,6 +90,9 @@ class BridgeHealthResponse(BaseModel):
 class BridgeInfoResponse(BaseModel):
     version: str
     commit: Optional[str] = None
+    # Pairing window (Z2M 2.x): permit_join_end is ms since the epoch
+    permit_join: Optional[bool] = None
+    permit_join_end: Optional[int] = None
     coordinator: Optional[dict] = None
     network: Optional[dict] = None
     

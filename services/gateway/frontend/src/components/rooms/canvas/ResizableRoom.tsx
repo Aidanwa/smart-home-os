@@ -24,8 +24,9 @@ const getDeviceVisuals = (device: any) => {
 
 export function ResizableRoom({ 
   zone, 
-  isSelected, 
-  roomPlacements, 
+  isSelected,
+  editable,
+  roomPlacements,
   devices,
   updateDevicePlacement,
   onSelect, 
@@ -35,7 +36,8 @@ export function ResizableRoom({
   onDeviceClick
 }: { 
   zone: LogicalZone; 
-  isSelected: boolean; 
+  isSelected: boolean;
+  editable: boolean;
   roomPlacements: DevicePlacement[];
   devices: Record<string, any>;
   updateDevicePlacement: (ieee_address: string, zone_id: string | null, pos_x: number, pos_y: number) => void;
@@ -63,6 +65,16 @@ export function ResizableRoom({
     }
   }, [isSelected]);
 
+  const openRename = () => {
+    if (!editable) return;
+    const node = groupRef.current;
+    const stage = node?.getStage();
+    if (!node || !stage) return;
+    const container = stage.container().getBoundingClientRect();
+    const abs = node.getAbsolutePosition();
+    onDoubleClick(zone, { x: container.left + abs.x, y: container.top + abs.y });
+  };
+
   const pxWidth = ftToPx(liveSize.w);
   const pxHeight = ftToPx(liveSize.h);
   const roomColor = zone.color || '#64748b';
@@ -73,7 +85,8 @@ export function ResizableRoom({
         ref={groupRef}
         x={ftToPx(livePos.x)}
         y={ftToPx(livePos.y)}
-        draggable
+        // Only the selected room moves (edit mode); dragging anything else pans the plan.
+        draggable={editable && isSelected}
         onClick={(e) => { if (e.target === e.currentTarget || e.target.name() === 'room-bg') onSelect(); }}
         onTap={(e) => { if (e.target === e.currentTarget || e.target.name() === 'room-bg') onSelect(); }}
         // STRICT ROOM BOUNDARIES
@@ -104,15 +117,8 @@ export function ResizableRoom({
           setLivePos({ x: pxToFt(node.x()), y: pxToFt(node.y()) });
         }}
         onTransformEnd={() => onTransformEnd(livePos.x, livePos.y, liveSize.w, liveSize.h)}
-        onDblClick={() => {
-          const node = groupRef.current;
-          if (!node) return;
-          const stage = node.getStage();
-          if (!stage) return;
-          const container = stage.container().getBoundingClientRect();
-          const abs = node.getAbsolutePosition();
-          onDoubleClick(zone, { x: container.left + abs.x, y: container.top + abs.y });
-        }}
+        onDblClick={openRename}
+        onDblTap={openRename}
       >
         <Rect name="room-bg" width={pxWidth} height={pxHeight} fill={isSelected ? `${roomColor}80` : `${roomColor}40`} stroke={isSelected ? '#ffffff' : roomColor} strokeWidth={isSelected ? 2 : 1.5} cornerRadius={8} shadowColor="black" shadowBlur={isSelected ? 20 : 10} shadowOpacity={isSelected ? 0.3 : 0.15} />
         <Text name="room-bg" text={zone.name} fontSize={16} fontFamily="sans-serif" fontStyle="600" fill={isSelected ? '#ffffff' : '#d4d4d8'} align="center" verticalAlign="middle" width={pxWidth} height={pxHeight} padding={0} listening={false} />
@@ -131,7 +137,7 @@ export function ResizableRoom({
               key={placement.ieee_address}
               x={deviceX}
               y={deviceY}
-              draggable
+              draggable={editable && isSelected}
               // EVENT ISOLATION
               onClick={(e) => { e.cancelBubble = true; onDeviceClick(placement.ieee_address); }}
               onTap={(e) => { e.cancelBubble = true; onDeviceClick(placement.ieee_address); }}

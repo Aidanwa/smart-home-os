@@ -2,12 +2,8 @@ import { useEffect, useState } from 'react';
 import { Lightbulb, Sun, Thermometer } from 'lucide-react';
 import { Slider as SliderPrimitive } from 'radix-ui';
 import type { DeviceState } from '../../hooks/useDevices';
-import { kelvinToMired, miredToKelvin } from '../../lib/deviceUtils';
+import { miredToWarmth, useMiredRange, warmthToMired } from '../../lib/colorTemp';
 import { BaseDeviceCard } from './BaseDeviceCard';
-
-// Colour temperature range most bulbs accept (≈455–154 mired).
-const K_MIN = 2200;
-const K_MAX = 6500;
 
 interface Props {
   name: string;
@@ -50,7 +46,7 @@ function LightSlider({ label, icon, value, min, max, step, track, onChange, onCo
           className="block size-5 rounded-full bg-white border-2 border-neutral-800 shadow-md outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
         />
       </SliderPrimitive.Root>
-      <span className="text-xs tabular-nums text-neutral-400 w-12 text-right shrink-0">{valueText}</span>
+      <span className="text-xs tabular-nums text-neutral-400 w-16 text-right shrink-0">{valueText}</span>
     </div>
   );
 }
@@ -59,13 +55,15 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
   const isOn = state.state === 'ON';
 
   const serverBrightness = state.brightness ? Math.max(1, Math.round((state.brightness / 254) * 100)) : 0;
-  const serverKelvin = state.color_temp ? Math.min(K_MAX, Math.max(K_MIN, miredToKelvin(state.color_temp))) : 2700;
+  // Colour temperature as warmth, a percentage of this bulb's own range (lib/colorTemp).
+  const range = useMiredRange(state.ieee_address);
+  const serverWarmth = typeof state.color_temp === 'number' ? miredToWarmth(state.color_temp, range) : 50;
   const [brightness, setBrightness] = useState(serverBrightness);
-  const [kelvin, setKelvin] = useState(serverKelvin);
+  const [warmth, setWarmth] = useState(serverWarmth);
 
   // Follow the bulb when it changes elsewhere (other device, routine, wall switch).
   useEffect(() => setBrightness(serverBrightness), [serverBrightness]);
-  useEffect(() => setKelvin(serverKelvin), [serverKelvin]);
+  useEffect(() => setWarmth(serverWarmth), [serverWarmth]);
 
   const subtitle = isOn ? `On • ${brightness}%` : 'Off';
 
@@ -98,16 +96,16 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
           )}
           {state.color_temp !== undefined && (
             <LightSlider
-              label={`${name} colour temperature`}
+              label={`${name} warmth`}
               icon={<Thermometer size={14} />}
-              value={kelvin}
-              min={K_MIN}
-              max={K_MAX}
-              step={100}
-              track="bg-gradient-to-r from-[#ffb347] via-white to-[#8cb8ff]"
-              onChange={setKelvin}
-              onCommit={(v) => sendCommand(name, { color_temp: kelvinToMired(v) })}
-              valueText={`${kelvin} K`}
+              value={warmth}
+              min={0}
+              max={100}
+              step={1}
+              track="bg-gradient-to-r from-[#8cb8ff] via-white to-[#ffb347]"
+              onChange={setWarmth}
+              onCommit={(v) => sendCommand(name, { color_temp: warmthToMired(v, range) })}
+              valueText={`${warmth}% warm`}
             />
           )}
         </div>

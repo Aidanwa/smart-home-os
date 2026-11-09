@@ -33,8 +33,8 @@ export function DeviceAttributePicker({ attributes, device, attribute, onPick }:
 export function CurrentReading({ attributes, device, attribute, tempUnit }: { attributes: AttributeMap; device: string; attribute: string; tempUnit: TempUnit }) {
   const value = attributes[device]?.current?.[attribute];
   if (value === undefined || value === null || EVENT_ATTRIBUTES.includes(attribute)) return null;
-  const unit = findInfo(attributes, device, attribute)?.unit;
-  return <p className="text-xs text-neutral-500">Now: {formatValue(value as Scalar, unit, tempUnit)}</p>;
+  const info = findInfo(attributes, device, attribute);
+  return <p className="text-xs text-neutral-500">Now: {formatValue(value as Scalar, info, tempUnit)}</p>;
 }
 
 /** Value entry matching the attribute's type; numbers are shown in display units (°F) and stored native (°C). */
@@ -58,13 +58,15 @@ export function ValueInput({ info, value, onChange, tempUnit }: {
     );
   }
   if (info?.type === 'numeric' || typeof value === 'number') {
-    const unit = displayUnit(info?.unit, tempUnit);
+    const unit = displayUnit(info, tempUnit);
+    const warmth = info?.unit === 'mired';
     return (
       <div className="flex items-center gap-2">
         <NumberField className={input}
-          value={typeof value === 'number' ? toDisplay(value, info?.unit, tempUnit) : null}
+          value={typeof value === 'number' ? toDisplay(value, info, tempUnit) : null}
+          min={warmth ? 0 : undefined} max={warmth ? 100 : undefined}
           allowNegative={info?.unit === '°C' || (info?.value_min ?? 0) < 0}
-          onChange={n => onChange(fromDisplay(n, info?.unit, tempUnit))} />
+          onChange={n => onChange(fromDisplay(n, info, tempUnit))} />
         {unit && <span className="text-xs text-neutral-400 shrink-0 w-10">{unit}</span>}
       </div>
     );
