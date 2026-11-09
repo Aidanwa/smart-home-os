@@ -114,12 +114,11 @@ function AuthenticatedDashboard() {
     return Object.values(groups).filter(section => section.devices.length > 0);
   }, [devices, sortMode, roomIndex]);
 
-  // "Lights off" for a section or the whole house. Lights only: plugs often run things that
+  // "Lights off" for a section. Lights only: plugs often run things that
   // shouldn't be cut (a fridge, the router). Undo turns the same lights back on.
   const lightsOn = (list: Array<{ name: string; state: DeviceState }>) =>
     list.filter(d => getDeviceKind(d.state) === 'light' && d.state.state === 'ON')
       .map(d => (d.state.friendly_name as string | undefined) ?? d.name);
-  const allLightsOn = lightsOn(Object.entries(devices).map(([name, state]) => ({ name, state })));
   const setLights = async (names: string[], on: boolean) => {
     const ok = await Promise.all(names.map(n => sendCommand(n, { state: on ? 'ON' : 'OFF' }, `turn ${on ? 'on' : 'off'} ${n}`)));
     return names.filter((_, i) => ok[i]);
@@ -178,12 +177,6 @@ function AuthenticatedDashboard() {
                   <button onClick={() => setDashboardView('devices')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'devices' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Devices</button>
                   <button onClick={() => setDashboardView('groups')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'groups' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Groups</button>
                 </div>
-                {dashboardView === 'devices' && allLightsOn.length > 0 && (
-                  <button onClick={() => lightsOff(allLightsOn, '')} aria-label="Turn off every light"
-                    className="flex items-center gap-1.5 h-10 px-3 rounded-xl bg-neutral-900/50 border border-neutral-800 text-sm font-medium text-neutral-200 hover:bg-neutral-800">
-                    <PowerOff size={15} /> All lights off
-                  </button>
-                )}
                 <PairingButton devices={devices} permitJoin={permitJoin} />
               </div>
             </header>
