@@ -24,8 +24,18 @@ class DeviceState(BaseModel):
     # Sensors
     temperature: Optional[float] = None
     temperature_units: Optional[str] = None
+    humidity: Optional[float] = None
     battery: Optional[int] = None
-    
+    battery_low: Optional[bool] = None
+    # Event sensors and remotes (Z2M: contact true = closed; action = last button press)
+    contact: Optional[bool] = None
+    occupancy: Optional[bool] = None
+    water_leak: Optional[bool] = None
+    smoke: Optional[bool] = None
+    vibration: Optional[bool] = None
+    tamper: Optional[bool] = None
+    action: Optional[str] = None
+
     # Smart Plugs
     power: Optional[float] = None
     voltage: Optional[float] = None
