@@ -35,6 +35,8 @@ class DeviceState(BaseModel):
     vibration: Optional[bool] = None
     tamper: Optional[bool] = None
     action: Optional[str] = None
+    # Last message from the device (Z2M advanced.last_seen: ISO_8601)
+    last_seen: Optional[str] = None
     # Z2M OTA status: {"state": "idle"|"available"|"scheduled"|"updating", "progress", ...}
     update: Optional[Dict[str, Any]] = None
 

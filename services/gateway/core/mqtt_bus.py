@@ -32,6 +32,35 @@ def summarize_exposes(devices: list) -> dict:
     return out
 
 
+def summarize_device_meta(devices: list) -> dict:
+    """{ieee: {...}} identity, firmware and pairing health from bridge/devices (no endpoints/exposes)."""
+    out = {}
+    for d in devices:
+        if not isinstance(d, dict) or not d.get("ieee_address") or d.get("type") == "Coordinator":
+            continue
+        definition = d.get("definition") or {}
+        interview = d.get("interview_state")  # Z2M 2.x; older versions only have the booleans
+        if not interview:
+            interview = ("IN_PROGRESS" if d.get("interviewing")
+                         else "SUCCESSFUL" if d.get("interview_completed") else "FAILED")
+        out[d["ieee_address"]] = {
+            "vendor": definition.get("vendor"),
+            "model": definition.get("model"),
+            "description": definition.get("description"),
+            "supports_ota": definition.get("supports_ota"),
+            "manufacturer": d.get("manufacturer"),
+            "model_id": d.get("model_id"),
+            "type": d.get("type"),
+            "power_source": d.get("power_source"),
+            "software_build_id": d.get("software_build_id"),
+            "date_code": d.get("date_code"),
+            "interview_state": interview,
+            "supported": d.get("supported"),
+            "disabled": d.get("disabled", False),
+        }
+    return out
+
+
 class AsyncMqttBus:
     def __init__(self, mqtt_host: str, mqtt_port: int, mqtt_username: str | None, 
                  mqtt_password: str | None, redis_url: str, z2m_base: str = "zigbee2mqtt"):
@@ -171,7 +200,10 @@ class AsyncMqttBus:
 
             # Property metadata (type, unit, allowed values) for the routine editor's pickers
             await self.redis.set("gateway:device_exposes", json.dumps(summarize_exposes(payload)))
-            
+
+            # Identity, firmware and health per device, for the device drawer's About section
+            await self.redis.set("gateway:device_meta", json.dumps(summarize_device_meta(payload)))
+
             # The Diff Engine: Sync Redis Topology
             current_twin = await self.redis.hgetall("gateway:digital_twin")
             

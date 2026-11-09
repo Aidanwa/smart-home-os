@@ -72,7 +72,7 @@ class GatewayClient:
                 
                 attr_list = [
                     f"{k}: {v}" for k, v in attributes.items() 
-                    if k not in ('ieee_address', 'linkquality', 'friendly_name', 'update')
+                    if k not in ('ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen')
                 ]
                 
                 attributes_string = ", ".join(attr_list)

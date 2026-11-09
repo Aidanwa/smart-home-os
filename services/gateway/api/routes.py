@@ -88,7 +88,21 @@ async def get_device_state(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Failed to read device state: {str(e)}"
         )
-    
+
+
+@router.get("/devices/{device_id}/info")
+async def get_device_info(device_id: str, bus: AsyncMqttBus = Depends(get_mqtt_bus)):
+    """Identity, firmware and pairing health for one device (IEEE or friendly_name),
+    kept from Z2M's retained bridge/devices by the bus."""
+    raw = await bus.redis.get("gateway:device_meta")
+    if not raw:
+        raise HTTPException(status_code=503, detail="Device details are still syncing from the hub.")
+    info = json.loads(raw).get(bus._device_registry.get(device_id, device_id))
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found.")
+    return info
+
+
 @router.post("/devices/{device_id}/set")
 async def set_device_state(
     device_id: str, 

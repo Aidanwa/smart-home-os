@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Check, X, Signal, Battery, Clock, Download, Trash2 } from 'lucide-react';
+import { Pencil, Check, X, Signal, Battery, Clock, Download, Trash2, AlertTriangle } from 'lucide-react';
 import { 
   Sheet, 
   SheetContent, 
@@ -19,6 +19,59 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
     <div className="absolute bottom-full mb-2 px-2 py-1 bg-neutral-800 text-neutral-200 text-xs rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[100] border border-neutral-700 shadow-xl">
       {text}
     </div>
+  </div>
+);
+
+/** GET /api/devices/{id}/info: identity, firmware and pairing health from Z2M's bridge/devices. */
+interface DeviceInfo {
+  vendor?: string | null;
+  model?: string | null;
+  description?: string | null;
+  supports_ota?: boolean | null;
+  manufacturer?: string | null;
+  model_id?: string | null;
+  type?: string | null;            // Router | EndDevice
+  power_source?: string | null;    // e.g. "Mains (single phase)", "Battery"
+  software_build_id?: string | null;
+  date_code?: string | null;       // usually starts YYYYMMDD
+  interview_state?: string | null; // PENDING | IN_PROGRESS | SUCCESSFUL | FAILED
+  supported?: boolean | null;
+  disabled?: boolean | null;
+}
+
+/** OTA image versions are 32-bit numbers that read best in hex (0x01001D00). */
+const otaHex = (v: unknown) =>
+  typeof v === 'number' ? `0x${v.toString(16).toUpperCase().padStart(8, '0')}` : null;
+
+/** "20260817" or "20251126 1702-3R" → a local date string; anything else as is. */
+function formatDateCode(code: string) {
+  const m = /^(\d{4})(\d{2})(\d{2})/.exec(code);
+  if (!m) return code;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? code : d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
+function healthWarnings(info: DeviceInfo | null): { title: string; detail: string }[] {
+  if (!info) return [];
+  const out: { title: string; detail: string }[] = [];
+  if (info.disabled) {
+    out.push({ title: 'Disabled in Zigbee2MQTT', detail: 'The hub ignores this device until it is enabled again.' });
+  }
+  if (info.interview_state === 'FAILED') {
+    out.push({ title: 'Pairing didn’t finish', detail: 'Some controls or readings may be missing. Remove the device and pair it again.' });
+  } else if (info.interview_state === 'PENDING' || info.interview_state === 'IN_PROGRESS') {
+    out.push({ title: 'Still pairing', detail: 'The hub is still reading this device’s capabilities. Keep it powered and nearby.' });
+  }
+  if (info.supported === false) {
+    out.push({ title: 'Not supported by Zigbee2MQTT', detail: 'Basic on/off may work, but most features won’t show up.' });
+  }
+  return out;
+}
+
+const AboutRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="flex items-start justify-between gap-4 px-3 py-2.5">
+    <span className="text-xs text-neutral-500 shrink-0 pt-0.5">{label}</span>
+    <div className="text-sm text-right min-w-0 break-words">{children}</div>
   </div>
 );
 
@@ -47,6 +100,31 @@ export function DeviceConfigDrawer({
   // Firmware install: a second tap confirms; `starting` covers the request itself.
   const [confirmFirmware, setConfirmFirmware] = useState(false);
   const [startingFirmware, setStartingFirmware] = useState(false);
+  const [info, setInfo] = useState<DeviceInfo | null>(null);
+  const deviceId = state.ieee_address || name;
+
+  // Details are fetched each time the drawer opens (they change only on re-pair or a firmware update).
+  // A failed load just leaves the About section out.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetch(`/api/devices/${encodeURIComponent(deviceId)}/info`)
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: DeviceInfo | null) => { if (!cancelled) setInfo(data); })
+      .catch(err => console.error(err));
+    return () => { cancelled = true; };
+  }, [isOpen, deviceId]);
+
+  const warnings = healthWarnings(info);
+  const installedOta = otaHex(state.update?.installed_version);
+  const latestOta = otaHex(state.update?.latest_version);
+  const powerLabel = info?.power_source?.startsWith('Mains') ? 'Mains' : info?.power_source;
+  const roleLabel = info?.type === 'Router' ? 'Router (relays for other devices)'
+    : info?.type === 'EndDevice' ? 'End device' : info?.type;
+  const firmwareStatus = info?.supports_ota === false ? 'No over-the-air updates'
+    : state.update?.state === 'idle' ? 'Up to date'
+    : state.update?.state === 'available' ? 'Update available' : null;
+  const hasAbout = !!info && !!(info.vendor || info.model || info.software_build_id || info.type || info.model_id);
 
   const installFirmware = async () => {
     setStartingFirmware(true);
@@ -144,6 +222,15 @@ export function DeviceConfigDrawer({
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-neutral-400">Status & Health</h4>
           <div className="grid grid-cols-2 gap-3 text-sm">
+            {warnings.map(w => (
+              <div key={w.title} role="alert" className="flex items-start gap-2 bg-red-500/10 p-3 rounded-xl border border-red-500/20 col-span-2">
+                <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <div className="font-medium text-red-300">{w.title}</div>
+                  <div className="text-xs text-red-200/70 mt-0.5">{w.detail}</div>
+                </div>
+              </div>
+            ))}
             {state.linkquality !== undefined && (
               <div className="flex flex-col gap-1 bg-neutral-900/50 p-3 rounded-xl border border-neutral-800/50">
                 <div className="flex items-center gap-2 text-neutral-500">
@@ -191,6 +278,11 @@ export function DeviceConfigDrawer({
                     {startingFirmware ? 'Starting…' : confirmFirmware ? 'Install now' : 'Install'}
                   </button>
                 )}
+                {installedOta && latestOta && installedOta !== latestOta && (
+                  <p className="basis-full text-xs text-yellow-200/70 font-mono break-all">
+                    {installedOta} → {latestOta}
+                  </p>
+                )}
                 {state.update.state === 'available' && confirmFirmware && !startingFirmware && (
                   <p className="basis-full text-xs text-yellow-200/80">
                     Takes 10–30 minutes. The device may stop responding and restart while it updates.
@@ -208,6 +300,42 @@ export function DeviceConfigDrawer({
             )}
           </div>
         </div>
+
+        {/* About: identity and firmware from Z2M's device list */}
+        {hasAbout && info && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-neutral-400">About</h4>
+            <div className="bg-neutral-900/50 rounded-xl border border-neutral-800/50 divide-y divide-neutral-800/50">
+              {(info.vendor || info.model) && (
+                <AboutRow label="Model">
+                  <div className="font-medium">{[info.vendor, info.model].filter(Boolean).join(' ')}</div>
+                  {info.description && <div className="text-xs text-neutral-500 mt-0.5">{info.description}</div>}
+                </AboutRow>
+              )}
+              {(roleLabel || powerLabel) && (
+                <AboutRow label="Network">
+                  {[roleLabel, powerLabel].filter(Boolean).join(' · ')}
+                </AboutRow>
+              )}
+              {(info.software_build_id || info.date_code || firmwareStatus) && (
+                <AboutRow label="Firmware">
+                  {(info.software_build_id || info.date_code) && (
+                    <div className="font-medium">
+                      {[info.software_build_id, info.date_code && formatDateCode(info.date_code)].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+                  {firmwareStatus && <div className="text-xs text-neutral-500 mt-0.5">{firmwareStatus}</div>}
+                  {installedOta && <div className="text-xs text-neutral-600 font-mono mt-0.5">image {installedOta}</div>}
+                </AboutRow>
+              )}
+              {(info.manufacturer || info.model_id) && (
+                <AboutRow label="Reports as">
+                  <span className="text-neutral-400">{[info.manufacturer, info.model_id].filter(Boolean).join(' · ')}</span>
+                </AboutRow>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Advanced Config Injection Point */}
         {advancedConfig && (

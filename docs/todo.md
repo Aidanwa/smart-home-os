@@ -67,6 +67,9 @@ Ideas considered but not built:
 - Scenes for groups and rooms.
 - Power-on behaviour per bulb (what it does when power comes back). The old chips were removed because they did nothing; this would make them real.
 - Automatic or scheduled firmware updates. Manual install from the device drawer already works.
+- Device options in the drawer: render each device's `definition.options` from `bridge/devices` as inputs (plugs: `power_calibration`, `*_precision`, `state_action`; Hue bulbs: `transition`, `color_sync`; thermometer: `temperature_calibration` (in °F in the UI); Hue dimmer: `simulated_brightness`). Current values are in `bridge/info` → `config.devices[ieee]`; save with `bridge/request/device/options`.
+- A collapsed "Zigbee details" section in the drawer, for debugging: network address, endpoints with input/output clusters, bindings, and configured reporting intervals (all in `bridge/devices` → `endpoints`; the gateway drops them today).
+- Mesh info: a device's parent router and its neighbours' link LQI, from `bridge/request/networkmap`. It's slow (tens of seconds), so a "Scan network" button, not something that loads with the drawer.
 
 ### Users and admin
 

@@ -80,6 +80,8 @@ There are **no tests**. Use these checks:
   - `gateway:digital_twin` is a hash **keyed by IEEE address** (`0x...`). The value is the last Z2M state JSON plus `friendly_name`/`ieee_address`.
   - `gateway:groups`, `gateway:bridge_info`: retained bridge payloads.
   - `gateway:device_exposes`: per-IEEE property metadata (type, unit, enum values) summarised from `bridge/devices`, for the routine editor's pickers.
+  - `gateway:device_meta`: per-IEEE identity, firmware and pairing health (vendor/model, role, power source, build, date code, interview state, supported, disabled) from `bridge/devices`, served by `GET /api/devices/{id}/info` for the device drawer's About section and health warnings.
+  - Z2M has `advanced.last_seen: ISO_8601` on, so every state carries `last_seen`. The agent's home-state prompt leaves it out (with `linkquality` and `update`) so it doesn't change on every message.
   - `_device_registry` maps friendly_name to IEEE (in memory, rebuilt from `bridge/devices`).
 - **IDs**: the frontend and API key devices by IEEE, but Z2M topics use `friendly_name`. Endpoints accept either and translate via `_device_registry` and the twin. Keep that translation when adding device endpoints.
 - **RPC** (`bus.rpc`): bridge requests correlate on an injected `transaction` id. Device `/set` correlates on **friendly_name**, meaning it resolves on that device's next state publish, so device RPCs are serialized per device with `_device_rpc_locks`. Timeout is 5s, mapped to HTTP 504. The listen loop catches and logs per-message exceptions. Keep it that way: an uncaught exception there kills the listener and the twin goes stale silently. Group `/set` is fire-and-forget.
