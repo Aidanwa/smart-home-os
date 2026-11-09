@@ -212,7 +212,7 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
         <SheetContent
           // Escape while renaming cancels the rename instead of closing the group.
           onEscapeKeyDown={e => { if (editingName) { e.preventDefault(); setEditingName(false); } }}
-          className="bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden w-full sm:max-w-2xl p-0 gap-0">
+          className="bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-2xl p-0 gap-0">
           {current && (() => {
             const members = membersOf(current, devices);
             const g = groupState(members);
@@ -246,16 +246,18 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                     <p className="text-sm text-neutral-200">{g.summary}</p>
                     {g.canSwitch && <p className="text-xs text-neutral-500">{g.anyOn ? 'Tap to turn everything off' : 'Tap to turn everything on'}</p>}
                   </div>
-                  <button onClick={() => setManaging(true)} className="flex items-center gap-1.5 px-3 min-h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm font-medium text-neutral-200">
-                    <Settings2 size={16} /> <span>Devices</span>
-                  </button>
-                  <button onClick={() => setGroupToDelete(name)} aria-label="Delete this group" className="size-10 shrink-0 flex items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10">
-                    <Trash2 size={18} />
-                  </button>
                 </div>
                 {g.anyOn && g.canDim && g.brightness !== null && (
                   <GroupBrightness name={name} value={g.brightness} onCommit={pct => setBrightness(name, pct)} />
                 )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => setManaging(true)} className="flex items-center gap-1.5 px-3 min-h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm font-medium text-neutral-200">
+                    <Settings2 size={16} /> Add or remove devices
+                  </button>
+                  <button onClick={() => setGroupToDelete(name)} className="flex items-center gap-1.5 px-3 min-h-10 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                    <Trash2 size={16} /> Delete group
+                  </button>
+                </div>
               </SheetHeader>
 
               <div className="p-4">
