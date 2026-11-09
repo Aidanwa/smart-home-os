@@ -229,13 +229,13 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
         ) : pv.result ? (
           <>
             <p className="text-neutral-400 flex items-center gap-1.5"><Clock size={13} />
-              {pv.result.next_fires.length
+              {pv.result.next_fires?.length
                 ? <>Next: {pv.result.next_fires.slice(0, 3).map(f => formatInTz(f, timezone)).join(' · ')}</>
                 : !spec.enabled ? 'Disabled: no scheduled runs'
                 : spec.triggers.some(t => t.type === 'device') ? 'Runs when the device reading matches'
                 : 'No scheduled runs'}
             </p>
-            {pv.result.warnings.map(w => <p key={w} className="text-amber-400">{w}</p>)}
+            {(pv.result.warnings ?? []).map(w => <p key={w} className="text-amber-400">{w}</p>)}
           </>
         ) : (
           <p className="text-neutral-500">Checking…</p>
