@@ -67,6 +67,8 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 - [x] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`). *(Fixed 2026-11-08: everything is mired underneath and shown as warmth %, scaled to each bulb's range, on cards, actions, fades, triggers and conditions.)*
 - [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
 - [x] Icon buttons and chips are ~28px, below a 44px touch target. *(List rows fixed 2026-11-09: 44px switch, Run and ⋯ targets. Editor done the same day: chips, day buttons, move/remove icons, add buttons and the bottom row are 44px, checkbox rows 40px, and the shared Sheet ✕ is 40px.)*
+- [x] A routine in "Needs attention" can't be dismissed once you've looked at it. *(Done 2026-11-09: "What happened" and "Reviewed" buttons on those rows; Reviewed (with Undo) hides it until its next run, per user, kept in `ui_settings.routines_reviewed`.)*
+- [x] No way to see everything routines did, or what's coming. *(Done 2026-11-09: an Activity page (button left of New): the next 7 days of scheduled runs, then every run newest first, by day, loading more as you scroll, with an Everything/Problems filter; tap a run for its steps, or an upcoming one to open the routine. Device-triggered routines aren't in "Coming up" since they run when a device reports.)*
 - [ ] User-made tags or folders for routines. Deferred 2026-11-09: needs a new column and a migration (Aidan's OK).
 
 ## Cross-cutting
