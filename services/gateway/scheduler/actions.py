@@ -9,11 +9,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from core import device_control
+from core import device_control, push
 from core.mqtt_bus import AsyncMqttBus
 from scheduler import agent_client, store
 from scheduler.schema import (AGENT_RUNS_PER_HOUR, AgentAction, DelayAction, DeviceAction, FadeAction, GroupAction,
-                              SpotifyCtrlAction, SpotifyPlayAction)
+                              NotifyAction, SpotifyCtrlAction, SpotifyPlayAction)
 
 GROUP_VERIFY_SECONDS = 3.0
 # Manual-change detection for stepped fades. Bulbs report their in-between level during a
@@ -101,6 +101,8 @@ async def perform(ctx: RunContext, action) -> tuple[str, dict, object]:
             return (*await _spotify_ctrl(ctx, action), None)
         if isinstance(action, AgentAction):
             return (*await _agent(ctx, action), None)
+        if isinstance(action, NotifyAction):
+            return (*await _notify(ctx, action), None)
     except TimeoutError:
         raise StepFailed("Device did not confirm in time (offline or unresponsive?)")
     except (device_control.DeviceStateMismatch, device_control.MqttDisconnected, agent_client.AgentError) as e:
@@ -336,3 +338,20 @@ async def _agent(ctx: RunContext, a: AgentAction):
     if res.get("status") != "success":
         raise StepFailed(res.get("message") or "The agent didn't finish", detail)
     return "ok", detail
+
+
+# ------------------------------------------------------------------ notifications
+
+async def _notify(ctx: RunContext, a: NotifyAction):
+    if not push.public_key():
+        raise StepFailed("Notifications aren't set up on the hub (no VAPID key)")
+    users = [ctx.owner_id] if a.to == "owner" else await push.users_with_devices()
+    title = a.title or ctx.routine_name or "Home"
+    result = await push.send(users, title, a.message, url="/", urgency="high")
+    detail = {"to": a.to, "title": title, "message": a.message, **result}
+    if result["devices"] == 0:
+        who = "the routine's owner" if a.to == "owner" else "anyone"
+        raise StepFailed(f"No device has notifications turned on for {who}", detail)
+    if result["sent"] == 0:
+        raise StepFailed("The push service didn't accept the notification", detail)
+    return ("ok" if result["failed"] == 0 else "partial"), detail

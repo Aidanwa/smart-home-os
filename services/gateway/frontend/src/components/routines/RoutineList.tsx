@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -76,8 +76,13 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
     });
 
     const attention = sorted.filter(needsAttention);
-    const off = sorted.filter(r => !r.enabled);
-    const rest = sorted.filter(r => r.enabled && !needsAttention(r));
+    // One-time reminders get their own section (below Off), whether they're on, off or done.
+    const oneTime = sorted.filter(r => r.one_time && !needsAttention(r))
+      .sort((a, b) => Number(!!a.done) - Number(!!b.done) || (a.done
+        ? (b.last_run_at ?? '').localeCompare(a.last_run_at ?? '')            // done: most recent first
+        : (a.next_fire_at ?? 'z').localeCompare(b.next_fire_at ?? 'z')));  // pending: soonest first (paused last)
+    const off = sorted.filter(r => !r.enabled && !r.one_time);
+    const rest = sorted.filter(r => r.enabled && !r.one_time && !needsAttention(r));
     const out: Section[] = [];
     if (attention.length) out.push({ key: 'attention', title: 'Needs attention', icon: <AlertTriangle size={16} />, routines: attention, tone: 'attention' });
 
@@ -118,6 +123,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
     }
 
     if (off.length) out.push({ key: 'off', title: 'Off', icon: <PowerOff size={16} />, routines: off, tone: 'off', defaultOpen: false });
+    if (oneTime.length) out.push({ key: 'once', title: 'One-time', icon: <BellRing size={16} />, routines: oneTime });
     return out.filter(s => s.routines.length > 0);
   }, [routines, query, sortBy, groupBy, roomIndex, groups, summaries]);
 
@@ -227,11 +233,12 @@ function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun,
     <article className={`relative min-w-0 flex flex-col rounded-xl border bg-neutral-900 ${attention ? 'border-amber-900/70' : 'border-neutral-800'}`}>
     <div className="flex items-stretch min-w-0">
       {/* The body opens the editor */}
-      <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left p-3 pr-2 rounded-l-xl hover:bg-neutral-800/40">
+      <button type="button" onClick={onOpen} className={`flex-1 min-w-0 text-left p-3 pr-2 rounded-l-xl hover:bg-neutral-800/40 ${r.one_time && r.done ? 'opacity-60' : ''}`}>
         <h3 className="font-medium text-neutral-100 truncate">{r.name}</h3>
         <p className="text-xs text-neutral-400 mt-0.5 line-clamp-2">{summary}</p>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-xs">
-          {r.enabled && r.next_fire_at && <span className="text-neutral-400">Next {formatInTz(r.next_fire_at, timezone)}</span>}
+          {r.enabled && r.next_fire_at && <span className="text-neutral-400">{r.one_time ? '' : 'Next '}{formatInTz(r.next_fire_at, timezone)}</span>}
+          {r.one_time && r.done && <span className="text-neutral-500">Done</span>}
           {r.running ? (
             <span className={`px-1.5 py-0.5 rounded-md border font-medium ${STATUS_STYLE.running}`}>running</span>
           ) : r.last_run_status ? (

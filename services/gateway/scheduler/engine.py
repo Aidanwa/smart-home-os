@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
@@ -18,7 +18,7 @@ from sqlalchemy import text
 from core.mqtt_bus import AsyncMqttBus
 from shared.database.core import engine as db_engine
 from shared.database.models import Routine
-from scheduler import runner, store
+from scheduler import alerts, runner, store
 from scheduler.matching import compare, device_reading, failing_condition, released
 from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoutineSpec, SunTrigger, TimeTrigger
 from scheduler.timing import Location, is_scheduled, next_fire, prev_fire
@@ -48,7 +48,7 @@ def spec_from_row(row: Routine) -> RoutineSpec:
 
 def describe_trigger(trig) -> str:
     if isinstance(trig, TimeTrigger):
-        return trig.at
+        return f"{trig.date} {trig.at}" if trig.date else trig.at
     if isinstance(trig, SunTrigger):
         return trig.event + (f" {trig.offset_min:+d} min" if trig.offset_min else "")
     return f"{trig.attribute} {trig.op} {trig.value}"
@@ -356,6 +356,7 @@ class Scheduler:
             if run_id:
                 await store.set_last_run(r.id, now, "missed")
                 self.bus.broadcast({"type": "routine_run", "routine_id": str(r.id), "run_id": str(run_id), "status": "missed"})
+                alerts.run_finished(r.owner_id, r.id, r.name, "missed")
             return
         await self._start_run(r, trig.type, trig.id, scheduled_for, int(late) if late >= 5 else None)
 
@@ -463,6 +464,9 @@ class Scheduler:
                     continue
                 prev = prev_fire(trig, now, self.tz, self.loc)
                 if not prev or prev < r.updated_at:  # didn't exist (in this form) back then
+                    continue
+                # A one-time trigger's date can be long past; its run row may be pruned by now.
+                if getattr(trig, "date", None) is not None and now - prev > timedelta(days=1):
                     continue
                 if await store.occurrence_recorded(r.id, trig.id, prev):
                     continue

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, History, Plus, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -17,6 +17,14 @@ const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflo
 
 type Panel = { kind: 'edit'; routine: Routine | null } | { kind: 'history'; routine: Routine } | null;
 
+/** Links from notifications: #routines/activity, #routines/history/<routine id>. */
+type DeepLink = { kind: 'activity' } | { kind: 'history'; id: string } | null;
+function parseDeepLink(): DeepLink {
+  const m = window.location.hash.match(/^#routines\/(activity|history\/([\w-]+))$/);
+  if (!m) return null;
+  return m[2] ? { kind: 'history', id: m[2] } : { kind: 'activity' };
+}
+
 function toSpec(r: Routine): RoutineSpec {
   const { name, description, enabled, mode, grace_minutes, triggers, conditions, actions } = r;
   return { name, description, enabled, mode, grace_minutes, triggers, conditions, actions };
@@ -30,6 +38,26 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
   const ctx = useMemo(() => ({ attributes, tempUnit }), [attributes]);
   const [panel, setPanel] = useState<Panel>(null);
+  const [deepLink, setDeepLink] = useState<DeepLink>(parseDeepLink);
+  useEffect(() => {
+    const onHash = () => setDeepLink(parseDeepLink());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  // Acting on the URL once the routines have loaded is the point of this effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!deepLink || (deepLink.kind === 'history' && loading)) return;
+    if (deepLink.kind === 'activity') setView('activity');
+    else {
+      const r = routines.find(x => x.id === deepLink.id);
+      if (r) { setView('list'); setPanel({ kind: 'history', routine: r }); }
+      else toast.error('That routine no longer exists');
+    }
+    setDeepLink(null);
+    window.history.replaceState(null, '', '#routines');  // Back shouldn't reopen it
+  }, [deepLink, loading, routines]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   // Closing the editor by swiping, tapping outside or Escape asks first if there are unsaved edits.
   // (Cancel, Save and Delete close it directly.)
   const editorDirty = useRef(false);

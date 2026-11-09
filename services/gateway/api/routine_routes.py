@@ -6,7 +6,7 @@ run-as owner (whose Spotify/LLM credentials later action types will use).
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -18,8 +18,9 @@ from shared.database.models import Routine, RoutineRun, User, UserPreference
 from api.auth import get_current_user
 from scheduler.engine import Scheduler
 from scheduler import agent_client
-from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, RoutineSpec,
-                              SpotifyCtrlAction, SpotifyPlayAction, leaf_conditions)
+from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, NotifyAction,
+                              RoutineSpec, SpotifyCtrlAction, SpotifyPlayAction, is_one_time, leaf_conditions)
+from core import push
 from scheduler.timing import upcoming
 
 ALERT_STATUSES = ("failed", "partial", "missed", "interrupted")
@@ -39,6 +40,18 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
+def _reminder_done(r: Routine, sched: Scheduler) -> bool:
+    """A one-time routine whose every date/time is in the past (whether or not it's enabled)."""
+    if not is_one_time(r.triggers or []):
+        return False
+    now = datetime.now(timezone.utc)
+    for t in r.triggers:
+        hh, mm = map(int, t["at"].split(":"))
+        if datetime.combine(date.fromisoformat(t["date"]), time(hh, mm), tzinfo=sched.tz) > now:
+            return False
+    return True
+
+
 def _out(r: Routine, sched: Scheduler, owner_name: str | None = None, reviewed: dict | None = None) -> dict:
     return {
         "id": str(r.id), "name": r.name, "description": r.description, "enabled": r.enabled,
@@ -47,6 +60,7 @@ def _out(r: Routine, sched: Scheduler, owner_name: str | None = None, reviewed: 
         "owner_user_id": str(r.owner_user_id), "owner_username": owner_name,
         "last_run_at": _iso(r.last_run_at), "last_run_status": r.last_run_status,
         "next_fire_at": _iso(sched.next_fire_at(r.id)), "running": sched.is_running(r.id),
+        "one_time": is_one_time(r.triggers or []), "done": _reminder_done(r, sched),
         "created_at": _iso(r.created_at), "updated_at": _iso(r.updated_at),
         # This user marked the latest problem run as reviewed (a newer run clears it).
         "reviewed": bool(reviewed and r.last_run_at and reviewed.get(str(r.id)) == _iso(r.last_run_at)),
@@ -147,7 +161,14 @@ async def preview_routine(spec: RoutineSpec, request: Request, user=Depends(get_
         warnings.append("No triggers: this routine only runs when you press Run now")
     if not sched.active:
         warnings.append("The scheduler isn't running on this gateway; see the gateway logs")
+    if any(isinstance(a, NotifyAction) for a in spec.actions):
+        if not push.public_key():
+            warnings.append("Notifications aren't set up on the hub, so notify steps will fail")
+        elif not await push.users_with_devices():
+            warnings.append("No one has notifications turned on yet (Settings → Notifications on the phone)")
     fires = upcoming(spec.triggers, datetime.now(timezone.utc), sched.tz, sched.loc) if spec.enabled else []
+    if spec.is_one_time() and spec.enabled and not fires:
+        warnings.append("That time has already passed, so this won't run")
     return {"timezone": sched.tz.key, "next_fires": [_iso(t) for t in fires], "warnings": warnings}
 
 

@@ -18,7 +18,8 @@ ROUTINE_FORMAT = """Routine JSON for rt_save. Refer to devices and groups by the
 {"name": str, "enabled": true, "mode": "single"|"restart", "grace_minutes": 5,
  "triggers": [...], "conditions": [...], "actions": [...]}   (ids like "t1"/"a1" are optional)
 TRIGGERS (any one starts it; [] = manual only):
- {"type":"time","at":"HH:MM","days":["mon",..,"sun"] or null (= every day)}
+ {"type":"time","at":"HH:MM","days":["mon",..,"sun"] or null (= every day),"date":null}
+  One-time (a reminder): "date":"YYYY-MM-DD" with "days":null; it fires once; finished ones drop out of rt_list.
  {"type":"sun","event":"sunrise"|"sunset","offset_min":-30,"days":null}
  {"type":"device","device":NAME,"attribute":"state"|"temperature"|"power"|"action"|...,
   "op":"eq"|"ne"|"gt"|"gte"|"lt"|"lte"|"changes","value":X (null for changes),
@@ -39,8 +40,11 @@ ACTIONS (in order):
   "title":str,"volume":0-100 or null,"ramp_to":0-100 or null,"ramp_s":seconds or null,"shuffle":true|false|null}
  {"type":"spotify_ctrl","cmd":"pause"|"resume"|"next"|"previous"|"volume","speaker":null,"volume":null}
  {"type":"agent","prompt":"plain-language instruction"}  (uses the LLM; max 2 runs/hour)
+ {"type":"notify","title":str or null (null = routine name),"message":str,"to":"owner"|"everyone"}
+  Push notification to the phone app. "owner" = the user you're talking to. E.g. "remind me at 6 to take
+  the bins out" = one-time time trigger + notify; "tell me when the washer is done" = power trigger + notify.
 Values are device-native: temperature is always °C (convert from °F), brightness 0-254 (50% = 127).
-Notifications/reminders are not supported yet: say so instead of building a routine that can't notify."""
+"""
 
 
 _SPEC_FIELDS = ("name", "description", "enabled", "mode", "grace_minutes", "triggers", "conditions", "actions")
@@ -167,8 +171,14 @@ class RoutineTools:
             return {"status": "error", "message": f"Couldn't list routines (HTTP {res.status_code})"}
         data = res.json()
         devices, groups = await self._names(user_id)
-        return {"status": "success", "timezone": data["timezone"],
-                "routines": [self._brief(r, data["timezone"], devices, groups) for r in data["routines"]]}
+        # Reminders that already fired are history, not something to edit: leave them out.
+        done = [r for r in data["routines"] if r.get("done")]
+        live = [r for r in data["routines"] if r not in done]
+        out = {"status": "success", "timezone": data["timezone"],
+               "routines": [self._brief(r, data["timezone"], devices, groups) for r in live]}
+        if done:
+            out["finished_reminders_hidden"] = len(done)
+        return out
 
     async def rt_save(self, user_id: str, routine: str, id: str | None = None, **kwargs):
         """Tool: create a routine (id null) or replace one (id given) from JSON."""
@@ -207,7 +217,10 @@ class RoutineTools:
         saved = res.json()
         tz = (await self._call(user_id, "GET", "/api/routines")).json().get("timezone", "UTC")
         brief = self._brief(saved, tz, devices, groups)
-        return {"status": "success", "message": "Saved. Read back what it does in one short sentence.", **brief}
+        message = "Saved. Read back what it does in one short sentence."
+        if saved.get("done"):
+            message = "Saved, but that time has already passed, so it won't run. Fix the date/time with rt_save."
+        return {"status": "success", "message": message, **brief}
 
     async def rt_enable(self, user_id: str, id: str, enabled: bool, **kwargs):
         """Tool: turn a routine on or off."""

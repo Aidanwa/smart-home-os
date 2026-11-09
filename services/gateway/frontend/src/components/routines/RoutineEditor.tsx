@@ -60,7 +60,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
   // Live validation + next fire times, debounced. Only meaningful once there's a name and an action.
   const previewable = spec.name.trim().length > 0 && spec.actions.length > 0
-    && !spec.actions.some(a => (a.type === 'spotify_play' && !a.uri) || (a.type === 'agent' && !a.prompt.trim()));
+    && !spec.actions.some(a => (a.type === 'spotify_play' && !a.uri) || (a.type === 'agent' && !a.prompt.trim()) || (a.type === 'notify' && !a.message.trim()));
   useEffect(() => {
     if (!previewable) return;
     const handle = setTimeout(() => preview(spec).then(setPv), 400);
@@ -83,6 +83,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   };
   const missingMusic = spec.actions.some(a => a.type === 'spotify_play' && !a.uri);
   const emptyPrompt = spec.actions.some(a => a.type === 'agent' && !a.prompt.trim());
+  const emptyMessage = spec.actions.some(a => a.type === 'notify' && !a.message.trim());
 
   const handleSave = async () => {
     setSaving(true);
@@ -190,7 +191,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          {(['device', 'group', 'fade', 'delay', 'spotify_play', 'spotify_ctrl', 'agent'] as const).map(t => (
+          {(['device', 'group', 'fade', 'delay', 'notify', 'spotify_play', 'spotify_ctrl', 'agent'] as const).map(t => (
             <button key={t} type="button" onClick={() => addAction(t)} className={addBtn}>
               <Plus size={14} /> {ACTION_LABEL[t]}
             </button>
@@ -225,6 +226,8 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           <p className="text-amber-400">Pick some music for the Play music action.</p>
         ) : emptyPrompt ? (
           <p className="text-amber-400">Write an instruction for the Ask the agent action.</p>
+        ) : emptyMessage ? (
+          <p className="text-amber-400">Write a message for the Notify action.</p>
         ) : !previewable ? (
           <p className="text-neutral-500">Add a name and at least one action to see when it will run.</p>
         ) : pv.error ? (

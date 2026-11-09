@@ -30,10 +30,11 @@ const TABS = ['home', 'agent', 'rooms', 'routines', 'settings'] as const;
 type Tab = typeof TABS[number];
 
 /** The tab lives in the URL hash (#routines), so refresh, Back and links work. Spotify's
- *  sign-in comes back with ?code=..., which Settings handles, so land there. */
+ *  sign-in comes back with ?code=..., which Settings handles, so land there. A tab may take a
+ *  sub-path (#routines/history/<id>, from a notification); the tab itself handles that part. */
 function tabFromUrl(): Tab {
   if (new URLSearchParams(window.location.search).has('code')) return 'settings';
-  const h = window.location.hash.slice(1);
+  const h = window.location.hash.slice(1).split('/')[0];
   return (TABS as readonly string[]).includes(h) ? (h as Tab) : 'home';
 }
 

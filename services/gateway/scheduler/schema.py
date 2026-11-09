@@ -3,9 +3,10 @@
 Kept flat and plain-worded so the agent can write them (tools/routines_api.py). See the Routines section of CLAUDE.md.
 Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
 the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
-spotify_ctrl, agent (Spotify and agent actions go through the agent as the routine's owner;
-see agent_client.py).
+spotify_ctrl, agent, notify (Spotify and agent actions go through the agent as the routine's
+owner; see agent_client.py; notify is a web push, core/push.py).
 """
+from datetime import date as date_
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -35,15 +36,23 @@ def _normalize_days(v: list[str] | None) -> list[str] | None:
 # ---------------------------------------------------------------- triggers
 
 class TimeTrigger(_Strict):
+    """Every day (or the listed days) at `at`; with `date`, once only (a one-time reminder)."""
     id: ShortId
     type: Literal["time"]
     at: HHMM
     days: list[Day] | None = None  # None = every day
+    date: date_ | None = None  # fires once, on this local date; days must then be None
 
     @field_validator("days")
     @classmethod
     def _days(cls, v):
         return _normalize_days(v)
+
+    @model_validator(mode="after")
+    def _once(self):
+        if self.date is not None and self.days is not None:
+            raise ValueError("a one-time trigger (date) can't also have days")
+        return self
 
 
 class SunTrigger(_Strict):
@@ -295,13 +304,32 @@ class AgentAction(_Strict):
 AGENT_RUNS_PER_HOUR = 2
 
 
+class NotifyAction(_Strict):
+    """Send a push notification to the installed app: the routine owner's devices, or everyone's."""
+    id: ShortId
+    type: Literal["notify"]
+    title: str | None = Field(None, max_length=100)  # None = the routine's name
+    message: str = Field(min_length=1, max_length=300)
+    to: Literal["owner", "everyone"] = "owner"
+    stop_on_error: bool = False
+
+
 Action = Annotated[
-    Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction, AgentAction],
+    Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction, AgentAction,
+          NotifyAction],
     Field(discriminator="type"),
 ]
 
 
 # ---------------------------------------------------------------- routine
+
+def is_one_time(triggers: list) -> bool:
+    """A one-time routine (a reminder): every trigger is a dated time trigger. Takes parsed
+    triggers or the stored JSON dicts."""
+    def dated(t):
+        return (t.get("type"), t.get("date")) if isinstance(t, dict) else (t.type, getattr(t, "date", None))
+    return bool(triggers) and all(kind == "time" and d for kind, d in map(dated, triggers))
+
 
 class RoutineSpec(_Strict):
     """The user-editable part of a routine (everything except ids, owner and run bookkeeping)."""
@@ -313,6 +341,9 @@ class RoutineSpec(_Strict):
     triggers: list[Trigger] = Field(default_factory=list, max_length=20)  # empty = run-now only
     conditions: list[Condition] = Field(default_factory=list, max_length=20)
     actions: list[Action] = Field(min_length=1, max_length=50)
+
+    def is_one_time(self) -> bool:
+        return is_one_time(self.triggers)
 
     def uses_sun(self) -> bool:
         return any(t.type == "sun" for t in self.triggers) or any(c.type == "sun" for c in leaf_conditions(self.conditions))

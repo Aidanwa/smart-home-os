@@ -25,6 +25,7 @@ export function ActionFields({ action, onChange, deviceOptions, groups }: Action
   if (action.type === 'spotify_play') return <MusicFields action={action} onChange={onChange} />;
   if (action.type === 'spotify_ctrl') return <MusicCtrlFields action={action} onChange={onChange} />;
   if (action.type === 'agent') return <AgentFields action={action} onChange={onChange} />;
+  if (action.type === 'notify') return <NotifyFields action={action} onChange={onChange} />;
   if (action.type === 'fade') {
     const targets = [
       ...deviceOptions.filter(d => d.hasBrightness).map(d => ({ value: `d:${d.ieee}`, label: d.name, range: d.range })),
@@ -367,6 +368,37 @@ export function AgentFields({ action, onChange }: { action: AgentAction; onChang
       <p className="text-xs text-amber-400/90">
         Uses the AI: costs tokens and can do things a little differently each time. Runs at most {AGENT_RUNS_PER_HOUR}× per hour for this routine;
         extra triggers skip this step. Its reply and everything it did show in History.
+      </p>
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+        Stop the routine if this fails
+      </label>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ notify
+
+type NotifyAction = Extract<Action, { type: 'notify' }>;
+
+export function NotifyFields({ action, onChange }: { action: NotifyAction; onChange: (a: Action) => void }) {
+  return (
+    <div className="space-y-2">
+      <input className={input} maxLength={100} value={action.title ?? ''} placeholder="Title (blank = the routine's name)"
+        onChange={e => onChange({ ...action, title: e.target.value || null })} />
+      <textarea className={`${input} min-h-20`} maxLength={300} value={action.message}
+        placeholder="e.g. The front door has been open for 10 minutes."
+        onChange={e => onChange({ ...action, message: e.target.value })} />
+      <div className="flex gap-2">
+        {(['owner', 'everyone'] as const).map(to => (
+          <button key={to} type="button" className={chip(action.to === to)} onClick={() => onChange({ ...action, to })}>
+            {to === 'owner' ? 'Just the owner' : 'Everyone'}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-neutral-500">
+        Sent to the phones that turned notifications on in Settings → Notifications.
+        {action.to === 'owner' ? ' The owner is whoever created the routine.' : ''}
       </p>
       <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
         <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />

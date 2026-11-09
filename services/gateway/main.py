@@ -21,6 +21,7 @@ from api.integration_routes import integrations_router
 from api.home_routes import router as home_router
 from api.zone_routes import router as zone_router
 from api.routine_routes import router as routine_router
+from api.push_routes import router as push_router
 
 # The installed app's manifest (frontend/public); Python doesn't know the extension.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(home_router)
     app.include_router(zone_router)
     app.include_router(routine_router)
+    app.include_router(push_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

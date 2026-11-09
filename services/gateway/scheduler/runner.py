@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from core.mqtt_bus import AsyncMqttBus
-from scheduler import store
+from scheduler import alerts, store
 from scheduler.actions import RunContext, StepFailed, finish_background, perform
 from scheduler.schema import RoutineSpec
 
@@ -109,5 +109,6 @@ async def execute(bus: AsyncMqttBus, routine_id: uuid.UUID, name: str, run_id: u
         log = logger.info if status == "success" else logger.warning
         log(f"Routine '{name}' run {run_id} finished: {status}" + (f" ({error})" if error else ""))
         bus.broadcast({"type": "routine_run", "routine_id": str(routine_id), "run_id": str(run_id), "status": status})
+        alerts.run_finished(owner_id, routine_id, name, status, error)
 
     return status

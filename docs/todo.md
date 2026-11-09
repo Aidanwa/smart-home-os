@@ -6,28 +6,11 @@ Items marked **(migration)** need a database schema change, which needs Aidan's 
 
 ## Up next
 
-### 1. Notifications
-
-Today a failed or missed routine only shows as the red badge on the Routines tab. The goal is a push to the phone:
-
-- **Failure alerts:** push `failed` and `missed` routine runs.
-- **A `notify` routine action**, for example "door left open 10 min → notify" or "washer under 5 W for 3 min → laundry done".
-- **Agent reminders:** "remind me at 6 to take the bins out" becomes a routine with a notify action. The agent's routine tools currently say reminders aren't supported.
-
-There are two ways to deliver them, and choosing one is the first step:
-
-| | ntfy | Web push to the installed app |
-|---|---|---|
-| On the phone | The ntfy app | Nothing extra: the home-screen app (iOS 16.4+) |
-| On the hub | One small container on the Pi, or the hosted ntfy.sh | Push keys (VAPID), a Python push library, and a table of each phone's subscription **(migration)** |
-| Privacy | Self-hosted with auth; on ntfy.sh the topic name is the password (keep it long and random, in `user_secrets`) | Goes through Apple's or Google's push service, encrypted end to end |
-| Extras | Priorities, tags, action buttons | Tapping the alert opens the app at the right tab |
-
-### 2. Routine tags or folders (migration)
+### 1. Routine tags or folders (migration)
 
 User-made labels for grouping routines beyond the built-in "when it runs" and "room" groupings, e.g. "Morning", "Away", "Kids". Needs a new column on `routines`, the list's group-by dropdown gaining "Tag", and a tag field in the editor (and in the agent's `rt_save`).
 
-### 3. Routine starter templates
+### 2. Routine starter templates
 
 Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, all off at bedtime.
 
@@ -41,6 +24,7 @@ Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, 
 Built, but nobody has seen it work for real yet:
 
 - **The firmware update badge** on device cards ("Update", "Scheduled", "42%"). No device has had an update waiting.
+- **Notifications** (built 2026-11-09): turning them on in the iPhone app, a test send, tapping one to open the app at the right page, routine failure/missed/partial alerts, the Notify action, and one-time reminders made by the agent ("remind me at 6 to take the bins out").
 
 ## Testing
 
@@ -57,6 +41,12 @@ Ideas considered but not built:
 - webhook triggers;
 - colour (`xy`/`hue`) in device actions;
 - a run-as switch in the editor.
+
+### Notifications
+
+- A `notify` tool for "Ask the agent" routine runs ("every morning, summarise the weather and notify me").
+- Message templates with live values ("Freezer is {temperature}°").
+- The app icon badge (`setAppBadge`) for unseen routine problems.
 
 ### Assistant (agent)
 

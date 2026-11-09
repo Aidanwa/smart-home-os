@@ -29,6 +29,8 @@ def sun_event(event: str, day: date, tz: ZoneInfo, loc: Location) -> datetime | 
 
 
 def _fire_on(trig, day: date, tz: ZoneInfo, loc: Location) -> datetime | None:
+    if getattr(trig, "date", None) is not None and day != trig.date:
+        return None
     if trig.days is not None and DAYS[day.weekday()] not in trig.days:
         return None
     if isinstance(trig, TimeTrigger):
@@ -47,6 +49,9 @@ def is_scheduled(trig) -> bool:
 def next_fire(trig, after: datetime, tz: ZoneInfo, loc: Location = None) -> datetime | None:
     """First fire time strictly after `after`. Fire times only grow from one day to the next, so
     the first match is the earliest. (Starts a day early: a negative sun offset can cross midnight.)"""
+    if getattr(trig, "date", None) is not None:  # one-time: its date may be weeks away
+        t = _fire_on(trig, trig.date, tz, loc)
+        return t if t and t > after else None
     start = after.astimezone(tz).date()
     for offset in range(-1, 9):
         t = _fire_on(trig, start + timedelta(days=offset), tz, loc)
@@ -57,6 +62,9 @@ def next_fire(trig, after: datetime, tz: ZoneInfo, loc: Location = None) -> date
 
 def prev_fire(trig, at_or_before: datetime, tz: ZoneInfo, loc: Location = None) -> datetime | None:
     """Most recent fire time at or before `at_or_before`."""
+    if getattr(trig, "date", None) is not None:
+        t = _fire_on(trig, trig.date, tz, loc)
+        return t if t and t <= at_or_before else None
     start = at_or_before.astimezone(tz).date()
     for offset in range(1, -9, -1):
         t = _fire_on(trig, start + timedelta(days=offset), tz, loc)

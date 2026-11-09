@@ -93,6 +93,21 @@ class UserPreference(Base):
     # Link back to the User object
     user: Mapped["User"] = relationship(back_populates="preferences")
 
+class PushSubscription(Base):
+    """One browser/phone that receives web push notifications for a user (the installed app's
+    PushManager subscription). The endpoint is the push service URL (Apple, Google, Mozilla)."""
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
+    auth: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Home(Base):
     """Global Home Configuration, Location & Weather Context (Singleton)"""
     __tablename__ = "home_profile"

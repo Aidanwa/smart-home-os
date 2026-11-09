@@ -96,6 +96,7 @@ function StepRow({ step }: { step: RunStep }) {
     : step.type === 'spotify_play' ? `Play ${String(d.playing ?? '')} on ${String(d.speaker ?? '')}`
     : step.type === 'spotify_ctrl' ? `${String(d.cmd ?? '')} on ${String(d.speaker ?? '')}`
     : step.type === 'agent' ? 'Ask the agent'
+    : step.type === 'notify' ? `Notify ${d.to === 'everyone' ? 'everyone' : 'owner'}: ${String(d.title ?? '')}${typeof d.devices === 'number' ? ` (${d.sent ?? 0} of ${d.devices} device${d.devices === 1 ? '' : 's'})` : ''}`
     : `${target ?? step.type}${d.sent ? ` → ${Object.entries(d.sent as Record<string, unknown>).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
   const notes = ['message', 'ramp', 'ramp_stopped', 'stopped_early', 'note']
     .filter(k => typeof d[k] === 'string')

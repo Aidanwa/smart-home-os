@@ -101,12 +101,12 @@ def get_agent_tools(has_spotify: bool = False) -> List[Dict[str, Any]]:
     tools.extend([
         {
             "name": "rt_format",
-            "description": "Get the JSON format for routines (schedules/automations). Call this before rt_save.",
+            "description": "Get the JSON format for routines (schedules/automations, reminders, phone notifications). Call this before rt_save.",
             "parameters": NO_ARGS,
         },
         {
             "name": "rt_list",
-            "description": "List the household's routines with ids, next run, last result and full definitions. Use before editing, enabling, running or deleting one.",
+            "description": "List the household's routines and pending reminders with ids, next run, last result and full definitions. Use before editing, enabling, running or deleting one.",
             "parameters": NO_ARGS,
         },
         {

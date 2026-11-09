@@ -11,6 +11,7 @@ export interface TimeTrigger {
   type: 'time';
   at: string;          // "HH:MM", home timezone
   days: Day[] | null;  // null = every day
+  date?: string | null;  // "YYYY-MM-DD": fires once (a one-time reminder); days must be null
 }
 
 export interface SunTrigger {
@@ -103,13 +104,14 @@ export type Action =
       id: string; type: 'spotify_ctrl'; cmd: 'pause' | 'resume' | 'next' | 'previous' | 'volume';
       speaker: string | null; volume: number | null; stop_on_error: boolean;
     }
-  | { id: string; type: 'agent'; prompt: string; stop_on_error: boolean };
+  | { id: string; type: 'agent'; prompt: string; stop_on_error: boolean }
+  | { id: string; type: 'notify'; title: string | null; message: string; to: 'owner' | 'everyone'; stop_on_error: boolean };
 
 export const AGENT_RUNS_PER_HOUR = 2;  // mirrors scheduler/schema.py
 
 export const ACTION_LABEL: Record<Action['type'], string> = {
   device: 'Device', group: 'Group', delay: 'Wait', fade: 'Fade', spotify_play: 'Play music', spotify_ctrl: 'Music control',
-  agent: 'Ask the agent',
+  agent: 'Ask the agent', notify: 'Notify',
 };
 
 
@@ -139,6 +141,9 @@ export interface Routine extends RoutineSpec {
   last_run_status: RunStatus | null;
   next_fire_at: string | null;
   running: boolean;
+  /** Every trigger is a dated time trigger: a one-time reminder. `done`: all its times have passed. */
+  one_time?: boolean;
+  done?: boolean;
   /** This user marked the latest problem run as reviewed; the next run clears it. */
   reviewed?: boolean;
   created_at: string;
@@ -265,8 +270,17 @@ function describeDeviceRef(device: string, attribute: string, op: TriggerOp, val
   return `${name} ${attribute} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, info, ctx?.tempUnit ?? 'F')}`;
 }
 
+/** "2026-12-25" -> "Fri, Dec 25" (plus the year if it isn't this year). A calendar date, no timezone maths. */
+export function formatDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric',
+  });
+}
+
 export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {
-  if (t.type === 'time') return `${describeDays(t.days)} ${t.at}`;
+  if (t.type === 'time') return t.date ? `Once, ${formatDate(t.date)} ${t.at}` : `${describeDays(t.days)} ${t.at}`;
   if (t.type === 'sun') {
     const off = t.offset_min ? ` ${t.offset_min > 0 ? '+' : '−'}${Math.abs(t.offset_min)}m` : '';
     const days = t.days ? ` (${describeDays(t.days)})` : '';

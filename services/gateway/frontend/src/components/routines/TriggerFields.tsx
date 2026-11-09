@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import type { AttributeMap, Day, DeviceTrigger, SunTrigger, TempUnit, TimeTrigger, Trigger, TriggerOp } from './types';
-import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDisplay, describeDays, displayUnit } from './types';
+import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDisplay, describeDays, displayUnit, formatDate } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, isNumericOp, opsFor } from './fieldLogic';
 import { card, chip, iconBtn, input } from './styles';
@@ -51,13 +51,32 @@ export function TriggerRow({ trigger, onChange, onRemove, ctx }: { trigger: Trig
   return <DeviceRow trigger={trigger} onChange={onChange} onRemove={onRemove} ctx={ctx} />;
 }
 
+/** Today as "YYYY-MM-DD" on this device. */
+function todayYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function TimeRow({ trigger, onChange, onRemove }: { trigger: TimeTrigger; onChange: (t: TimeTrigger) => void; onRemove: () => void }) {
+  const once = !!trigger.date;
   return (
     <div className={card}>
-      <RowHeader title={`At a time · ${describeDays(trigger.days)}`} onRemove={onRemove} />
-      <input type="time" className={`${input} w-32`} value={trigger.at} required
-        onChange={e => e.target.value && onChange({ ...trigger, at: e.target.value.slice(0, 5) })} />
-      <DayChips days={trigger.days} onChange={days => onChange({ ...trigger, days })} />
+      <RowHeader title={once ? `Once · ${formatDate(trigger.date!)}` : `At a time · ${describeDays(trigger.days)}`} onRemove={onRemove} />
+      <div className="flex gap-2">
+        <button type="button" className={chip(!once)} onClick={() => onChange({ ...trigger, date: null })}>Repeats</button>
+        <button type="button" className={chip(once)} onClick={() => onChange({ ...trigger, date: trigger.date || todayYmd(), days: null })}>Once</button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {once && (
+          <input type="date" className={`${input} w-44`} value={trigger.date!} required
+            onChange={e => e.target.value && onChange({ ...trigger, date: e.target.value })} />
+        )}
+        <input type="time" className={`${input} w-32`} value={trigger.at} required
+          onChange={e => e.target.value && onChange({ ...trigger, at: e.target.value.slice(0, 5) })} />
+      </div>
+      {once
+        ? <p className="text-xs text-neutral-500">Runs once, then moves to One-time in the list. Good for reminders.</p>
+        : <DayChips days={trigger.days} onChange={days => onChange({ ...trigger, days })} />}
     </div>
   );
 }
