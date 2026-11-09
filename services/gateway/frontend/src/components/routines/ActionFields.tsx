@@ -53,8 +53,8 @@ export function ActionFields({ action, onChange, deviceOptions, groups }: Action
         </select>
       )}
       <PayloadFields value={action.set} showColorTemp={showColorTemp} range={range} onChange={set => onChange({ ...action, set })} />
-      <label className="flex items-center gap-2 text-xs text-neutral-500">
-        <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
         Stop the routine if this fails
       </label>
     </>
@@ -119,8 +119,8 @@ function OptionalNumber({ label: text, value, min, max, defaultValue, onChange }
 }) {
   return (
     <div className="flex items-center gap-2">
-      <label className="flex items-center gap-2 text-xs text-neutral-400 flex-1">
-        <input type="checkbox" checked={value != null} onChange={e => onChange(e.target.checked ? defaultValue : null)} />
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400 flex-1">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={value != null} onChange={e => onChange(e.target.checked ? defaultValue : null)} />
         {text}
       </label>
       {value != null && (
@@ -184,8 +184,8 @@ export function FadeFields({ action, onChange, targets }: { action: FadeAction; 
         onChange={v => onChange({ ...action, from_brightness: v === null ? null : Math.max(1, toBright(v)) })} />
       <p className="text-xs text-neutral-600 -mt-2">Otherwise it starts where the light is now (or at 1% if it is off).</p>
 
-      <label className="flex items-center gap-2 text-xs text-neutral-400">
-        <input type="checkbox" checked={action.to_color_temp !== null}
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.to_color_temp !== null}
           onChange={e => onChange({ ...action, to_color_temp: e.target.checked ? toMired(25) : null, from_color_temp: e.target.checked ? action.from_color_temp : null })} />
         Also fade the white tone
       </label>
@@ -210,8 +210,8 @@ export function FadeFields({ action, onChange, targets }: { action: FadeAction; 
         <option value="native">Smooth: the bulb does the fade (recommended)</option>
         <option value="stepped">Stepped: small steps; stops if someone changes the light</option>
       </select>
-      <label className="flex items-center gap-2 text-xs text-neutral-400">
-        <input type="checkbox" checked={action.wait} onChange={e => onChange({ ...action, wait: e.target.checked })} />
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.wait} onChange={e => onChange({ ...action, wait: e.target.checked })} />
         Wait for the fade to finish before the next action
       </label>
     </div>
@@ -261,7 +261,7 @@ function MusicPicker({ action, onChange }: { action: PlayAction; onChange: (a: A
           <p className="text-sm text-neutral-200 truncate">{action.title ?? action.uri}</p>
           <p className="text-xs text-neutral-500 truncate">{action.uri.split(':')[1]}</p>
         </div>
-        <button type="button" className="text-xs text-blue-400 shrink-0" onClick={() => setPicking(true)}>Change</button>
+        <button type="button" className="text-xs text-blue-400 shrink-0 min-h-10 px-2 -mr-2" onClick={() => setPicking(true)}>Change</button>
       </div>
     );
   }
@@ -275,7 +275,7 @@ function MusicPicker({ action, onChange }: { action: PlayAction; onChange: (a: A
         <ul className="max-h-64 overflow-y-auto rounded-lg border border-neutral-800 divide-y divide-neutral-800">
           {shown.results.map(r => (
             <li key={r.uri}>
-              <button type="button" className="w-full text-left px-3 py-2 hover:bg-neutral-800/60"
+              <button type="button" className="w-full text-left px-3 py-3 hover:bg-neutral-800/60"
                 onClick={() => { onChange({ ...action, uri: r.uri, title: r.name }); setPicking(false); setQuery(''); }}>
                 <p className="text-sm text-neutral-200 truncate">{r.name}</p>
                 <p className="text-xs text-neutral-500 truncate">{r.subtitle}</p>
@@ -284,7 +284,7 @@ function MusicPicker({ action, onChange }: { action: PlayAction; onChange: (a: A
           ))}
         </ul>
       )}
-      {action.uri && <button type="button" className="text-xs text-neutral-500" onClick={() => setPicking(false)}>Keep {action.title ?? 'current choice'}</button>}
+      {action.uri && <button type="button" className="text-xs text-neutral-500 min-h-10" onClick={() => setPicking(false)}>Keep {action.title ?? 'current choice'}</button>}
     </div>
   );
 }
@@ -300,8 +300,8 @@ export function MusicFields({ action, onChange }: { action: PlayAction; onChange
       </div>
       <OptionalNumber label="Volume (%)" value={action.volume} min={0} max={100} defaultValue={30}
         onChange={volume => onChange({ ...action, volume, ...(volume === null ? { ramp_to: null, ramp_s: null } : {}) })} />
-      <label className="flex items-center gap-2 text-xs text-neutral-400">
-        <input type="checkbox" checked={ramping} onChange={e => onChange(e.target.checked
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={ramping} onChange={e => onChange(e.target.checked
           ? { ...action, volume: action.volume ?? 10, ramp_to: 40, ramp_s: 600 }
           : { ...action, ramp_to: null, ramp_s: null })} />
         Then gradually change the volume
@@ -368,8 +368,8 @@ export function AgentFields({ action, onChange }: { action: AgentAction; onChang
         Uses the AI: costs tokens and can do things a little differently each time. Runs at most {AGENT_RUNS_PER_HOUR}× per hour for this routine;
         extra triggers skip this step. Its reply and everything it did show in History.
       </p>
-      <label className="flex items-center gap-2 text-xs text-neutral-500">
-        <input type="checkbox" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
         Stop the routine if this fails
       </label>
     </div>

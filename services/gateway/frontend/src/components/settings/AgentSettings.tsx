@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Bot, KeyRound, Server } from 'lucide-react';
+import { toast } from 'sonner';
+import { request } from '../../lib/api';
 
 // Pre-configured models mapping for future expansion
 const PROVIDER_MODELS: Record<string, string[]> = {
@@ -19,7 +21,7 @@ export function AgentSettings() {
   const [hasCustomKey, setHasCustomKey] = useState(false);
   const [apiKey, setApiKey] = useState('');
   
-  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [saving, setSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch initial preferences on mount
@@ -56,20 +58,31 @@ export function AgentSettings() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus(null);
 
-    // If using custom key but they didn't type one and don't already have one saved
-    if (!useSystemKey && !apiKey && !hasCustomKey) {
-      setStatus({ type: 'error', message: 'You must provide a custom API key.' });
+    // Using your own key, but none typed and none saved yet
+    if (!useSystemKey && !apiKey.trim() && !hasCustomKey) {
+      toast.error('Enter your API key first.', { description: 'Or turn “Use the hub’s API key” back on.' });
       return;
     }
 
-    // Determine if we will have a custom key on file after this save
+    // Whether a custom key will be on file after this save
     const willHaveCustomKey = apiKey.trim().length > 0 ? true : hasCustomKey;
 
+    setSaving(true);
     try {
-      // 1. Update unstructured agent preferences
-      const prefRes = await authenticatedFetch('/api/platform/preferences', {
+      // 1. A newly typed key goes to the encrypted vault first, so the
+      //    preferences never point at a key that failed to save.
+      if (apiKey.trim()) {
+        const ok = await request('save your API key', () => authenticatedFetch('/api/platform/secrets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, credentials: apiKey.trim() }),
+        }));
+        if (!ok) return;
+      }
+
+      // 2. The agent preferences
+      const ok = await request('save the assistant settings', () => authenticatedFetch('/api/platform/preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,41 +90,17 @@ export function AgentSettings() {
             provider,
             model,
             use_system_api_key: useSystemKey,
-            has_custom_api_key: willHaveCustomKey // Explicitly save to database JSONB
+            has_custom_api_key: willHaveCustomKey,
           }
         })
-      });
+      }));
+      if (!ok) return;
 
-      if (!prefRes.ok) {
-        const errData = await prefRes.json();
-        throw new Error(errData.detail || 'Failed to save agent preferences.');
-      }
-
-      // 2. If a new API key was typed, save it to the secure vault
-      if (apiKey) {
-        const secretRes = await authenticatedFetch('/api/platform/secrets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            provider: provider,
-            credentials: apiKey
-          })
-        });
-
-        if (!secretRes.ok) {
-           const errData = await secretRes.json();
-           throw new Error(errData.detail || 'Couldn’t save the API key.');
-        }
-      }
-
-      // Success State
-      setStatus({ type: 'success', message: 'Agent configuration successfully synced.' });
+      toast.success('Assistant settings saved');
       setApiKey(''); // Clear the input field for security
-      setHasCustomKey(willHaveCustomKey); // Update local state indicator
-      setTimeout(() => setStatus(null), 3000);
-
-    } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Couldn’t reach the hub. Settings weren’t saved.' });
+      setHasCustomKey(willHaveCustomKey);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -176,32 +165,28 @@ export function AgentSettings() {
               <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
             </label>
           </div>
+          {!useSystemKey && (
             <div className="pt-4 border-t border-neutral-800/50 animate-in slide-in-from-top-2">
               <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <KeyRound size={12} /> Your API key
-                {hasCustomKey && !useSystemKey && <span className="text-green-400 ml-auto flex items-center gap-1"><div className="w-1.5 h-1.5 bg-green-400 rounded-full"/> Key Saved</span>}
+                {hasCustomKey && <span className="text-green-400 ml-auto flex items-center gap-1"><div className="w-1.5 h-1.5 bg-green-400 rounded-full"/> Key saved</span>}
               </label>
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={hasCustomKey && !useSystemKey ? "••••••••••••••••••••••••" : "sk-proj-..."}
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-neutral-600 transition-colors disabled:opacity-50"
-                disabled={useSystemKey}
+                placeholder={hasCustomKey ? "Saved. Type a new key to replace it." : "sk-proj-..."}
+                autoComplete="off"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-sm font-mono text-neutral-200 focus:outline-none focus:border-neutral-600 transition-colors"
               />
               <p className="text-[10px] text-neutral-500 mt-1.5">Stored encrypted on the hub and used only for your account.</p>
             </div>
+          )}
         </div>
 
-        {status && (
-          <div className={`p-3 rounded-lg text-xs ${status.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-            {status.message}
-          </div>
-        )}
-
         <div className="flex justify-end">
-          <button type="submit" className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]">
-            Save
+          <button type="submit" disabled={saving} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99] disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </form>

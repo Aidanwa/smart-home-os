@@ -13,6 +13,8 @@ import { TriggerRow } from './TriggerFields';
 import { ConditionRow } from './ConditionFields';
 import { newAction, newCondition, newTrigger } from './fieldLogic';
 import { card, iconBtn, input, label } from './styles';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/dialog';
 
 interface Props {
   initial: RoutineSpec;
@@ -30,7 +32,7 @@ interface Props {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-const addBtn = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
+const addBtn = 'flex items-center gap-1.5 px-3 min-h-11 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
 
 export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, onSave, onDelete, onCancel, onDirtyChange }: Props) {
   const [spec, setSpec] = useState<RoutineSpec>(initial);
@@ -39,7 +41,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   const dirty = JSON.stringify(spec) !== initialJson;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [pv, setPv] = useState<{ result: PreviewResult | null; error: string | null }>({ result: null, error: null });
 
   // Controllable devices (anything reporting an on/off state), sorted by name.
@@ -84,8 +86,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(await onSave(spec));
+    const err = await onSave(spec);
     setSaving(false);
+    if (err) toast.error(`Couldn’t save ${spec.name.trim() || 'the routine'}`, { description: err, duration: 10000 });
   };
 
   const cond = splitConditions(spec.conditions);
@@ -142,7 +145,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
             <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-neutral-800 shrink-0" role="group" aria-label="Match all or any">
               {([['all', 'All'], ['any', 'Any']] as const).map(([m, text]) => (
                 <button key={m} type="button" onClick={() => setConditions(m, cond.leaves)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium ${cond.mode === m ? 'bg-neutral-700 text-white' : 'text-neutral-500'}`}>{text}</button>
+                  className={`px-4 min-h-9 rounded-lg text-sm font-medium ${cond.mode === m ? 'bg-neutral-700 text-white' : 'text-neutral-500'}`}>{text}</button>
               ))}
             </div>
           )}
@@ -197,7 +200,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
       {/* ADVANCED */}
       <details>
-        <summary className="text-sm text-neutral-400 cursor-pointer select-none">Advanced</summary>
+        <summary className="text-sm text-neutral-400 cursor-pointer select-none min-h-11 flex items-center">Advanced</summary>
         <div className="mt-3 space-y-4">
           <div>
             <label className={label}>If it triggers while already running</label>
@@ -243,19 +246,29 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
         <p className="text-neutral-600">Times are in {timezone}.</p>
       </div>
 
-      {saveError && <div className="p-3 text-xs bg-red-950/50 border border-red-900 text-red-400 rounded-lg whitespace-pre-line">{saveError}</div>}
-
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={!canSave} onClick={handleSave}
-          className="flex-1 min-w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">
+          className="flex-1 min-w-32 px-4 min-h-11 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">
           {saving ? 'Saving…' : isNew ? 'Create routine' : 'Save changes'}
         </button>
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-neutral-300 bg-neutral-900 border border-neutral-800">Cancel</button>
+        <button type="button" onClick={onCancel} className="px-4 min-h-11 rounded-lg text-sm text-neutral-300 bg-neutral-900 border border-neutral-800">Cancel</button>
         {onDelete && (
-          <button type="button" onClick={() => window.confirm(`Delete "${initial.name}"? Its run history goes too.`) && onDelete()}
-            className="px-4 py-2 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">Delete</button>
+          <button type="button" onClick={() => setConfirmDelete(true)}
+            className="px-4 min-h-11 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">Delete</button>
         )}
       </div>
+      {onDelete && (
+        <ConfirmDialog
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          title={`Delete ${initial.name}?`}
+          description="Its run history goes too. This can’t be undone."
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          destructive
+          onConfirm={onDelete}
+        />
+      )}
     </div>
   );
 }

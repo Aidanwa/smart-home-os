@@ -113,8 +113,12 @@ async def update_home(
     # Default to the incoming data address in case the if-block is skipped
     full_address = data.address
 
-    # Only recalculate if the address or coordinates actually changed
-    if data.address != home.address or data.latitude != home.latitude or data.longitude != home.longitude:
+    # Look the address up again only when it changed, explicit coordinates were sent, or the
+    # last lookup failed. (The form never sends coordinates, so comparing them to the stored
+    # ones made every save, even a nickname change, hit Nominatim and NWS.)
+    coords_given = data.latitude is not None and data.longitude is not None
+    lookup_failed = bool(home.address) and (home.latitude is None or not home.weather_grid)
+    if data.address != home.address or coords_given or lookup_failed:
         lat, lon, grid, full_address = await resolve_spatial_data(data.address, data.latitude, data.longitude)
         home.latitude = lat
         home.longitude = lon

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../ui/dialog';
+import { dialogButton } from '../../ui/dialog-styles';
 import { ROOM_COLORS } from '../constants';
 import { NumberField } from '../../routines/NumberField';
 
-export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: number; onClose: () => void; onCreate: (name: string, width: number, height: number, color: string) => Promise<void>; }) {
+export function AddRoomModal({ floorLabel, onClose, onCreate }: { floorLabel: string; onClose: () => void; onCreate: (name: string, width: number, height: number, color: string) => Promise<void>; }) {
   const [name, setName] = useState('');
   const [widthFt, setWidthFt] = useState(10);
   const [heightFt, setHeightFt] = useState(10);
@@ -25,11 +26,11 @@ export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: nu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl p-6 w-full max-w-md flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-white font-semibold text-lg">Add Room — Floor {floorLevel}</h2>
-          <button onClick={onClose} className="text-neutral-500 hover:text-white transition-colors"><X size={20} /></button>
+    <Dialog open onOpenChange={o => !o && !isSubmitting && onClose()}>
+      <DialogContent className="flex flex-col gap-6">
+        <div>
+          <DialogTitle>Add a room</DialogTitle>
+          <DialogDescription>{floorLabel}. You can move and resize it afterwards.</DialogDescription>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -50,10 +51,10 @@ export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: nu
           </div>
 
           <div className="flex flex-col gap-1.5">
-             <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Color Label</span>
+             <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Colour</span>
              <div className="flex items-center gap-2">
                 {ROOM_COLORS.map(c => (
-                  <button key={c} onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border-2 transition-all ${color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: c }} aria-label={`Select color ${c}`} />
+                  <button key={c} onClick={() => setColor(c)} className={`w-10 h-10 rounded-full border-2 transition-all ${color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: c }} aria-label={`Select color ${c}`} />
                 ))}
              </div>
           </div>
@@ -61,10 +62,10 @@ export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: nu
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-neutral-600 text-neutral-300 text-sm font-medium hover:bg-neutral-800 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 px-4 py-2.5 rounded-lg bg-white text-neutral-900 text-sm font-medium hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">{isSubmitting ? 'Creating…' : 'Create Room'}</button>
+          <button onClick={onClose} disabled={isSubmitting} className={dialogButton.cancel}>Cancel</button>
+          <button onClick={handleSubmit} disabled={isSubmitting} className={dialogButton.primary}>{isSubmitting ? 'Creating…' : 'Create room'}</button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

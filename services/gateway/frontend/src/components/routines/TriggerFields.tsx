@@ -15,17 +15,17 @@ export function DayChips({ days, onChange, allowNull = true }: { days: Day[] | n
   };
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="grid grid-cols-7 gap-1">
         {DAYS.map(d => (
-          <button key={d} type="button" className={chip(on.includes(d))} onClick={() => toggle(d)}>
+          <button key={d} type="button" className={chip(on.includes(d)).replace("px-3", "px-0 min-w-0")} onClick={() => toggle(d)}>
             {d[0].toUpperCase() + d.slice(1, 3)}
           </button>
         ))}
       </div>
-      <div className="flex gap-3 text-xs text-neutral-500">
-        <button type="button" className="hover:text-neutral-300" onClick={() => onChange(allowNull ? null : [...DAYS])}>Every day</button>
-        <button type="button" className="hover:text-neutral-300" onClick={() => onChange(WEEKDAYS)}>Weekdays</button>
-        <button type="button" className="hover:text-neutral-300" onClick={() => onChange(WEEKEND)}>Weekends</button>
+      <div className="flex flex-wrap gap-x-1 text-xs text-neutral-500">
+        <button type="button" className="min-h-10 px-2 first:-ml-2 hover:text-neutral-300" onClick={() => onChange(allowNull ? null : [...DAYS])}>Every day</button>
+        <button type="button" className="min-h-10 px-2 first:-ml-2 hover:text-neutral-300" onClick={() => onChange(WEEKDAYS)}>Weekdays</button>
+        <button type="button" className="min-h-10 px-2 first:-ml-2 hover:text-neutral-300" onClick={() => onChange(WEEKEND)}>Weekends</button>
       </div>
     </div>
   );
@@ -90,8 +90,8 @@ function SunRow({ trigger, onChange, onRemove }: { trigger: SunTrigger; onChange
 function MinutesField({ text, seconds, onChange, hint }: { text: string; seconds: number | null; onChange: (s: number | null) => void; hint?: string }) {
   return (
     <div>
-      <label className="flex items-center gap-2 text-xs text-neutral-400">
-        <input type="checkbox" checked={seconds !== null && seconds > 0} onChange={e => onChange(e.target.checked ? 300 : null)} />
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={seconds !== null && seconds > 0} onChange={e => onChange(e.target.checked ? 300 : null)} />
         {text}
       </label>
       {seconds !== null && seconds > 0 && (
@@ -145,7 +145,7 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
       <CurrentReading attributes={ctx.attributes} device={trigger.device} attribute={trigger.attribute} tempUnit={ctx.tempUnit} />
 
       <details className="text-xs">
-        <summary className="cursor-pointer text-neutral-500 select-none">Options</summary>
+        <summary className="cursor-pointer text-neutral-500 select-none min-h-10 flex items-center">Options</summary>
         <div className="mt-2 space-y-3">
           {!isEvent && trigger.op !== 'changes' && (
             <MinutesField text="Only after it has held for" seconds={trigger.for_s} onChange={for_s => onChange({ ...trigger, for_s })}
@@ -153,8 +153,8 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
           )}
           {!isEvent && trigger.op !== 'changes' && (
             <div>
-              <label className="flex items-center gap-2 text-xs text-neutral-400">
-                <input type="checkbox" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
+              <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+                <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
                 Also fire if it's already true when saved or when the hub restarts
               </label>
               <p className="text-xs text-neutral-600 mt-1">Normally it only fires when the reading changes into a match. Useful for e.g. "heater on below 18°".</p>
@@ -162,8 +162,8 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
           )}
           {isNumericOp(trigger.op) && (
             <div>
-              <label className="flex items-center gap-2 text-xs text-neutral-400">
-                <input type="checkbox" checked={trigger.rearm !== null}
+              <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+                <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={trigger.rearm !== null}
                   onChange={e => onChange({ ...trigger, rearm: e.target.checked ? deltaFromDisplay(2, info, ctx.tempUnit) : null })} />
                 Re-arm margin (ignore small wobbles)
               </label>

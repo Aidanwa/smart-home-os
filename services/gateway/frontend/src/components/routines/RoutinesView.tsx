@@ -10,6 +10,7 @@ import { RunHistory } from './RunHistory';
 import { RoutineList } from './RoutineList';
 import type { Routine, RoutineSpec, TempUnit } from './types';
 import { emptyRoutine } from './types';
+import { ConfirmDialog } from '../ui/dialog';
 
 const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-lg p-4 sm:p-6 gap-4';
 
@@ -32,9 +33,10 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const editorDirty = useRef(false);
   const setEditorDirty = useCallback((d: boolean) => { editorDirty.current = d; }, []);
   const closePanel = () => { editorDirty.current = false; setPanel(null); };
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const requestClose = () => {
-    if (editorDirty.current && !window.confirm('Discard your changes to this routine?')) return;
-    closePanel();
+    if (editorDirty.current) setConfirmDiscard(true);
+    else closePanel();
   };
   const handleRun = async (r: Routine) => {
     const err = await runNow(r.id);
@@ -85,7 +87,10 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
           onHistory={r => setPanel({ kind: 'history', routine: r })}
           onRun={handleRun}
           onDuplicate={handleDuplicate}
-          onToggle={r => setEnabled(r.id, !r.enabled)} />
+          onToggle={async r => {
+            const err = await setEnabled(r.id, !r.enabled);
+            if (err) toast.error(`Couldn’t turn ${r.enabled ? 'off' : 'on'} ${r.name}`, { description: err });
+          }} />
       )}
 
       <Sheet open={panel !== null} onOpenChange={open => !open && requestClose()}>
@@ -111,7 +116,15 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                   if (!err) closePanel();
                   return err;
                 }}
-                onDelete={editing ? async () => { await remove(editing.id); closePanel(); } : undefined}
+                onDelete={editing ? async () => {
+                  const err = await remove(editing.id);
+                  if (err) {
+                    toast.error(`Couldn’t delete ${editing.name}`, { description: err });
+                    throw new Error(err);  // keeps the confirm open
+                  }
+                  toast.success(`Deleted ${editing.name}`);
+                  closePanel();
+                } : undefined}
                 onCancel={closePanel}
                 onDirtyChange={setEditorDirty}
               />
@@ -128,6 +141,16 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
           )}
         </SheetContent>
       </Sheet>
+      <ConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard your changes?"
+        description="Your edits to this routine haven’t been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        destructive
+        onConfirm={closePanel}
+      />
     </div>
   );
 }

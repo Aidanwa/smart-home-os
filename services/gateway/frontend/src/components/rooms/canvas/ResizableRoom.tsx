@@ -23,6 +23,27 @@ const getDeviceVisuals = (device: any) => {
   return { path: DEVICE_PATHS.radio, color: "#a1a1aa" };
 };
 
+// Markers keep at least this fraction of their 100% size on screen, however far the plan is
+// zoomed out (a phone fits the whole floor at ~35%, which made them tiny).
+const MIN_MARKER_SCREEN_SCALE = 0.9;
+const MAX_MARKER_SCALE = 3;
+const LABEL_W = 76;  // world px at marker scale 1
+const LABEL_FONT = 11;
+
+/** Which markers' names would collide with a neighbour's (world px, at this marker scale). */
+function crowdedLabels(points: { id: string; x: number; y: number }[], markerScale: number): Set<string> {
+  const crowded = new Set<string>();
+  const w = LABEL_W * markerScale, h = 34 * markerScale;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      if (Math.abs(points[i].x - points[j].x) < w && Math.abs(points[i].y - points[j].y) < h) {
+        crowded.add(points[i].id); crowded.add(points[j].id);
+      }
+    }
+  }
+  return crowded;
+}
+
 /** A device's dot on the plan. Switchable devices glow when on and pulse while a command is in flight. */
 function DeviceMarker({ device, color, path, name }: { device: { state?: unknown }; color: string; path: string; name: string }) {
   const busy = usePending(name);
@@ -59,7 +80,8 @@ export function ResizableRoom({
   onDragEnd, 
   onTransformEnd, 
   onDoubleClick,
-  onDeviceClick
+  onDeviceClick,
+  stageScale = 1,
 }: { 
   zone: LogicalZone; 
   isSelected: boolean;
@@ -72,6 +94,8 @@ export function ResizableRoom({
   onTransformEnd: (x: number, y: number, w: number, h: number) => void; 
   onDoubleClick: (zone: LogicalZone, nodePos: { x: number; y: number }) => void; 
   onDeviceClick: (ieee_address: string) => void;
+  /** The plan's current zoom, so markers can stay a usable size on screen. */
+  stageScale?: number;
 }) {
   const groupRef = useRef<Konva.Group>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -104,6 +128,13 @@ export function ResizableRoom({
   const pxWidth = ftToPx(liveSize.w);
   const pxHeight = ftToPx(liveSize.h);
   const roomColor = zone.color || '#64748b';
+
+  const markerScale = Math.min(MAX_MARKER_SCALE, Math.max(1, MIN_MARKER_SCREEN_SCALE / stageScale));
+  const markers = roomPlacements
+    .filter(p => devices[p.ieee_address])
+    .map(p => ({ id: p.ieee_address, x: (p.pos_x / 100) * pxWidth, y: (p.pos_y / 100) * pxHeight }));
+  // Names that would overlap are hidden until you zoom in (tap the room in View mode).
+  const hideLabel = crowdedLabels(markers, markerScale);
 
   return (
     <>
@@ -196,20 +227,26 @@ export function ResizableRoom({
                 updateDevicePlacement(placement.ieee_address, zone.id, percentX, percentY);
               }}
             >
-              <DeviceMarker device={device} color={visuals.color} path={visuals.path} name={device.friendly_name ?? placement.ieee_address} />
-              {/* TRUNCATED TEXT */}
-              <Text 
-                text={device.friendly_name} 
-                fontSize={10} 
-                fill="#f8fafc" 
-                align="center"
-                width={70} 
-                x={-35} 
-                y={18} 
-                ellipsis={true} 
-                wrap="none" 
-                listening={false} 
-              />
+              <Group scaleX={markerScale} scaleY={markerScale}>
+                <DeviceMarker device={device} color={visuals.color} path={visuals.path} name={device.friendly_name ?? placement.ieee_address} />
+                {!hideLabel.has(placement.ieee_address) && (
+                  <Text
+                    text={device.friendly_name}
+                    fontSize={LABEL_FONT}
+                    fill="#f8fafc"
+                    align="center"
+                    width={LABEL_W}
+                    x={-LABEL_W / 2}
+                    y={18}
+                    ellipsis={true}
+                    wrap="none"
+                    listening={false}
+                    shadowColor="black"
+                    shadowBlur={3}
+                    shadowOpacity={0.9}
+                  />
+                )}
+              </Group>
             </Group>
           );
         })}

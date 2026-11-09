@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Settings2, X, Pencil, Check, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Settings2, X, Pencil, Check } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, ConfirmDialog } from '../ui/dialog';
 import { useGroups } from '../../hooks/useGroups';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { DeviceState } from '../../hooks/useDevices';
@@ -213,16 +214,13 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
       })}
 
       {/* Manage Group Modal */}
-      {managingGroup && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b border-neutral-800 rounded-t-2xl">
-              <h3 className="font-medium text-lg text-white">Manage: {managingGroup.friendly_name}</h3>
-              <Tooltip text="Close">
-                <button onClick={() => setManagingGroup(null)} className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-800 transition-colors"><X size={20} /></button>
-              </Tooltip>
+      <Dialog open={!!managingGroup} onOpenChange={o => !o && setManagingGroup(null)}>
+        <DialogContent className="p-0 flex flex-col">
+          {managingGroup && (<>
+            <div className="p-4 pr-14 border-b border-neutral-800">
+              <DialogTitle className="truncate">{managingGroup.friendly_name}</DialogTitle>
+              <DialogDescription>Add or remove devices.</DialogDescription>
             </div>
-            
             <div className="p-4 max-h-[60vh] overflow-y-auto overflow-x-hidden space-y-2 rounded-b-2xl">
               {Object.entries(devices)
                 .sort(([a, sa], [b, sb]) => (sa.friendly_name ?? a).localeCompare(sb.friendly_name ?? b))
@@ -257,42 +255,19 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                 );
               })}
             </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Delete Confirmation Panel */}
-      {groupToDelete && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-red-400">
-              <AlertTriangle size={24} />
-              <h3 className="font-medium text-lg">Delete Group?</h3>
-            </div>
-            <p className="text-neutral-400 text-sm">
-              Are you sure you want to delete the group <strong className="text-white">"{groupToDelete}"</strong>? The devices in it aren’t affected.
-            </p>
-            <div className="flex justify-end gap-3 pt-4">
-              <Tooltip text="Cancel deletion">
-                <button 
-                  onClick={() => setGroupToDelete(null)} 
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
-                >
-                  Cancel
-                </button>
-              </Tooltip>
-              <Tooltip text="Permanently delete group">
-                <button 
-                  onClick={confirmDelete} 
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
-                >
-                  Delete
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-      )}
+          </>)}
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!groupToDelete}
+        onOpenChange={o => !o && setGroupToDelete(null)}
+        title="Delete group?"
+        description={<>Delete the group <strong className="text-white">{groupToDelete}</strong>? The devices in it aren’t affected.</>}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

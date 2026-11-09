@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { ConfirmDialog } from '../ui/dialog';
+import { toast } from 'sonner';
+import { request } from '../../lib/api';
 
 export function AccountSettings() {
   const { user, logout, authenticatedFetch, refreshUser } = useAuth();
@@ -7,7 +10,7 @@ export function AccountSettings() {
   // Profile State
   const [username, setUsername] = useState(user?.username || '');
   const [newPassword, setNewPassword] = useState('');
-  const [profileStatus, setProfileStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   // Modal States
@@ -21,67 +24,38 @@ export function AccountSettings() {
 
   const handleSaveProfile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setProfileStatus(null);
-    
     if (!username.trim()) {
-      setProfileStatus({ type: 'error', message: 'Username cannot be left blank.' });
+      toast.error('Username can’t be blank.');
       return;
     }
-
-    try {
-      const res = await authenticatedFetch('/api/auth/me', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: username.trim(),
-          ...(newPassword ? { password: newPassword } : {})
-        }),
-      });
-
-      if (res.ok) {
-        setProfileStatus({ type: 'success', message: 'Saved.' });
-        setNewPassword('');
-        setIsEditing(false); // Drop back to static view on success
-        await refreshUser(); // Pull the new username into AuthContext (header, settings view)
-        setTimeout(() => setProfileStatus(null), 4000);
-      } else {
-        const data = await res.json();
-        // FastAPI validation errors (422) return detail as an array of {msg, ...}
-        const detail = Array.isArray(data.detail)
-          ? data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(' ')
-          : data.detail;
-        setProfileStatus({ type: 'error', message: detail || 'Couldn’t save your changes.' });
-      }
-    } catch {
-      setProfileStatus({ type: 'error', message: 'Couldn’t reach the hub. Your changes weren’t saved.' });
-    }
+    setSaving(true);
+    const ok = await request('save your account', () => authenticatedFetch('/api/auth/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.trim(),
+        ...(newPassword ? { password: newPassword } : {})
+      }),
+    }));
+    setSaving(false);
+    if (!ok) return;
+    toast.success(newPassword ? 'Username and password saved' : 'Account saved');
+    setNewPassword('');
+    setIsEditing(false); // Drop back to static view on success
+    await refreshUser(); // Pull the new username into AuthContext (header, settings view)
   };
 
   const handleCancelEdit = () => {
     setUsername(user?.username || ''); // Revert unsaved changes
     setNewPassword('');
     setIsEditing(false);
-    setProfileStatus(null);
   };
 
+  // Throwing keeps the confirm dialog open after a failure (the toast says why).
   const handleDeleteAccount = async () => {
-    try {
-      const res = await authenticatedFetch('/api/auth/me', {
-        method: 'DELETE'
-      });
-
-      if (res.ok) {
-        // Clear frontend context and redirect to login
-        logout();
-      } else {
-        const data = await res.json();
-        setProfileStatus({ type: 'error', message: data.detail || 'Couldn’t delete the account.' });
-        setShowDeleteConfirm(false);
-      }
-    } catch (err) {
-      setProfileStatus({ type: 'error', message: 'Couldn’t reach the hub. Try again.' });
-      setShowDeleteConfirm(false);
-    }
+    const ok = await request('delete your account', () => authenticatedFetch('/api/auth/me', { method: 'DELETE' }));
+    if (!ok) throw new Error('not deleted');
+    logout();
   };
 
   return (
@@ -133,15 +107,9 @@ export function AccountSettings() {
             </div>
           </div>
 
-          {profileStatus && (
-            <div className={`p-3.5 rounded-lg text-xs ${profileStatus.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-              {profileStatus.message}
-            </div>
-          )}
-
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99]">
-              Save
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-lg transition-colors active:scale-[0.99] disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'}
             </button>
             <button type="button" onClick={handleCancelEdit} className="px-4 py-2 bg-transparent hover:bg-neutral-800/50 text-neutral-400 text-xs font-medium rounded-lg transition-colors">
               Cancel
@@ -178,27 +146,16 @@ export function AccountSettings() {
         </button>
       </div>
 
-      {/* ---------------- MODALS ---------------- */}
-
-
-      {/* Delete Account Confirmation */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-neutral-950 border border-red-900/50 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-lg font-semibold text-red-500">Delete your account?</h3>
-            <p className="text-sm text-neutral-300 leading-relaxed">This <span className="font-bold text-red-400">can’t be undone</span>. Your settings, saved API key and Spotify link will be deleted.</p>
-            <div className="flex gap-3 justify-end pt-4">
-              <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-xl transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleDeleteAccount} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-xl transition-colors active:scale-[0.99]">
-                Delete account
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete your account?"
+        description={<>This <span className="font-semibold text-red-400">can’t be undone</span>. Your settings, saved API key and Spotify link will be deleted.</>}
+        confirmLabel="Delete account"
+        busyLabel="Deleting…"
+        destructive
+        onConfirm={handleDeleteAccount}
+      />
     </div>
   );
 }

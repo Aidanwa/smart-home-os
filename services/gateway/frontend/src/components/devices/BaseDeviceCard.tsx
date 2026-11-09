@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BatteryLow, Loader2, MoreHorizontal } from 'lucide-react';
+import { BatteryLow, Download, Loader2, MoreHorizontal } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import { isBatteryLow } from '../../lib/deviceUtils';
 import { usePending } from '../../lib/api';
@@ -34,6 +34,9 @@ export function BaseDeviceCard({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isOn = state.state === 'ON';
   const lowBattery = isBatteryLow(state);
+  // Z2M's OTA status: update.state is idle | available | scheduled | updating
+  const ota = state.update?.state;
+  const otaProgress = typeof state.update?.progress === 'number' ? Math.round(state.update.progress) : null;
   // A command is on its way; ignore further taps until the device answers (or fails),
   // otherwise a second tap would flip it back based on the not-yet-updated state.
   const busy = usePending(name);
@@ -68,6 +71,21 @@ export function BaseDeviceCard({
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[11px] font-medium">
                 <BatteryLow size={12} /> Low battery
               </span>
+            )}
+            {(ota === 'available' || ota === 'scheduled' || ota === 'updating') && (
+              // Opens the drawer, which has the Install button and the progress bar.
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(true)}
+                aria-label={ota === 'updating'
+                  ? `${name}: updating firmware${otaProgress !== null ? `, ${otaProgress}%` : ''}`
+                  : `${name}: firmware update ${ota === 'scheduled' ? 'scheduled' : 'available'}. Open settings`}
+                className="pointer-events-auto flex items-center gap-1 px-2 min-h-7 rounded-full bg-sky-500/10 text-sky-400 text-[11px] font-medium hover:bg-sky-500/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+              >
+                {ota === 'updating'
+                  ? <><Loader2 size={12} className="animate-spin" /> {otaProgress !== null ? `${otaProgress}%` : 'Updating'}</>
+                  : <><Download size={12} /> {ota === 'scheduled' ? 'Scheduled' : 'Update'}</>}
+              </button>
             )}
             <button
               type="button"

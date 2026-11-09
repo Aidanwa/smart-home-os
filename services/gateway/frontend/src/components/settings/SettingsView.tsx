@@ -4,7 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { HomeSettingsCard } from './HomeSettings';
 import { AgentSettings } from './AgentSettings';
 import { MemorySettings } from './MemorySettings';
-import { AccountSettings } from './AccountSettings'; // <-- Import new component
+import { AccountSettings } from './AccountSettings';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { request } from '../../lib/api';
+import { ConfirmDialog } from '../ui/dialog';
 
 const SpotifyLogo = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current text-[#1DB954]" xmlns="http://www.w3.org/2000/svg">
@@ -17,7 +21,9 @@ export function SettingsView() {
   const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'agent' | 'connections'>('account'); 
 
   // Integration states
-  const [vaultStatus, setVaultStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // What the Spotify row is busy with, if anything; shown on its button.
+  const [spotifyBusy, setSpotifyBusy] = useState<'linking' | 'opening' | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [connectedServices, setConnectedServices] = useState<{spotify: boolean, openai: boolean}>({ spotify: false, openai: false });
 
   // Fetch integration status when opening the connections tab
@@ -50,52 +56,45 @@ export function SettingsView() {
   }, []); 
 
   const handleSpotifyCallback = async (code: string, state: string | null) => {
-    setVaultStatus({ type: 'success', message: 'Connecting to Spotify...' });
-    try {
-      const res = await authenticatedFetch('/api/integrations/spotify/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, state }),
-      });
-
-      if (res.ok) {
-        setVaultStatus({ type: 'success', message: 'Spotify is linked. The agent and routines can now play music.' });
-        window.history.replaceState({}, document.title, window.location.pathname + '#settings');
-      } else {
-        const data = await res.json();
-        setVaultStatus({ type: 'error', message: data.detail || 'Couldn’t link Spotify. Try again.' });
-      }
-    } catch (err) {
-      setVaultStatus({ type: 'error', message: 'Couldn’t reach the hub while linking Spotify.' });
+    // Drop ?code= at once so a refresh doesn't replay a spent code
+    window.history.replaceState({}, document.title, window.location.pathname + '#settings');
+    setSpotifyBusy('linking');
+    const id = toast.loading('Linking Spotify…');
+    const ok = await request('link Spotify', () => authenticatedFetch('/api/integrations/spotify/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, state }),
+    }));
+    toast.dismiss(id);
+    setSpotifyBusy(null);
+    if (ok) {
+      toast.success('Spotify is linked', { description: 'The agent and routines can now play music.' });
+      fetchIntegrationStatus();
     }
   };
 
   const handleSpotifyLogin = async () => {
-    setVaultStatus({ type: 'success', message: 'Opening Spotify…' });
+    setSpotifyBusy('opening');
     try {
       const res = await authenticatedFetch('/api/integrations/spotify/auth-url');
-      const data = await res.json(); 
-      if (data && data.auth_url) {
-        window.location.href = data.auth_url;
-      } else {
-        setVaultStatus({ type: 'error', message: 'Couldn’t start the Spotify sign-in. Try again.' });
+      const data = res.ok ? await res.json() : null;
+      if (data?.auth_url) {
+        window.location.href = data.auth_url;  // leaves the page; busy stays on until then
+        return;
       }
-    } catch (err) {
-      setVaultStatus({ type: 'error', message: 'Couldn’t reach the hub. Try again.' });
+      toast.error('Couldn’t start the Spotify sign-in', { description: 'Try again in a moment.' });
+    } catch {
+      toast.error('Couldn’t start the Spotify sign-in', { description: 'Can’t reach the hub. Check your connection.' });
     }
+    setSpotifyBusy(null);
   };
 
-  const handleDisconnect = async (provider: string) => {
-    setVaultStatus({ type: 'success', message: `Disconnecting ${provider}...` });
-    try {
-      const res = await authenticatedFetch(`/api/integrations/${provider}`, { method: 'DELETE' });
-      if (res.ok || res.status === 200) {
-        setVaultStatus({ type: 'success', message: `${provider} successfully disconnected.` });
-        fetchIntegrationStatus();
-      }
-    } catch (err) {
-      setVaultStatus({ type: 'error', message: `Failed to disconnect ${provider}.` });
-    }
+  // Throwing keeps the confirm dialog open after a failure (the toast says why).
+  const disconnectSpotify = async () => {
+    const ok = await request('unlink Spotify', () => authenticatedFetch('/api/integrations/spotify', { method: 'DELETE' }));
+    if (!ok) throw new Error('not unlinked');
+    toast.success('Spotify unlinked');
+    fetchIntegrationStatus();
   };
 
   return (
@@ -130,14 +129,8 @@ export function SettingsView() {
           <h2 className="text-base font-medium text-neutral-200">Linked services</h2>
           <p className="text-xs text-neutral-500 leading-relaxed">Accounts the agent and routines can use.</p>
           
-          {vaultStatus && (
-            <div className={`p-3 rounded-lg text-xs ${vaultStatus.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-              {vaultStatus.message}
-            </div>
-          )}
-
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800/80 rounded-xl">
+            <div className="flex items-center justify-between gap-3 p-3.5 bg-neutral-950 border border-neutral-800/80 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-neutral-900 flex items-center justify-center rounded-lg border border-neutral-800">
                   <SpotifyLogo />
@@ -155,17 +148,22 @@ export function SettingsView() {
                 </div>
               </div>
               
-              {connectedServices.spotify ? (
+              {spotifyBusy ? (
+                <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 text-neutral-400 shrink-0">
+                  <Loader2 size={14} className="animate-spin" />
+                  {spotifyBusy === 'linking' ? 'Linking…' : 'Opening…'}
+                </span>
+              ) : connectedServices.spotify ? (
                 <button 
-                  onClick={() => handleDisconnect('spotify')}
-                  className="text-xs px-3 py-1.5 bg-red-950/40 border border-red-900/50 hover:bg-red-900/40 text-red-400 rounded-lg font-medium transition-colors"
+                  onClick={() => setConfirmDisconnect(true)}
+                  className="text-xs px-3 min-h-10 bg-red-950/40 border border-red-900/50 hover:bg-red-900/40 text-red-400 rounded-lg font-medium transition-colors shrink-0"
                 >
                   Disconnect
                 </button>
               ) : (
                 <button 
                   onClick={handleSpotifyLogin}
-                  className="text-xs px-3 py-1.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors"
+                  className="text-xs px-3 min-h-10 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 rounded-lg font-medium transition-colors shrink-0"
                 >
                   Link
                 </button>
@@ -175,7 +173,16 @@ export function SettingsView() {
         </div>
       )}
 
-
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Unlink Spotify?"
+        description="The agent won’t be able to play music, and routines with Spotify steps will fail until you link it again."
+        confirmLabel="Unlink"
+        busyLabel="Unlinking…"
+        destructive
+        onConfirm={disconnectSpotify}
+      />
     </div>
   );
 }

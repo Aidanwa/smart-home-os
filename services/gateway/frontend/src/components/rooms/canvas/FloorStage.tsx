@@ -1,10 +1,23 @@
 import { Stage, Layer } from 'react-konva';
-import { useState, useEffect, useRef } from 'react'; // ADDED HOOKS
+import { useState, useEffect, useRef } from 'react';
+import { Maximize2 } from 'lucide-react';
 
 import { GhostRoom } from './GhostRoom';
 import { ResizableRoom } from './ResizableRoom';
 import type { LogicalZone, DevicePlacement } from '../types';
 import { ftToPx } from '../constants';
+
+const FIT_PAD = 24;
+/** Camera that fits these rooms in the stage. `maxScale` 1 never zooms past 100% (the floor view). */
+function fitCamera(rooms: LogicalZone[], width: number, height: number, maxScale: number) {
+  const minX = Math.min(...rooms.map(z => ftToPx(z.pos_x)));
+  const minY = Math.min(...rooms.map(z => ftToPx(z.pos_y)));
+  const maxX = Math.max(...rooms.map(z => ftToPx(z.pos_x + z.width)));
+  const maxY = Math.max(...rooms.map(z => ftToPx(z.pos_y + z.height)));
+  const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+  const scale = Math.min(maxScale, (width - 2 * FIT_PAD) / bw, (height - 2 * FIT_PAD) / bh);
+  return { scale, x: (width - bw * scale) / 2 - minX * scale, y: (height - bh * scale) / 2 - minY * scale };
+}
 
 interface FloorStageProps {
   // ... (keep your existing props interface exactly as is)
@@ -40,18 +53,34 @@ export function FloorStage(props: FloorStageProps) {
     if (width <= 0 || height <= 0 || hasInitialized) return;
     const all = [...props.zones, ...props.baseFloorZones];
     if (all.length) {
-      const minX = Math.min(...all.map(z => ftToPx(z.pos_x)));
-      const minY = Math.min(...all.map(z => ftToPx(z.pos_y)));
-      const maxX = Math.max(...all.map(z => ftToPx(z.pos_x + z.width)));
-      const maxY = Math.max(...all.map(z => ftToPx(z.pos_y + z.height)));
-      const pad = 24;
-      const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
-      const scale = Math.min(1, (width - 2 * pad) / bw, (height - 2 * pad) / bh);
-      setStageScale(scale);
-      setStagePos({ x: (width - bw * scale) / 2 - minX * scale, y: (height - bh * scale) / 2 - minY * scale });
+      const cam = fitCamera(all, width, height, 1);
+      setStageScale(cam.scale);
+      setStagePos({ x: cam.x, y: cam.y });
     }
     setHasInitialized(true);
   }, [width, height, hasInitialized, props.zones, props.baseFloorZones]);
+
+  // View mode: tapping a room zooms to it, so its devices are big and their names readable
+  // on a phone. Tapping it again, empty space or "Whole floor" zooms back out.
+  const [zoomedState, setZoomedZoneId] = useState<string | null>(null);
+  // Edit mode keeps the camera where it is but forgets which room was zoomed.
+  const zoomedZoneId = props.editable ? null : zoomedState;
+  const flyTo = (cam: { scale: number; x: number; y: number }) => {
+    const stage = stageRef.current;
+    const done = () => { setStageScale(cam.scale); setStagePos({ x: cam.x, y: cam.y }); };
+    if (!stage) return done();
+    stage.to({ x: cam.x, y: cam.y, scaleX: cam.scale, scaleY: cam.scale, duration: 0.25, onFinish: done });
+  };
+  const zoomOut = () => {
+    setZoomedZoneId(null);
+    const all = [...props.zones, ...props.baseFloorZones];
+    if (all.length) flyTo(fitCamera(all, width, height, 1));
+  };
+  const zoomToRoom = (zone: LogicalZone) => {
+    if (zoomedZoneId === zone.id) return zoomOut();
+    setZoomedZoneId(zone.id);
+    flyTo(fitCamera([zone], width, height, 3));
+  };
 
   // --- 3. NEW: Desktop Wheel Zoom ---
   const handleWheel = (e: any) => {
@@ -127,6 +156,7 @@ export function FloorStage(props: FloorStageProps) {
   };
 
   return (
+    <>
     <Stage
       ref={stageRef}
       width={width}
@@ -154,11 +184,13 @@ export function FloorStage(props: FloorStageProps) {
       onClick={(e) => {
         if (e.target === e.target.getStage()) {
           props.onSelectZone(null);
+          if (zoomedZoneId) zoomOut();
         }
       }}
       onTap={(e) => { // Added onTap specifically for Mobile deselect
         if (e.target === e.target.getStage()) {
           props.onSelectZone(null);
+          if (zoomedZoneId) zoomOut();
         }
       }}
     >
@@ -183,7 +215,9 @@ export function FloorStage(props: FloorStageProps) {
               isSelected={props.editable && zone.id === props.selectedZoneId}
               editable={props.editable}
               onDeviceClick={props.onDeviceClick}
+              stageScale={stageScale}
               onSelect={() => {
+                if (!props.editable) return zoomToRoom(zone);
                 // Selecting only happens in edit mode. Tapping the selected room keeps it selected
                 // (tap empty space to deselect), so a tap before a drag doesn't drop the selection.
                 if (props.editable && props.selectedZoneId !== zone.id) props.onSelectZone(zone.id);
@@ -198,5 +232,12 @@ export function FloorStage(props: FloorStageProps) {
         })}
       </Layer>
     </Stage>
+    {zoomedZoneId && (
+      <button type="button" onClick={zoomOut}
+        className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 min-h-10 rounded-full bg-neutral-900/90 border border-neutral-700 text-xs font-medium text-neutral-200 hover:bg-neutral-800 shadow-lg">
+        <Maximize2 size={14} /> Whole floor
+      </button>
+    )}
+    </>
   );
 }

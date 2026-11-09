@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Check, X, Signal, Battery, Clock, Download, Trash2, AlertTriangle } from 'lucide-react';
+import { Pencil, Check, X, Signal, Battery, Clock, Download, Trash2 } from 'lucide-react';
 import { 
   Sheet, 
   SheetContent, 
@@ -10,6 +10,7 @@ import {
 import type { DeviceState } from '../../hooks/useDevices';
 import { request } from '../../lib/api';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/dialog';
 
 // This is to add tooltips to buttons
 const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
@@ -80,7 +81,6 @@ export function DeviceConfigDrawer({
   const confirmDelete = () => {
     // Use ieee_address if available, fallback to name
     deleteDevice(state.ieee_address || name, name);
-    setShowDeleteConfirm(false);
     onOpenChange(false);
   };
 
@@ -228,38 +228,15 @@ export function DeviceConfigDrawer({
           </button>
         </div>
 
-        {/* Delete Confirmation Panel */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-              <div className="flex items-center gap-3 text-red-400">
-                <AlertTriangle size={24} />
-                <h3 className="font-medium text-lg">Remove Device?</h3>
-              </div>
-              <p className="text-neutral-400 text-sm">
-                Remove <strong className="text-white">"{name}"</strong> from the Zigbee network? You’ll have to pair it again to use it.
-              </p>
-              <div className="flex justify-end gap-3 pt-4">
-                <Tooltip text="Cancel removal">
-                  <button 
-                    onClick={() => setShowDeleteConfirm(false)} 
-                    className="px-4 py-2 rounded-xl text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </Tooltip>
-                <Tooltip text="Permanently remove device">
-                  <button 
-                    onClick={confirmDelete} 
-                    className="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
-                  >
-                    Remove
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          title="Remove device?"
+          description={<>Remove <strong className="text-white">{name}</strong> from the Zigbee network? You’ll have to pair it again to use it.</>}
+          confirmLabel="Remove"
+          destructive
+          onConfirm={confirmDelete}
+        />
 
       </SheetContent>
     </Sheet>

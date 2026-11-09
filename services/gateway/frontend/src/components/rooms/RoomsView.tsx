@@ -152,7 +152,7 @@ export function RoomsView({
   const confirmDelete = async () => {
     if (!zoneToDelete) return;
 
-    await deleteRoom(zoneToDelete.id);
+    await deleteRoom(zoneToDelete.id, zoneToDelete.name);  // throws on failure: the dialog stays open
 
     if (selectedZoneId === zoneToDelete.id) {
       setSelectedZoneId(null);
@@ -220,7 +220,9 @@ export function RoomsView({
           </h1>
           <span className="text-neutral-500 text-xs leading-none">
             {isLoading
-              ? 'Loading...'
+              ? 'Loading…'
+              : isSaving ? 'Saving…'
+              : isDirty ? 'Unsaved changes'
               : `${zones.length} room${zones.length !== 1 ? 's' : ''}`}
           </span>
         </div>
@@ -331,9 +333,9 @@ export function RoomsView({
             />
           )}
 
-          {(isEditMode || placements.some(p => p.zone_id && zones.some(z => z.id === p.zone_id))) && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 pointer-events-none whitespace-nowrap">
-              {!isEditMode ? 'Tap a light or plug to switch it'
+          {(isEditMode || zones.length > 0) && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 pointer-events-none w-max max-w-[calc(100%-1.5rem)] text-center">
+              {!isEditMode ? (zones.length ? 'Tap a light or plug to switch it, a room to zoom in' : 'Tap a light or plug to switch it')
                 : selectedZone ? 'Drag to move · corners to resize · double-tap to rename' : 'Tap a room to edit it'}
             </div>
           )}
@@ -362,7 +364,7 @@ export function RoomsView({
         selectedZone={selectedZone ?? null} onPlace={handleDeviceClick} />
 
       {/* Modals */}
-      {showAddModal && <AddRoomModal floorLevel={currentFloor} onClose={() => setShowAddModal(false)} onCreate={createRoom} />}
+      {showAddModal && <AddRoomModal floorLabel={formatFloorName(currentFloor)} onClose={() => setShowAddModal(false)} onCreate={createRoom} />}
       {zoneToDelete && <DeleteRoomModal roomName={zoneToDelete.name} onClose={() => setZoneToDelete(null)} onConfirm={confirmDelete} />}
       {deviceToRemove && (<RemoveDeviceModal deviceName={deviceToRemove.name} roomName={deviceToRemove.room} onClose={() => setDeviceToRemove(null)} onConfirm={confirmDeviceRemoval} />)}
     </div>

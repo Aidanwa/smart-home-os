@@ -1,7 +1,9 @@
 // src/components/rooms/hooks/useRoomLayout.ts
 
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import type { LogicalZone, DevicePlacement } from '../types';
+import { request } from '../../../lib/api';
 
 interface HomeConfig {
   bottom_floor: number;
@@ -20,7 +22,6 @@ export function useRoomLayout() {
     try { localStorage.setItem('rooms.floor', String(floor)); } catch { /* private mode */ }
   }, []);
   const [placements, setPlacements] = useState<DevicePlacement[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   const [zones, setZones] = useState<LogicalZone[]>([]);
   const [baseFloorZones, setBaseFloorZones] = useState<LogicalZone[]>([]);
@@ -80,9 +81,8 @@ export function useRoomLayout() {
     fetch('/api/zones/placements')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setPlacements(Array.isArray(data) ? data : []))
-      .catch((err) => {
-        console.error("Failed to fetch placements:", err);
-        setError("Failed to load device placements.");
+      .catch(() => {
+        toast.error('Couldn’t load where devices are placed', { description: 'Can’t reach the hub. Reload to try again.' });
       });
   }, []);
 
@@ -146,47 +146,23 @@ export function useRoomLayout() {
     if (!zones.length && !placements.length) return;
 
     setIsSaving(true);
-
-    try {
-      const promises: Promise<any>[] = [];
-
-      // Queue Zone Layout Updates
-      if (zones.length > 0) {
-        promises.push(
-          ...zones.map((zone) =>
-            fetch(`/api/zones/${zone.id}/layout`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                width: zone.width,
-                height: zone.height,
-                pos_x: zone.pos_x,
-                pos_y: zone.pos_y,
-              }),
-            })
-          )
-        );
-      }
-
-      // Queue Device Placement Batch Update
-      if (placements.length > 0) {
-        promises.push(
-          fetch('/api/zones/placements/batch', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ placements }),
-          })
-        );
-      }
-
-      await Promise.all(promises);
-      setIsDirty(false);
-    } catch (err) {
-      console.error("Failed to save layout and placements:", err);
-      setError("Failed to save changes.");
-    } finally {
-      setIsSaving(false);
+    const requests: Promise<boolean>[] = zones.map((zone) =>
+      request(`save ${zone.name}`, () => fetch(`/api/zones/${zone.id}/layout`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width: zone.width, height: zone.height, pos_x: zone.pos_x, pos_y: zone.pos_y }),
+      })));
+    if (placements.length > 0) {
+      requests.push(request('save where devices are placed', () => fetch('/api/zones/placements/batch', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placements }),
+      })));
     }
+    const results = await Promise.all(requests);
+    // Anything that failed has said so in a toast; stay dirty so "Save now" and the autosave retry.
+    if (results.every(Boolean)) setIsDirty(false);
+    setIsSaving(false);
   }, [zones, placements]);
 
   // Autosave Timer
@@ -231,10 +207,9 @@ export function useRoomLayout() {
     [currentFloor]
   );
 
-  const deleteRoom = useCallback(async (zoneId: string) => {
-    await fetch(`/api/zones/${zoneId}`, {
-      method: 'DELETE',
-    });
+  const deleteRoom = useCallback(async (zoneId: string, name: string) => {
+    const ok = await request(`delete ${name}`, () => fetch(`/api/zones/${zoneId}`, { method: 'DELETE' }));
+    if (!ok) throw new Error('not deleted');
 
     // Remove zone from UI
     setZones((prev) => prev.filter((z) => z.id !== zoneId));
@@ -251,11 +226,11 @@ export function useRoomLayout() {
         prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
       );
 
-      await fetch(`/api/zones/${zoneId}`, {
+      await request('rename the room', () => fetch(`/api/zones/${zoneId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
-      });
+      }));
     },
     []
   );
@@ -271,7 +246,6 @@ export function useRoomLayout() {
     isLoading,
     isDirty,
     isSaving,
-    error,
 
     currentFloor,
     setCurrentFloor,
