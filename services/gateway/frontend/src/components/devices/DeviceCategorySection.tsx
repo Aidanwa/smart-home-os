@@ -11,13 +11,15 @@ export interface DeviceSection {
 }
 
 interface Props extends DeviceSection {
+  /** A button for the section header (e.g. "Lights off"). */
+  action?: React.ReactNode;
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
   deleteDevice: (name: string, label?: string) => void;
 }
 
-export function DeviceCategorySection({ id, title, icon, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
+export function DeviceCategorySection({ id, title, icon, action, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   // 1. Create a unique storage key for this specific category (e.g., "section-expanded-lights")
   const storageKey = `section-expanded-${id}`;
 
@@ -44,6 +46,7 @@ export function DeviceCategorySection({ id, title, icon, devices, sendCommand, t
           {icon}
           <h2 className="text-sm font-semibold uppercase tracking-wider">{title}</h2>
           <div className="h-px bg-neutral-800 flex-1 ml-4 transition-colors group-hover:bg-neutral-700" />
+          {action && <div onClick={(e) => e.stopPropagation()}>{action}</div>}
           <ChevronDown 
             size={18} 
             className={`transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} 

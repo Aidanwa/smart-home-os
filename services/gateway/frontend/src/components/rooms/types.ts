@@ -11,6 +11,8 @@ export interface LogicalZone {
 
 export interface RoomsViewProps {
   devices: Record<string, any>;
+  /** Switch a device by name (View mode taps). */
+  toggleDevice: (name: string, currentState?: string) => unknown;
 }
 
 export interface DevicePlacement {

@@ -30,6 +30,7 @@ import type {
 
 export function RoomsView({
   devices: _devices,
+  toggleDevice,
 }: RoomsViewProps) {
   const {
     currentFloor,
@@ -127,8 +128,12 @@ export function RoomsView({
   };
 
   const handleCanvasDeviceClick = (ieee_address: string) => {
-    if (!isEditMode) return;
     const device = _devices[ieee_address];
+    if (!isEditMode) {
+      // View mode is the remote control: tap a light or plug to switch it.
+      if (device && typeof device.state === 'string') toggleDevice(device.friendly_name ?? ieee_address, device.state);
+      return;
+    }
     const placement = placements.find(p => p.ieee_address === ieee_address);
     const zone = zones.find(z => z.id === placement?.zone_id);
     if (device && zone) {
@@ -326,9 +331,10 @@ export function RoomsView({
             />
           )}
 
-          {isEditMode && (
+          {(isEditMode || placements.some(p => p.zone_id && zones.some(z => z.id === p.zone_id))) && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 pointer-events-none whitespace-nowrap">
-              {selectedZone ? 'Drag to move · corners to resize · double-tap to rename' : 'Tap a room to edit it'}
+              {!isEditMode ? 'Tap a light or plug to switch it'
+                : selectedZone ? 'Drag to move · corners to resize · double-tap to rename' : 'Tap a room to edit it'}
             </div>
           )}
 

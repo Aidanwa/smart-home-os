@@ -10,7 +10,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] **Settings has no padding and can't scroll.** `App.tsx` renders `<SettingsView />` straight into the `overflow-hidden` `<main>` without the `overflow-y-auto p-6` wrapper other tabs have. Its five sub-tabs also overflow horizontally on phones. *(Fixed 2026-11-08: padded scrolling wrapper; short sub-tab labels that scroll sideways.)*
 - [x] **iOS zooms on every text field.** Inputs are `text-sm` (14px); Safari zooms on focus below 16px. Affects `routines/styles.ts` `input`, the chat box, settings, modals. Use `text-base` on mobile. *(Fixed 2026-11-08: one rule in `index.css` raises `text-sm`/`text-xs` fields to 16px on touch screens.)*
 - [x] **Light sliders.** 1px track under an invisible range input; commits only on `mouseup`/`touchend`, so keyboard changes never send (`ColorLightCard.tsx`). Use the shadcn Slider with `onValueCommit`. *(Fixed 2026-11-08: Radix slider, 32px touch row, sends on release or key press, value shown beside it.)*
-- [x] **Controls that do nothing.** "Power On Behavior" chips (`ColorLightCard.tsx`), firmware "Install" (`DeviceConfigDrawer.tsx`), the "Coming Soon" providers. The Admin tab is a placeholder (planned in todo.md); hide it until it has content. *(Fixed 2026-11-08: chips and Coming Soon options removed; Install became "Install from Zigbee2MQTT"; Admin hidden.)*
+- [x] **Controls that do nothing.** "Power On Behavior" chips (`ColorLightCard.tsx`), firmware "Install" (`DeviceConfigDrawer.tsx`), the "Coming Soon" providers. The Admin tab is a placeholder (planned in todo.md); hide it until it has content. *(Fixed 2026-11-08: chips and Coming Soon options removed; Install became "Install from Zigbee2MQTT"; Admin hidden. 2026-11-09: Install now works from the device drawer, with a confirm, a progress bar and a toast when it finishes.)*
 - [x] **Add Room width/height clamp on every keystroke** (`AddRoomModal.tsx`). Use `NumberField`. *(Done 2026-11-08.)*
 
 ## Home / devices
@@ -19,10 +19,10 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] Classification disagrees: `getDeviceCategory` checks lights first, `DeviceRenderer` checks sensors first, so a device with brightness and temperature sits under Lights but renders as a sensor card. *(Fixed 2026-11-08: one `getDeviceKind` in `lib/deviceUtils.ts` drives both.)*
 - [x] Devices without `state` (remotes, motion/contact sensors) fall through to `BasicSwitchCard`, which shows a power button that sends `ON`, and their real readings (occupancy, contact, action) aren't shown. *(Fixed 2026-11-08: `SensorCard` (open/closed, motion, leak, temperature, tamper) and `RemoteCard` (last press); unknown devices get no power button.)*
 - [ ] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card. *(Low-battery badge done 2026-11-08; offline still open, Z2M doesn't publish `last_seen` here.)*
-- [ ] Home groups by device type although rooms exist. Grouping by room, with per-room and whole-house "All off", matches how it's used.
+- [x] Home groups by device type although rooms exist. Grouping by room, with per-room and whole-house "All off", matches how it's used. *(Done 2026-11-09: a "By type / By room / A–Z" dropdown replaces the toggle; "Lights off" per section and "All lights off" in the header, lights only (plugs may run a fridge or the router), with Undo.)*
 - [x] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown. *(Done 2026-11-08: `PairingButton` in the Home header, countdown from Z2M's `permit_join_end`, a toast per joined device.)*
 - [x] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted. *(Fixed 2026-11-08: hidden on Groups; sort and view remembered; A-Z now sorts by name, not IEEE address.)*
-- [ ] No loading or empty state (blank before the first fetch, nothing for zero devices).
+- [x] No loading or empty state (blank before the first fetch, nothing for zero devices). *(Done 2026-11-09: placeholder cards while loading, a retry if the hub doesn't answer, and a "No devices yet" card.)*
 - [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(Now 2200–6500 K.)*
 
 ## Groups
@@ -43,7 +43,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 ## Rooms
 
-- [ ] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab.
+- [x] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab. *(Done 2026-11-09: in View mode a tap switches lights and plugs; icons glow when on and show a dashed ring while a command is in flight. Edit mode keeps "Remove from room".)*
 - [ ] Placement needs "select a room, then click a device in the sidebar", otherwise a "Placement Error" modal. Drag from the sidebar or a "which room?" picker is easier.
 - [x] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle. *(Done 2026-11-08: View/Edit toggle; only the selected room drags; double-tap renames.)*
 - [x] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Done 2026-11-08: a "Devices" bottom sheet in Edit mode; the "pick a room first" error modal became a hint in the list.)* *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
@@ -59,8 +59,9 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] System health indicator is `hidden md:flex` and hover-only, so phones never see it. Messages are technical.
 - [x] Log out asks for confirmation in a warning-styled modal; unnecessary friction. *(Removed 2026-11-08.)*
 
-## Routines (in good shape)
+## Routines
 
+- [ ] **Priority: organise the list.** All routines show in one unsorted, ungrouped list, which gets hard to scan past a handful. Ideas: group by room or by trigger type (time, sun, device), or user-made folders/tags; sort by name, next run or last run; a search box; collapse disabled routines into their own section; show the next run time on each row. (Logged 2026-11-09, not started.)
 - [x] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`). *(Fixed 2026-11-08: everything is mired underneath and shown as warmth %, scaled to each bulb's range, on cards, actions, fades, triggers and conditions.)*
 - [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
 - [ ] Icon buttons and chips are ~28px, below a 44px touch target.

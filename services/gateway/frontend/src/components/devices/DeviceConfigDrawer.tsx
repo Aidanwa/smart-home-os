@@ -8,6 +8,8 @@ import {
   SheetDescription 
 } from '../ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
+import { request } from '../../lib/api';
+import { toast } from 'sonner';
 
 // This is to add tooltips to buttons
 const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
@@ -41,6 +43,18 @@ export function DeviceConfigDrawer({
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(name);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Firmware install: a second tap confirms; `starting` covers the request itself.
+  const [confirmFirmware, setConfirmFirmware] = useState(false);
+  const [startingFirmware, setStartingFirmware] = useState(false);
+
+  const installFirmware = async () => {
+    setStartingFirmware(true);
+    const ok = await request(`start the firmware update for ${name}`, () =>
+      fetch(`/api/devices/${encodeURIComponent(state.ieee_address || name)}/firmware/update`, { method: 'POST' }));
+    setStartingFirmware(false);
+    setConfirmFirmware(false);
+    if (ok) toast.success(`Updating ${name}`, { description: 'This usually takes 10–30 minutes. Progress shows here.' });
+  };
 
   // Reset draft if the device name actually changes via WebSocket
   useEffect(() => {
@@ -52,6 +66,7 @@ export function DeviceConfigDrawer({
     if (!isOpen) {
       setShowDeleteConfirm(false);
       setIsEditing(false);
+      setConfirmFirmware(false);
     }
   }, [isOpen]);
 
@@ -158,7 +173,7 @@ export function DeviceConfigDrawer({
             )}
             {/* Z2M's OTA status: update.state is idle | available | scheduled | updating */}
             {(state.update?.state === 'available' || state.update?.state === 'updating' || state.update?.state === 'scheduled') && (
-              <div className="flex items-center justify-between gap-3 bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 col-span-2">
                 <div className="flex items-center gap-2 text-yellow-500 min-w-0">
                   <Download size={16} className="shrink-0" />
                   <span className="font-medium text-sm">
@@ -168,7 +183,26 @@ export function DeviceConfigDrawer({
                   </span>
                 </div>
                 {state.update.state === 'available' && (
-                  <span className="text-xs text-yellow-400/80 text-right">Install from Zigbee2MQTT</span>
+                  <button
+                    onClick={() => (confirmFirmware ? installFirmware() : setConfirmFirmware(true))}
+                    disabled={startingFirmware}
+                    className="shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium bg-yellow-500 text-neutral-950 hover:bg-yellow-400 disabled:opacity-60 transition-colors"
+                  >
+                    {startingFirmware ? 'Starting…' : confirmFirmware ? 'Install now' : 'Install'}
+                  </button>
+                )}
+                {state.update.state === 'available' && confirmFirmware && !startingFirmware && (
+                  <p className="basis-full text-xs text-yellow-200/80">
+                    Takes 10–30 minutes. The device may stop responding and restart while it updates.
+                    Tap <strong>Install now</strong> to start, or{' '}
+                    <button onClick={() => setConfirmFirmware(false)} className="underline">cancel</button>.
+                  </p>
+                )}
+                {state.update.state === 'updating' && typeof state.update.progress === 'number' && (
+                  <div className="basis-full h-1.5 rounded-full bg-yellow-500/20 overflow-hidden" role="progressbar"
+                    aria-valuenow={Math.round(state.update.progress)} aria-valuemin={0} aria-valuemax={100} aria-label="Firmware update progress">
+                    <div className="h-full bg-yellow-500 transition-[width]" style={{ width: `${state.update.progress}%` }} />
+                  </div>
                 )}
               </div>
             )}

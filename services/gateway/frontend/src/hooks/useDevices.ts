@@ -20,16 +20,23 @@ export function useDevices() {
   const { authenticatedFetch } = useAuth();
   const [devices, setDevices] = useState<Record<string, DeviceState>>({});
   const [realtime, setRealtime] = useState<RealtimeStatus>('connecting');
+  // The first device list: Home shows placeholders while 'loading' and a retry on 'error'.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   // Snapshot of the digital twin. Replaces local state so devices removed while we were
   // disconnected disappear too.
   const loadDevices = useCallback(() => {
     authenticatedFetch('/api/devices')
-      .then(res => res.json())
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => {
         if (data.devices) setDevices(data.devices);
+        setLoadState('ready');
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        // Keep showing what we had after a failed resync; only the first load shows an error.
+        setLoadState(prev => (prev === 'ready' ? 'ready' : 'error'));
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 1. Initial REST fetch, in parallel with the socket for a fast first paint
@@ -50,7 +57,7 @@ export function useDevices() {
       onMessage: (raw) => handleMessage(JSON.parse(raw)),
     });
 
-    function handleMessage(data: { type: string; device: string; state?: DeviceState; groups?: unknown }) {
+    function handleMessage(data: { type: string; device: string; state?: DeviceState; groups?: unknown; friendly_name?: string; ok?: boolean; error?: string | null }) {
       if (data.type === 'device_update') {
         setDevices(prev => ({
           ...prev,
@@ -64,6 +71,11 @@ export function useDevices() {
       }
       if (data.type === 'routine_run') {
         window.dispatchEvent(new CustomEvent('onRoutineRun', { detail: data }));
+      }
+      if (data.type === 'ota_result') {
+        const label = data.friendly_name ?? data.device;
+        if (data.ok) toast.success(`${label} is up to date`, { description: 'The firmware update finished.' });
+        else toast.error(`Firmware update for ${label} failed`, { description: data.error ?? undefined, duration: 15000 });
       }
       if (data.type === 'device_delete') {
         setDevices(prev => {
@@ -125,6 +137,8 @@ export function useDevices() {
 
   return {
     devices,
+    loadState,
+    reloadDevices: () => { setLoadState('loading'); loadDevices(); },
     realtime,
     sendCommand,
     toggleDevice,

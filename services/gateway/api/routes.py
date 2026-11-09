@@ -231,7 +231,49 @@ async def rename_device(device_id: str, request: RenameRequest, bus=Depends(get_
         raise HTTPException(status_code=504, detail="Bridge timeout during device renaming.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+# Z2M answers an OTA request only when the update has finished (often 10-30 minutes), so the
+# route starts it and returns; progress arrives as the device's `update` state, and the outcome
+# is pushed to the browsers as {type: "ota_result"}.
+OTA_TIMEOUT_S = 2 * 60 * 60
+_ota_tasks: dict[str, asyncio.Task] = {}
+
+
+@router.post("/devices/{device_id}/firmware/update", status_code=status.HTTP_202_ACCEPTED)
+async def update_firmware(device_id: str, bus=Depends(get_mqtt_bus)):
+    target_ieee = bus._device_registry.get(device_id, device_id)
+    raw = await bus.redis.hget("gateway:digital_twin", target_ieee)
+    if not raw:
+        raise HTTPException(status_code=404, detail="Device not found.")
+    state = json.loads(raw)
+    friendly_name = state.get("friendly_name", device_id)
+    update = state.get("update") or {}
+    if update.get("state") in ("updating", "scheduled") or (
+        target_ieee in _ota_tasks and not _ota_tasks[target_ieee].done()
+    ):
+        raise HTTPException(status_code=409, detail="An update is already in progress for this device.")
+    if update.get("state") != "available":
+        raise HTTPException(status_code=400, detail="No firmware update is available for this device.")
+
+    async def run():
+        try:
+            res = await bus.rpc(
+                f"{bus.z2m_base}/bridge/request/device/ota_update/update", {"id": friendly_name}, timeout=OTA_TIMEOUT_S
+            )
+            ok = res.get("status") == "ok"
+            error = None if ok else res.get("error", "Update failed")
+        except TimeoutError:
+            ok, error = False, "No answer from Zigbee2MQTT after 2 hours"
+        except Exception as e:  # keep the task from dying silently
+            ok, error = False, str(e)
+        logger.info("OTA update for %s finished: ok=%s error=%s", friendly_name, ok, error)
+        bus.broadcast({"type": "ota_result", "device": target_ieee, "friendly_name": friendly_name, "ok": ok, "error": error})
+        _ota_tasks.pop(target_ieee, None)
+
+    _ota_tasks[target_ieee] = asyncio.create_task(run())
+    return {"status": "started", "message": f"Firmware update started for '{friendly_name}'."}
+
 # ====================================================================================
 # Group Routes
 # ====================================================================================

@@ -5,6 +5,7 @@ import type Konva from 'konva';
 
 import { GRID_PX, ftToPx, pxToFt } from '../constants';
 import type { LogicalZone, DevicePlacement } from '../types';
+import { usePending } from '../../../lib/api';
 
 // Lucide paths translated for native Konva rendering
 const DEVICE_PATHS = {
@@ -21,6 +22,31 @@ const getDeviceVisuals = (device: any) => {
   if (name.includes('temp') || name.includes('sensor')) return { path: DEVICE_PATHS.temp, color: "#60a5fa" };
   return { path: DEVICE_PATHS.radio, color: "#a1a1aa" };
 };
+
+/** A device's dot on the plan. Switchable devices glow when on and pulse while a command is in flight. */
+function DeviceMarker({ device, color, path, name }: { device: { state?: unknown }; color: string; path: string; name: string }) {
+  const busy = usePending(name);
+  const switchable = typeof device.state === 'string';
+  const isOn = device.state === 'ON';
+  return (
+    <>
+      {isOn && <Circle radius={20} fill={color} opacity={0.22} listening={false} />}
+      <Circle
+        radius={14}
+        fill={isOn ? '#3b2f12' : '#1e293b'}
+        stroke={busy ? '#ffffff' : isOn ? color : '#475569'}
+        strokeWidth={2}
+        dash={busy ? [4, 3] : undefined}
+        // A bigger target than the dot, for fingers on a zoomed-out plan.
+        hitStrokeWidth={22}
+        shadowColor={isOn ? color : 'black'}
+        shadowBlur={isOn ? 12 : 5}
+        shadowOpacity={isOn ? 0.8 : 0.5}
+      />
+      <Path data={path} fill="transparent" stroke={switchable && !isOn ? '#64748b' : color} strokeWidth={2.5} strokeLineCap="round" strokeLineJoin="round" scale={{x: 0.6, y: 0.6}} x={-7} y={-7} listening={false} />
+    </>
+  );
+}
 
 export function ResizableRoom({ 
   zone, 
@@ -170,8 +196,7 @@ export function ResizableRoom({
                 updateDevicePlacement(placement.ieee_address, zone.id, percentX, percentY);
               }}
             >
-              <Circle radius={14} fill="#1e293b" stroke="#475569" strokeWidth={2} shadowColor="black" shadowBlur={5} shadowOpacity={0.5} />
-              <Path data={visuals.path} fill="transparent" stroke={visuals.color} strokeWidth={2.5} strokeLineCap="round" strokeLineJoin="round" scale={{x: 0.6, y: 0.6}} x={-7} y={-7} listening={false} />
+              <DeviceMarker device={device} color={visuals.color} path={visuals.path} name={device.friendly_name ?? placement.ieee_address} />
               {/* TRUNCATED TEXT */}
               <Text 
                 text={device.friendly_name} 

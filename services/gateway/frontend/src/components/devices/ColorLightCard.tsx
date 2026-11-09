@@ -15,7 +15,7 @@ interface Props {
 }
 
 /** A slider with a big touch target that sends only when you let go (or on each key press). */
-function LightSlider({ label, icon, value, min, max, step, track, onChange, onCommit, valueText }: {
+function LightSlider({ label, icon, value, min, max, step, track, onChange, onCommit, valueText, shown }: {
   label: string;
   icon: React.ReactNode;
   value: number;
@@ -26,6 +26,8 @@ function LightSlider({ label, icon, value, min, max, step, track, onChange, onCo
   onChange: (v: number) => void;
   onCommit: (v: number) => void;
   valueText: string;
+  /** What the label beside the slider shows; defaults to valueText. */
+  shown?: string;
 }) {
   return (
     <div data-control className="flex items-center gap-3 w-full">
@@ -46,7 +48,7 @@ function LightSlider({ label, icon, value, min, max, step, track, onChange, onCo
           className="block size-5 rounded-full bg-white border-2 border-neutral-800 shadow-md outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
         />
       </SliderPrimitive.Root>
-      <span className="text-xs tabular-nums text-neutral-400 w-16 text-right shrink-0">{valueText}</span>
+      <span className="text-xs tabular-nums text-neutral-400 w-10 text-right shrink-0">{shown ?? valueText}</span>
     </div>
   );
 }
@@ -106,6 +108,7 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
               onChange={setWarmth}
               onCommit={(v) => sendCommand(name, { color_temp: warmthToMired(v, range) })}
               valueText={`${warmth}% warm`}
+              shown={`${warmth}%`}
             />
           )}
         </div>
