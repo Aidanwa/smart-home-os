@@ -2,7 +2,7 @@
 // request goes to the hub as usual, so a deploy shows up on the next launch.
 // Its only job is a friendly page when the hub can't be reached at all
 // (Tailscale off, Pi restarting) instead of the browser's error screen.
-const CACHE = 'offline-v1';
+const CACHE = 'offline-v2';
 const OFFLINE = ['/offline.html', '/icon.svg'];
 
 self.addEventListener('install', event => {
@@ -12,7 +12,8 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     for (const key of await caches.keys()) if (key !== CACHE) await caches.delete(key);
-    if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+    // Off: a preload request uses the normal HTTP cache, which is how a stale page got served.
+    if (self.registration.navigationPreload) await self.registration.navigationPreload.disable();
     await self.clients.claim();
   })());
 });
@@ -29,7 +30,9 @@ self.addEventListener('fetch', event => {
   if (req.mode !== 'navigate') return;
   event.respondWith((async () => {
     try {
-      return (await event.preloadResponse) || (await fetch(req));
+      // Always revalidate the page with the hub. A stale index.html points at the previous
+      // build's /assets files, which are gone after a deploy (a blank white screen on iOS).
+      return await fetch(new Request(req, { cache: 'no-cache' }));
     } catch {
       return (await caches.match('/offline.html')) || Response.error();
     }

@@ -217,10 +217,15 @@ def create_app() -> FastAPI:
             # path would replace dist_root in a join. Resolve and require containment.
             file_path = (dist_root / catchall).resolve()
 
+            # Everything outside /assets (index.html, sw.js, the manifest, icons) keeps the
+            # same URL across deploys, so the browser must revalidate it every time (cheap:
+            # ETag). Without this, iOS reused a stale index.html pointing at the previous
+            # build's hashed /assets files, which 404 after a deploy: a blank white app.
+            no_cache = {"Cache-Control": "no-cache"}
             if file_path.is_relative_to(dist_root) and file_path.is_file():
-                return FileResponse(file_path)
+                return FileResponse(file_path, headers=no_cache)
 
-            return FileResponse(dist_root / "index.html")
+            return FileResponse(dist_root / "index.html", headers=no_cache)
     else:
         logger.warning(f"Frontend dist folder not found at {FRONTEND_DIST}. Running in API-only mode.")
         
