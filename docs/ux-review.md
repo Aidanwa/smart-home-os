@@ -24,6 +24,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted. *(Fixed 2026-11-08: hidden on Groups; sort and view remembered; A-Z now sorts by name, not IEEE address.)*
 - [x] No loading or empty state (blank before the first fetch, nothing for zero devices). *(Done 2026-11-09: placeholder cards while loading, a retry if the hub doesn't answer, and a "No devices yet" card.)*
 - [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(Now 2200–6500 K.)*
+- [ ] Waiting firmware updates are only visible inside each device's settings drawer. Add a small badge on the device card when `update.state` is `available` (and a progress hint while `updating`), so updates can be spotted without opening every device. (Logged 2026-11-09.)
 
 ## Groups
 
@@ -61,10 +62,10 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 ## Routines
 
-- [ ] **Priority: organise the list.** All routines show in one unsorted, ungrouped list, which gets hard to scan past a handful. Ideas: group by room or by trigger type (time, sun, device), or user-made folders/tags; sort by name, next run or last run; a search box; collapse disabled routines into their own section; show the next run time on each row. (Logged 2026-11-09, not started.)
+- [x] **Priority: organise the list.** All routines show in one unsorted, ungrouped list, which gets hard to scan past a handful. Ideas: group by room or by trigger type (time, sun, device), or user-made folders/tags; sort by name, next run or last run; a search box; collapse disabled routines into their own section; show the next run time on each row. (Logged 2026-11-09.) *(Done 2026-11-09: compact rows, search, group by when it runs / room / none, sort by next run / name / last run, "Needs attention" and a collapsed "Off" section, a "Next up" line; choices remembered per device. User-made tags/folders deferred: they need a schema change.)*
 - [x] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`). *(Fixed 2026-11-08: everything is mired underneath and shown as warmth %, scaled to each bulb's range, on cards, actions, fades, triggers and conditions.)*
 - [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
-- [ ] Icon buttons and chips are ~28px, below a 44px touch target.
+- [x] Icon buttons and chips are ~28px, below a 44px touch target. *(List rows fixed 2026-11-09: 44px switch, Run and ⋯ targets. The editor's own buttons are still small.)*
 
 ## Cross-cutting
 
