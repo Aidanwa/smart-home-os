@@ -139,6 +139,8 @@ export interface Routine extends RoutineSpec {
   last_run_status: RunStatus | null;
   next_fire_at: string | null;
   running: boolean;
+  /** This user marked the latest problem run as reviewed; the next run clears it. */
+  reviewed?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -249,6 +249,28 @@ class Scheduler:
         times = [t for (rid, _), t in self._next.items() if rid == routine_id]
         return min(times) if times else None
 
+    def upcoming_all(self, until: datetime, limit: int = 300) -> list[dict]:
+        """Every time/sun fire between now and `until` for enabled routines, soonest first.
+        Conditions are checked only when a trigger fires, so some of these may end up skipped."""
+        now = _utcnow()
+        out = []
+        for r in self._routines.values():
+            if not r.spec.enabled:
+                continue
+            for trig in r.spec.triggers:
+                if not is_scheduled(trig):
+                    continue
+                t = now
+                for _ in range(100):
+                    t = next_fire(trig, t, self.tz, self.loc)
+                    if t is None or t > until:
+                        break
+                    out.append({"routine_id": str(r.id), "name": r.spec.name, "at": t,
+                                "trigger": trig.model_dump(mode="json"),
+                                "has_conditions": bool(r.spec.conditions)})
+        out.sort(key=lambda x: x["at"])
+        return out[:limit]
+
     def is_running(self, routine_id: uuid.UUID) -> bool:
         task = self._runs.get(routine_id)
         return bool(task and not task.done())

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { RoutineRun, RunStep } from './types';
 import { STATUS_STYLE, formatInTz } from './types';
@@ -31,39 +31,55 @@ export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
 
   return (
     <ul className="space-y-2">
-      {runs.map(run => {
-        const expanded = open === run.id;
-        const duration = run.finished_at
-          ? Math.max(0, Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000))
-          : null;
-        return (
-          <li key={run.id} className="bg-neutral-900 border border-neutral-800 rounded-xl">
-            <button type="button" className="w-full flex items-center gap-2 p-3 text-left" onClick={() => setOpen(expanded ? null : run.id)}>
-              {expanded ? <ChevronDown size={16} className="text-neutral-500 shrink-0" /> : <ChevronRight size={16} className="text-neutral-500 shrink-0" />}
-              <span className={`px-2 py-0.5 rounded-md border text-[11px] font-medium shrink-0 ${STATUS_STYLE[run.status]}`}>{run.status}</span>
-              <span className="text-sm text-neutral-300 truncate">
-                {TRIGGER_LABEL[run.trigger_type] ?? run.trigger_type} · {formatInTz(run.scheduled_for ?? run.started_at, timezone)}
-              </span>
-              {duration !== null && <span className="ml-auto text-xs text-neutral-500 shrink-0">{duration}s</span>}
-            </button>
-            {expanded && (
-              <div className="px-3 pb-3 space-y-2 text-xs">
-                {run.late_seconds ? <p className="text-amber-400">Started {run.late_seconds}s late.</p> : null}
-                {typeof run.trigger_detail?.reason === 'string' && <p className="text-neutral-400">{run.trigger_detail.reason}</p>}
-                {typeof run.trigger_detail?.attribute === 'string' && (
-                  <p className="text-neutral-400">
-                    Triggered by {String(run.trigger_detail.device)} {String(run.trigger_detail.attribute)} = {String(run.trigger_detail.value)}
-                    {typeof run.trigger_detail.held_s === 'number' ? ` (held ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
-                  </p>
-                )}
-                {run.error && <p className="text-red-400 whitespace-pre-line">{run.error}</p>}
-                {run.steps.map((s, i) => <StepRow key={`${s.id}-${i}`} step={s} />)}
-              </div>
-            )}
-          </li>
-        );
-      })}
+      {runs.map(run => (
+        <RunItem key={run.id} run={run} timezone={timezone} expanded={open === run.id} onToggle={() => setOpen(open === run.id ? null : run.id)} />
+      ))}
     </ul>
+  );
+}
+
+/** One run: status, trigger and time; expands to show why and each step.
+ *  `title` (the routine's name) and `timeOnly` are for the Activity page. */
+export function RunItem({ run, timezone, expanded, onToggle, title, timeOnly, footer }: {
+  run: RoutineRun; timezone: string; expanded: boolean; onToggle: () => void;
+  title?: string; timeOnly?: boolean; footer?: ReactNode;
+}) {
+  const duration = run.finished_at
+    ? Math.max(0, Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000))
+    : null;
+  const when = formatInTz(run.scheduled_for ?? run.started_at, timezone, !timeOnly);
+  const trigger = TRIGGER_LABEL[run.trigger_type] ?? run.trigger_type;
+  return (
+    <li className={`bg-neutral-900 border border-neutral-800 rounded-xl ${run.status === 'skipped' ? 'opacity-70' : ''}`}>
+      <button type="button" aria-expanded={expanded} className="w-full flex items-center gap-2 p-3 text-left min-h-11" onClick={onToggle}>
+        {expanded ? <ChevronDown size={16} className="text-neutral-500 shrink-0" /> : <ChevronRight size={16} className="text-neutral-500 shrink-0" />}
+        <span className={`px-2 py-0.5 rounded-md border text-[11px] font-medium shrink-0 ${STATUS_STYLE[run.status]}`}>{run.status}</span>
+        {title ? (
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-neutral-200 truncate">{title}</span>
+            <span className="block text-xs text-neutral-500 truncate">{trigger} · {when}</span>
+          </span>
+        ) : (
+          <span className="text-sm text-neutral-300 truncate">{trigger} · {when}</span>
+        )}
+        {duration !== null && <span className="ml-auto text-xs text-neutral-500 shrink-0">{duration}s</span>}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2 text-xs">
+          {run.late_seconds ? <p className="text-amber-400">Started {run.late_seconds}s late.</p> : null}
+          {typeof run.trigger_detail?.reason === 'string' && <p className="text-neutral-400">{run.trigger_detail.reason}</p>}
+          {typeof run.trigger_detail?.attribute === 'string' && (
+            <p className="text-neutral-400">
+              Triggered by {String(run.trigger_detail.device)} {String(run.trigger_detail.attribute)} = {String(run.trigger_detail.value)}
+              {typeof run.trigger_detail.held_s === 'number' ? ` (held ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
+            </p>
+          )}
+          {run.error && <p className="text-red-400 whitespace-pre-line">{run.error}</p>}
+          {run.steps.map((s, i) => <StepRow key={`${s.id}-${i}`} step={s} />)}
+          {footer}
+        </div>
+      )}
+    </li>
   );
 }
 

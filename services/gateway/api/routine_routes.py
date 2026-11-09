@@ -39,7 +39,7 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-def _out(r: Routine, sched: Scheduler, owner_name: str | None = None) -> dict:
+def _out(r: Routine, sched: Scheduler, owner_name: str | None = None, reviewed: dict | None = None) -> dict:
     return {
         "id": str(r.id), "name": r.name, "description": r.description, "enabled": r.enabled,
         "mode": r.mode, "grace_minutes": r.grace_minutes,
@@ -48,6 +48,8 @@ def _out(r: Routine, sched: Scheduler, owner_name: str | None = None) -> dict:
         "last_run_at": _iso(r.last_run_at), "last_run_status": r.last_run_status,
         "next_fire_at": _iso(sched.next_fire_at(r.id)), "running": sched.is_running(r.id),
         "created_at": _iso(r.created_at), "updated_at": _iso(r.updated_at),
+        # This user marked the latest problem run as reviewed (a newer run clears it).
+        "reviewed": bool(reviewed and r.last_run_at and reviewed.get(str(r.id)) == _iso(r.last_run_at)),
     }
 
 
@@ -84,10 +86,12 @@ async def list_routines(db: AsyncSession = Depends(get_db), user=Depends(get_cur
     rows = (await db.execute(
         select(Routine, User.username).join(User, User.id == Routine.owner_user_id).order_by(Routine.name)
     )).all()
+    prefs = await db.get(UserPreference, user.id)
+    reviewed = (prefs.ui_settings or {}).get("routines_reviewed", {}) if prefs else {}
     return {
         "timezone": sched.tz.key,
         "scheduler_active": sched.active,
-        "routines": [_out(r, sched, name) for r, name in rows],
+        "routines": [_out(r, sched, name, reviewed) for r, name in rows],
     }
 
 
@@ -244,6 +248,29 @@ async def alerts_seen(db: AsyncSession = Depends(get_db), user: User = Depends(g
     return {"count": 0}
 
 
+@router.get("/activity")
+async def activity(before: datetime | None = None, limit: int = 50, problems: bool = False,
+                   db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    """Every routine's runs, newest first, a page at a time: pass the last row's started_at as
+    `before` for the next page. `problems` keeps only failed/partial/missed/interrupted."""
+    q = (select(RoutineRun, Routine.name).join(Routine, Routine.id == RoutineRun.routine_id)
+         .order_by(RoutineRun.started_at.desc()).limit(max(1, min(limit, 100))))
+    if before:
+        q = q.where(RoutineRun.started_at < before)
+    if problems:
+        q = q.where(RoutineRun.status.in_(ALERT_STATUSES))
+    rows = (await db.execute(q)).all()
+    return [{**_run_out(run), "routine_id": str(run.routine_id), "routine_name": name} for run, name in rows]
+
+
+@router.get("/upcoming")
+async def upcoming_runs(days: int = 7, user=Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
+    """Scheduled (time/sun) fires of enabled routines over the next `days` days, soonest first."""
+    until = datetime.now(timezone.utc) + timedelta(days=max(1, min(days, 14)))
+    return {"timezone": sched.tz.key, "scheduler_active": sched.active,
+            "fires": [{**f, "at": _iso(f["at"])} for f in sched.upcoming_all(until)]}
+
+
 @router.get("/{routine_id}")
 async def get_routine(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
                       user=Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
@@ -280,6 +307,44 @@ async def set_enabled(routine_id: uuid.UUID, body: EnabledRequest, db: AsyncSess
     await db.commit()
     await db.refresh(r)
     await sched.reload(r.id)
+    return _out(r, sched)
+
+
+async def _set_reviewed(db: AsyncSession, user: User, routine_id: str, value: str | None):
+    prefs = await db.get(UserPreference, user.id)
+    if prefs is None:
+        prefs = UserPreference(user_id=user.id, ui_settings={}, agent_settings={})
+        db.add(prefs)
+    ui = dict(prefs.ui_settings or {})
+    marks = dict(ui.get("routines_reviewed") or {})
+    # Drop marks for routines that no longer exist.
+    live = {str(i) for i in (await db.scalars(select(Routine.id))).all()}
+    marks = {k: v for k, v in marks.items() if k in live}
+    if value:
+        marks[routine_id] = value
+    else:
+        marks.pop(routine_id, None)
+    ui["routines_reviewed"] = marks
+    prefs.ui_settings = ui
+    await db.commit()
+
+
+@router.post("/{routine_id}/reviewed")
+async def mark_reviewed(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
+                        user: User = Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
+    """Take a routine out of this user's "Needs attention" until its next run."""
+    r = await _get_or_404(db, routine_id)
+    if r.last_run_at is None:
+        raise HTTPException(status_code=409, detail="This routine hasn't run yet")
+    await _set_reviewed(db, user, str(r.id), _iso(r.last_run_at))
+    return _out(r, sched, reviewed={str(r.id): _iso(r.last_run_at)})
+
+
+@router.delete("/{routine_id}/reviewed")
+async def unmark_reviewed(routine_id: uuid.UUID, db: AsyncSession = Depends(get_db),
+                          user: User = Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
+    r = await _get_or_404(db, routine_id)
+    await _set_reviewed(db, user, str(r.id), None)
     return _out(r, sched)
 
 

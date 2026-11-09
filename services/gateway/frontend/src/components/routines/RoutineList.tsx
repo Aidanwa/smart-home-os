@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -20,7 +20,7 @@ function useStored<T extends string>(key: string, options: readonly T[], fallbac
 }
 
 const PROBLEM: RunStatus[] = ['failed', 'partial', 'missed', 'interrupted'];
-const needsAttention = (r: Routine) => r.enabled && !r.running && !!r.last_run_status && PROBLEM.includes(r.last_run_status);
+const needsAttention = (r: Routine) => r.enabled && !r.running && !r.reviewed && !!r.last_run_status && PROBLEM.includes(r.last_run_status);
 
 const WHEN_SECTIONS: { key: string; title: string; icon: ReactNode }[] = [
   { key: 'time', title: 'Schedule', icon: <Clock size={16} /> },
@@ -41,9 +41,10 @@ interface Props {
   onRun: (r: Routine) => void;
   onDuplicate: (r: Routine) => void;
   onToggle: (r: Routine) => void;
+  onReviewed: (r: Routine) => void;
 }
 
-export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory, onRun, onDuplicate, onToggle }: Props) {
+export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed }: Props) {
   const [groupBy, setGroupBy] = useStored<GroupBy>('routines.group', ['when', 'room', 'none'], 'when');
   const [sortBy, setSortBy] = useStored<SortBy>('routines.sort', ['next', 'name', 'last'], 'next');
   const [query, setQuery] = useState('');
@@ -182,7 +183,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
                 <div className={`grid grid-cols-1 gap-2 lg:grid-cols-2 ${s.tone === 'off' ? 'opacity-70' : ''}`}>
                   {s.routines.map(r => (
                     <RoutineRow key={r.id} r={r} summary={summaries.get(r.id) ?? ''} timezone={timezone} attention={s.tone === 'attention'}
-                      onOpen={() => onOpen(r)} onHistory={() => onHistory(r)} onRun={() => onRun(r)} onDuplicate={() => onDuplicate(r)} onToggle={() => onToggle(r)} />
+                      onOpen={() => onOpen(r)} onHistory={() => onHistory(r)} onRun={() => onRun(r)} onDuplicate={() => onDuplicate(r)} onToggle={() => onToggle(r)} onReviewed={() => onReviewed(r)} />
                   ))}
                 </div>
               )}
@@ -207,9 +208,9 @@ function Select({ label, value, onChange, options }: { label: string; value: str
   );
 }
 
-function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun, onDuplicate, onToggle }: {
+function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed }: {
   r: Routine; summary: string; timezone: string; attention: boolean;
-  onOpen: () => void; onHistory: () => void; onRun: () => void; onDuplicate: () => void; onToggle: () => void;
+  onOpen: () => void; onHistory: () => void; onRun: () => void; onDuplicate: () => void; onToggle: () => void; onReviewed: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -223,7 +224,8 @@ function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun,
   }, [menuOpen]);
 
   return (
-    <article className={`relative min-w-0 flex items-stretch rounded-xl border bg-neutral-900 ${attention ? 'border-amber-900/70' : 'border-neutral-800'}`}>
+    <article className={`relative min-w-0 flex flex-col rounded-xl border bg-neutral-900 ${attention ? 'border-amber-900/70' : 'border-neutral-800'}`}>
+    <div className="flex items-stretch min-w-0">
       {/* The body opens the editor */}
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left p-3 pr-2 rounded-l-xl hover:bg-neutral-800/40">
         <h3 className="font-medium text-neutral-100 truncate">{r.name}</h3>
@@ -269,6 +271,20 @@ function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun,
           </div>
         </div>
       </div>
+    </div>
+      {/* Needs attention: look at what went wrong, then say you've seen it. */}
+      {attention && (
+        <div className="flex border-t border-amber-900/40">
+          <button type="button" onClick={onHistory}
+            className="flex-1 min-h-11 flex items-center justify-center gap-1.5 text-sm text-neutral-300 hover:bg-neutral-800/50 rounded-bl-xl">
+            <History size={15} /> What happened
+          </button>
+          <button type="button" onClick={onReviewed} aria-label={`Mark ${r.name} as reviewed`}
+            className="flex-1 min-h-11 flex items-center justify-center gap-1.5 text-sm font-medium text-amber-300 hover:bg-amber-500/10 border-l border-amber-900/40 rounded-br-xl">
+            <Check size={15} /> Reviewed
+          </button>
+        </div>
+      )}
     </article>
   );
 }

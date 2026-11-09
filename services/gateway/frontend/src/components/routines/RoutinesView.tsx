@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Plus, Workflow } from 'lucide-react';
+import { ArrowLeft, History, Plus, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
@@ -8,6 +8,7 @@ import { useDeviceAttributes, useRoutines } from '../../hooks/useRoutines';
 import { RoutineEditor } from './RoutineEditor';
 import { RunHistory } from './RunHistory';
 import { RoutineList } from './RoutineList';
+import { RoutineActivity } from './RoutineActivity';
 import type { Routine, RoutineSpec, TempUnit } from './types';
 import { emptyRoutine } from './types';
 import { ConfirmDialog } from '../ui/dialog';
@@ -22,7 +23,8 @@ function toSpec(r: Routine): RoutineSpec {
 }
 
 export function RoutinesView({ devices }: { devices: Record<string, DeviceState> }) {
-  const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, duplicate, fetchRuns, preview } = useRoutines();
+  const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, duplicate, setReviewed, fetchRuns, preview } = useRoutines();
+  const [view, setView] = useState<'list' | 'activity'>('list');
   const { groups } = useGroups();
   const attributes = useDeviceAttributes();
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
@@ -50,13 +52,44 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
     else toast.error(`Couldn’t duplicate ${r.name}`, { description: err ?? undefined });
   };
 
+  const handleReviewed = async (r: Routine) => {
+    const err = await setReviewed(r.id, true);
+    if (err) toast.error(`Couldn’t mark ${r.name} as reviewed`, { description: err });
+    else toast.success(`${r.name} marked as reviewed`, {
+      description: 'It comes back here if a later run has a problem.',
+      action: { label: 'Undo', onClick: () => { setReviewed(r.id, false); } },
+    });
+  };
+
+  const openRoutine = (id: string) => {
+    const r = routines.find(x => x.id === id);
+    if (r) setPanel({ kind: 'edit', routine: r });
+    else toast.error('That routine no longer exists');
+  };
+
   const editing = panel?.kind === 'edit' ? panel.routine : null;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 animate-in fade-in duration-500">
       <header className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-medium tracking-tight">Routines</h1>
+        {view === 'list' ? (
+          <h1 className="text-2xl font-medium tracking-tight">Routines</h1>
+        ) : (
+          <div className="flex items-center gap-1 min-w-0 -ml-2">
+            <button type="button" onClick={() => setView('list')} aria-label="Back to routines"
+              className="size-11 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900">
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="text-2xl font-medium tracking-tight truncate">Activity</h1>
+          </div>
+        )}
         <div className="flex items-center gap-2 shrink-0">
+        {view === 'list' && (
+          <button type="button" onClick={() => setView('activity')}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 shrink-0">
+            <History size={16} /> Activity
+          </button>
+        )}
         <button type="button" onClick={() => setPanel({ kind: 'edit', routine: null })}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shrink-0">
           <Plus size={16} /> New
@@ -75,6 +108,8 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
         <div className="space-y-2" aria-busy="true" aria-label="Loading routines">
           {[0, 1, 2, 3].map(i => <div key={i} className="h-20 rounded-xl bg-neutral-900/60 border border-neutral-800/60 animate-pulse" />)}
         </div>
+      ) : view === 'activity' ? (
+        <RoutineActivity timezone={timezone} onOpenRoutine={openRoutine} />
       ) : routines.length === 0 ? (
         <div className="py-20 text-center text-neutral-500">
           <Workflow className="mx-auto mb-4 opacity-50" size={48} />
@@ -87,6 +122,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
           onHistory={r => setPanel({ kind: 'history', routine: r })}
           onRun={handleRun}
           onDuplicate={handleDuplicate}
+          onReviewed={handleReviewed}
           onToggle={async r => {
             const err = await setEnabled(r.id, !r.enabled);
             if (err) toast.error(`Couldn’t turn ${r.enabled ? 'off' : 'on'} ${r.name}`, { description: err });

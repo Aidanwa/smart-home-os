@@ -84,6 +84,13 @@ export function useRoutines() {
     return { routine: res.ok ? (res.data as Routine) : null, error: res.error };
   };
 
+  const setReviewed = async (id: string, reviewed: boolean) => {
+    setRoutines(prev => prev.map(r => (r.id === id ? { ...r, reviewed } : r)));  // optimistic
+    const res = await call(`/api/routines/${id}/reviewed`, { method: reviewed ? 'POST' : 'DELETE' });
+    if (!res.ok) await refresh();
+    return res.error;
+  };
+
   const fetchRuns = async (id: string): Promise<RoutineRun[]> => {
     const res = await call(`/api/routines/${id}/runs?limit=30`);
     return res.ok ? (res.data as RoutineRun[]) : [];
@@ -94,7 +101,7 @@ export function useRoutines() {
     return { result: res.ok ? (res.data as PreviewResult) : null, error: res.error };
   };
 
-  return { routines, timezone, schedulerActive, loading, error, refresh, save, remove, setEnabled, runNow, duplicate, fetchRuns, preview };
+  return { routines, timezone, schedulerActive, loading, error, refresh, save, remove, setEnabled, runNow, duplicate, setReviewed, fetchRuns, preview };
 }
 
 /** What every device reports (types, units, allowed values), for trigger/condition pickers. */
