@@ -159,7 +159,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
       )}
 
       {waitingForRooms ? (
-        <div className="space-y-2" aria-busy="true" aria-label="Loading rooms">
+        <div className="space-y-2" aria-busy="true" aria-label="Loading routines">
           {[0, 1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-neutral-900/60 border border-neutral-800/60 animate-pulse" />)}
         </div>
       ) : shown === 0 ? (
