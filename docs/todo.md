@@ -38,11 +38,9 @@ Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, 
 
 ## Not yet confirmed working
 
-These are built, but nobody has seen them work for real yet:
+Built, but nobody has seen it work for real yet:
 
 - **The firmware update badge** on device cards ("Update", "Scheduled", "42%"). No device has had an update waiting.
-- **Group power and brightness** on the Groups cards and sheet. They were never pressed in automated tests because they switch real lights.
-- **Voice on the iPhone after the 2026-11-09 changes:** auto-stop when you stop talking, giving up after 8 s with no speech, and the error toasts.
 
 ## Testing
 
