@@ -25,7 +25,7 @@ const getDeviceVisuals = (device: any) => {
 
 // Markers keep at least this fraction of their 100% size on screen, however far the plan is
 // zoomed out (a phone fits the whole floor at ~35%, which made them tiny).
-const MIN_MARKER_SCREEN_SCALE = 0.9;
+const MIN_MARKER_SCREEN_SCALE = 0.75;
 const MAX_MARKER_SCALE = 3;
 const LABEL_W = 76;  // world px at marker scale 1
 const LABEL_FONT = 11;
@@ -37,6 +37,20 @@ function crowdedLabels(points: { id: string; x: number; y: number }[], markerSca
   for (let i = 0; i < points.length; i++) {
     for (let j = i + 1; j < points.length; j++) {
       if (Math.abs(points[i].x - points[j].x) < w && Math.abs(points[i].y - points[j].y) < h) {
+        crowded.add(points[i].id); crowded.add(points[j].id);
+      }
+    }
+  }
+  return crowded;
+}
+
+/** Which markers' circles (radius 14 + a finger's slack) touch another's at this marker scale. */
+function crowdedMarkers(points: { id: string; x: number; y: number }[], markerScale: number): Set<string> {
+  const crowded = new Set<string>();
+  const minDist = 2 * 20 * markerScale;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      if (Math.hypot(points[i].x - points[j].x, points[i].y - points[j].y) < minDist) {
         crowded.add(points[i].id); crowded.add(points[j].id);
       }
     }
@@ -135,6 +149,10 @@ export function ResizableRoom({
     .map(p => ({ id: p.ieee_address, x: (p.pos_x / 100) * pxWidth, y: (p.pos_y / 100) * pxHeight }));
   // Names that would overlap are hidden until you zoom in (tap the room in View mode).
   const hideLabel = crowdedLabels(markers, markerScale);
+  // In View mode, markers packed too tightly to tap reliably ignore taps, so the tap lands on
+  // the room and zooms in (where they spread out and work). Otherwise a finger aimed at the
+  // room would switch whichever light happened to be under it.
+  const untappable = editable ? new Set<string>() : crowdedMarkers(markers, markerScale);
 
   return (
     <>
@@ -195,6 +213,7 @@ export function ResizableRoom({
               x={deviceX}
               y={deviceY}
               draggable={editable && isSelected}
+              listening={!untappable.has(placement.ieee_address)}
               // EVENT ISOLATION
               onClick={(e) => { e.cancelBubble = true; onDeviceClick(placement.ieee_address); }}
               onTap={(e) => { e.cancelBubble = true; onDeviceClick(placement.ieee_address); }}

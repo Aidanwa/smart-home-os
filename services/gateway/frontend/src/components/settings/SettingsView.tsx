@@ -132,7 +132,7 @@ export function SettingsView() {
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between gap-3 p-3.5 bg-neutral-950 border border-neutral-800/80 rounded-xl">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-neutral-900 flex items-center justify-center rounded-lg border border-neutral-800">
+                <div className="w-9 h-9 shrink-0 bg-neutral-900 flex items-center justify-center rounded-lg border border-neutral-800">
                   <SpotifyLogo />
                 </div>
                 <div>

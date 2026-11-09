@@ -334,7 +334,7 @@ export function RoomsView({
           )}
 
           {(isEditMode || zones.length > 0) && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 pointer-events-none w-max max-w-[calc(100%-1.5rem)] text-center">
+            <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-2xl bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-400 pointer-events-none w-max max-w-[calc(100%-7rem)]">
               {!isEditMode ? (zones.length ? 'Tap a light or plug to switch it, a room to zoom in' : 'Tap a light or plug to switch it')
                 : selectedZone ? 'Drag to move · corners to resize · double-tap to rename' : 'Tap a room to edit it'}
             </div>
