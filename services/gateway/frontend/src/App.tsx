@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner';
 import { getDeviceCategory, getDeviceKind } from './lib/deviceUtils';
 import { useRoomIndex } from './hooks/useRoomIndex';
+import { formatFloorName } from './components/rooms/constants';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
 import type { DeviceSection } from './components/devices/DeviceCategorySection';
 import { GroupsView } from './components/groups/GroupsView';
@@ -85,7 +86,7 @@ function AuthenticatedDashboard() {
       if (!roomIndex) return [];  // still loading the floor plan
       const multiFloor = new Set(roomIndex.rooms.map(r => r.floor)).size > 1;
       const sections: DeviceSection[] = roomIndex.rooms.map(r => ({
-        id: `room-${r.id}`, title: multiFloor ? `${r.name} · F${r.floor}` : r.name, icon: <DoorOpen size={18} />, devices: [],
+        id: `room-${r.id}`, title: multiFloor ? `${r.name} · ${formatFloorName(r.floor)}` : r.name, icon: <DoorOpen size={18} />, devices: [],
       }));
       const byId = new Map(roomIndex.rooms.map((r, i) => [r.id, sections[i]]));
       const unplaced: DeviceSection = { id: 'room-none', title: 'Not in a room', icon: <MapPinOff size={18} />, devices: [] };

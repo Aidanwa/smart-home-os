@@ -11,7 +11,14 @@ interface HomeConfig {
 export function useRoomLayout() {
   const [homeConfig, setHomeConfig] = useState<HomeConfig | null>(null);
   const [checkingHome, setCheckingHome] = useState(true);
-  const [currentFloor, setCurrentFloor] = useState(1);
+  // The floor last looked at, remembered on this device (most control happens on one floor).
+  const [currentFloor, setFloorState] = useState(() => {
+    try { const n = Number(localStorage.getItem('rooms.floor')); return Number.isInteger(n) && localStorage.getItem('rooms.floor') !== null ? n : 1; } catch { return 1; }
+  });
+  const setCurrentFloor = useCallback((floor: number) => {
+    setFloorState(floor);
+    try { localStorage.setItem('rooms.floor', String(floor)); } catch { /* private mode */ }
+  }, []);
   const [placements, setPlacements] = useState<DevicePlacement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,10 +39,10 @@ export function useRoomLayout() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.id) {
-          setHomeConfig({
-            bottom_floor: data.bottom_floor ?? 1,
-            top_floor: data.top_floor ?? 1,
-          });
+          const config = { bottom_floor: data.bottom_floor ?? 1, top_floor: data.top_floor ?? 1 };
+          setHomeConfig(config);
+          // A remembered floor the home no longer has falls back into range.
+          setFloorState(f => Math.min(config.top_floor, Math.max(config.bottom_floor, f)));
         }
       })
       .catch(console.error)
