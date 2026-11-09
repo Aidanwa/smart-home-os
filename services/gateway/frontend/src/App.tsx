@@ -193,7 +193,10 @@ function AuthenticatedDashboard() {
                   <button onClick={() => setDashboardView('devices')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'devices' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Devices</button>
                   <button onClick={() => setDashboardView('groups')} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${dashboardView === 'groups' ? 'bg-neutral-700 text-white' : 'text-neutral-400'}`}>Groups</button>
                 </div>
-                <PairingButton devices={devices} permitJoin={permitJoin} />
+                {/* Devices only; hidden rather than unmounted so a pairing window keeps announcing joins on Groups */}
+                <div className={dashboardView === 'devices' ? 'contents' : 'hidden'}>
+                  <PairingButton devices={devices} permitJoin={permitJoin} />
+                </div>
               </div>
             </header>
 
