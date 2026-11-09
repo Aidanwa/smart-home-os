@@ -18,7 +18,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 - [x] Only the small power icon toggles; make the whole card the toggle and keep ⋯ for settings. *(Done 2026-11-08.)*
 - [x] Classification disagrees: `getDeviceCategory` checks lights first, `DeviceRenderer` checks sensors first, so a device with brightness and temperature sits under Lights but renders as a sensor card. *(Fixed 2026-11-08: one `getDeviceKind` in `lib/deviceUtils.ts` drives both.)*
 - [x] Devices without `state` (remotes, motion/contact sensors) fall through to `BasicSwitchCard`, which shows a power button that sends `ON`, and their real readings (occupancy, contact, action) aren't shown. *(Fixed 2026-11-08: `SensorCard` (open/closed, motion, leak, temperature, tamper) and `RemoteCard` (last press); unknown devices get no power button.)*
-- [ ] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card. *(Low-battery badge done 2026-11-08; offline still open, Z2M doesn't publish `last_seen` here.)*
+- [~] Battery and `last_seen` only appear in the drawer; add a low-battery / offline badge on the card. *(Low-battery badge done 2026-11-08. Offline badge: won't do, 2026-11-09, Aidan doesn't need it.)*
 - [x] Home groups by device type although rooms exist. Grouping by room, with per-room and whole-house "All off", matches how it's used. *(Done 2026-11-09: a "By type / By room / A–Z" dropdown replaces the toggle; "Lights off" per section (no whole-house button, by choice), lights only (plugs may run a fridge or the router), with Undo.)*
 - [x] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown. *(Done 2026-11-08: `PairingButton` in the Home header, countdown from Z2M's `permit_join_end`, a toast per joined device.)*
 - [x] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted. *(Fixed 2026-11-08: hidden on Groups; sort and view remembered; A-Z now sorts by name, not IEEE address.)*
@@ -37,7 +37,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 - [x] Replies render as raw text; markdown shows literal `**` and `-`. *(Done 2026-11-09: `react-markdown` + `remark-gfm`, raw HTML ignored.)*
 - [~] Clear-history trash button sits next to Send with no label and no confirm. *(Won't do, 2026-11-09: Aidan is happy with it as it is. It did get a screen-reader label.)*
 - [x] Switching tabs unmounts the chat and kills an in-flight reply; input is disabled while streaming. *(Done 2026-11-09: the chat lives above the tabs, with a dot on Agent for a reply that arrived elsewhere; the agent finishes a reply even if the browser goes away and a reconnect picks it up; you can type while it answers, and Send becomes Stop.)*
-- [ ] Voice auto-sends the transcript unreviewed; mic denial and transcription failure only log to the console; recording never stops if no speech is detected; uses `alert()`.
+- [x] Voice auto-sends the transcript unreviewed; mic denial and transcription failure only log to the console; recording never stops if no speech is detected; uses `alert()`. *(2026-11-09: auto-send and the silent mic denial stay, by Aidan's choice. Done: a failed, unreachable ("Voice isn't ready yet") or empty transcription toasts; the HTTPS `alert()` is a toast; auto-stop measures the room's noise for the first 0.5 s and uses thresholds relative to it, runs on a timer instead of `requestAnimationFrame` (which paused when the screen locked), wakes a suspended iOS audio context, gives up after 8 s with no speech (nothing sent) and stops at 60 s; the upload is named by the recorder's real type (mp4 on Safari).)*
 - [x] Tool chips show raw names ("Spot Ctrl", "Rt Save"), always show a green check even on failure, and `JSON.parse(args)` can throw and crash the view (`ToolCallChip.tsx`). *(Done 2026-11-09: plain-language labels, a red ✕ with the reason when a tool failed, also in reloaded history; bad arguments no longer crash it.)*
 - [ ] Empty state could offer suggestion chips.
 - [x] The agent's memory facts (`agent_settings.user_memory`) can't be seen or edited anywhere in Settings. *(Done 2026-11-09: Settings → Agent → "What the assistant remembers": edit, forget (with Undo), add; a save is refused if the agent changed the list meanwhile.)*
@@ -45,7 +45,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 ## Rooms
 
 - [x] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab. *(Done 2026-11-09: in View mode a tap switches lights and plugs; icons glow when on and show a dashed ring while a command is in flight. Edit mode keeps "Remove from room".)*
-- [ ] Placement needs "select a room, then tap a device in the list" (the error modal became a hint on 2026-11-08). Dragging onto the plan or a "which room?" picker would be easier. On phones the Devices sheet covers the plan, so picking a room means closing it first.
+- [~] Placement needs "select a room, then tap a device in the list" (the error modal became a hint on 2026-11-08). Dragging onto the plan or a "which room?" picker would be easier. On phones the Devices sheet covers the plan, so picking a room means closing it first. *(Won't do, 2026-11-09: Aidan is fine with the current flow.)*
 - [x] On a phone the plan is zoomed out, so device icons are small and names overlap where devices sit close together (Aidan's Bedroom). Bigger markers, or zoom to a room on tap. Rooms now reopens on the last floor viewed. *(Done 2026-11-09: in View mode a tap on a room zooms to it and "Whole floor" zooms back; markers keep at least 75% of their full size on screen; names that would overlap are hidden until you zoom in; markers packed too tightly to tap ignore taps, so the tap zooms the room instead of switching whatever light is under your finger.)*
 - [x] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle. *(Done 2026-11-08: View/Edit toggle; only the selected room drags; double-tap renames.)*
 - [x] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Done 2026-11-08: a "Devices" bottom sheet in Edit mode; the "pick a room first" error modal became a hint in the list. Along the way: the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
@@ -71,8 +71,8 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 
 ## Cross-cutting
 
-- [ ] `focus:outline-none` everywhere (including nav) hides keyboard focus; use `focus-visible:ring`.
-- [ ] Tooltips are hover-only (useless on touch) and icon buttons lack `aria-label`.
+- [~] `focus:outline-none` everywhere (including nav) hides keyboard focus; use `focus-visible:ring`. *(Won't do, 2026-11-09.)*
+- [~] Tooltips are hover-only (useless on touch) and icon buttons lack `aria-label`. *(Won't do, 2026-11-09.)*
 - [x] ~8 hand-rolled modals: none close on Escape, none trap focus. Move to shadcn `Dialog` / `AlertDialog`, which also replaces the `window.confirm` calls. *(Done 2026-11-09: `components/ui/dialog.tsx` (Radix) with a `ConfirmDialog`; every modal and `window.confirm` uses it. Escape closes only the top one, so a confirm over the device drawer leaves the drawer open. Rooms' inline rename popover stays a popover; it already handled Escape.)*
 - [x] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above. *(`sonner` added 2026-11-08: device, group, pairing, firmware, Lights off, memory editor, and Routines' Run now / Duplicate use it. Still their own: the Settings forms' inline banners, Rooms' save state, and the routine editor's save errors.)* *(Done 2026-11-09: those are toasts now too. Rooms' saves used to fail silently (no status check; the error was never shown); a failure now toasts and the plan stays "Unsaved changes", so autosave retries. Form validation in the Add room dialog stays inline, beside the field.)*
 - [x] Tabs aren't in the URL: refresh always lands on Home, Back leaves the app, no deep links. A `#routines` hash is cheap. *(Done 2026-11-08; the Spotify sign-in return now lands on Settings, so the callback runs.)*
@@ -85,17 +85,13 @@ A pass over the whole frontend (`services/gateway/frontend/src`), started by rea
 - [ ] Not seen live yet: the firmware badge (no device had an update waiting) and the Spotify Unlink confirm (the test user has no Spotify link).
 - [ ] Chat's red ✕ for a failed tool call hasn't been seen live (the test prompts didn't make a tool fail). The logic is `tool_outcome` in `services/agent/core/orchestrator.py`, shared with routine runs.
 
-## What's next (ranked, 2026-11-09, after the dialogs/toasts/Rooms batch)
+## What's next (ranked, 2026-11-09, trimmed with Aidan)
 
-1. Offline badge on cards: turn on `last_seen` in Z2M first (Home section).
-2. Hub status on phones (Settings, login, shell).
-3. Voice input fixes (Agent chat).
-4. Groups: on/off state and brightness.
-5. Rooms device placement by drag or picker.
-6. Accessibility: focus rings, `aria-label`s, touch-friendly tooltips. Rooms' toolbar buttons are also still 28–32px.
-7. PWA manifest.
-8. Chat suggestion chips.
-9. A never-pressed remote is classified as Other (`getDeviceKind` needs an `action` key, which Z2M only sends after a press; the exposes could tell instead).
-10. Whether the agent should talk about colour temperature as warmth % (adds prompt tokens; Aidan's call).
-11. Routine tags/folders (needs a migration).
-12. Turn the throwaway interaction driver into `tests/ui` (Testing gaps).
+Dropped on 2026-11-09 (Aidan doesn't need them): the offline badge, Rooms placement by drag or picker, the accessibility pass (focus rings, `aria-label`s, touch tooltips, Rooms toolbar sizes), classifying never-pressed remotes, and warmth % in the agent's prompt.
+
+1. **Hub status on phones.** The health indicator (`useSystemHealth`, in the shell header) is `hidden md:flex` and opens on hover, so a phone never shows whether the hub, MQTT, Zigbee2MQTT or the agent is down. Show it on phones (e.g. a dot in the header that opens on tap) and reword its messages in plain language.
+2. **Groups: on/off state and brightness.** A group card has no on/off indicator (it's on if any member is on) and no brightness slider, so dimming a room means each bulb in turn. Z2M takes brightness on a group `/set`.
+3. **PWA manifest.** *(Aidan likes it; not yet. Notes for when we do it: manifest + icons + iOS meta tags, maybe a no-cache service worker for Android's install prompt; on iPhone the home-screen app needs its own sign-in, and Spotify linking should be done from the browser.)* Lets "Add to Home Screen" open the dashboard full-screen like an app (no browser bars), with its own icon and name. Without it, iOS opens a Safari tab. Only worth it if the dashboard is used from a phone home screen.
+4. **Chat suggestion chips.** The empty chat could offer a few tappable starters ("Turn off all lights", "What's on?", "Make a bedtime routine") so it's obvious what the assistant can do.
+5. **Routine tags/folders.** User-made labels to group routines beyond time/room. Needs a new column and a migration (Aidan's OK).
+6. **`tests/ui`.** Turn the throwaway headless-Chrome driver into a checked-in test that opens each dialog, checks Escape/Cancel and touch-target sizes, without ever tapping a device (Testing gaps).
