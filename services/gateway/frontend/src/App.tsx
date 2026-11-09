@@ -1,4 +1,5 @@
 // services/gateway/frontend/src/App.tsx
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useDevices } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -141,6 +142,9 @@ function AuthenticatedDashboard() {
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden w-full relative">
         <ConnectionBanner status={realtime} />
 
+        {/* A crash inside one tab shows a message there instead of blanking the app.
+            Keyed by tab, so switching tabs gives the broken one a fresh start. */}
+        <ErrorBoundary key={activeTab} label={`${activeTab} tab`}>
         {activeTab === 'home' && (
           // CHANGED: Moved the padding and scroll into the specific home container
           <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">
@@ -204,7 +208,7 @@ function AuthenticatedDashboard() {
             <SettingsView />
           </div>
         )}
-        
+        </ErrorBoundary>
       </main>
     </div>
   );

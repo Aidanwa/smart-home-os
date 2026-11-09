@@ -7,7 +7,7 @@ interface Props {
   state: DeviceState;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
 }
 
 export function BasicSwitchCard({ name, state, toggleDevice, renameDevice, deleteDevice }: Props) {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { ROOM_COLORS, GRID_FT } from '../constants';
+import { ROOM_COLORS } from '../constants';
+import { NumberField } from '../../routines/NumberField';
 
 export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: number; onClose: () => void; onCreate: (name: string, width: number, height: number, color: string) => Promise<void>; }) {
   const [name, setName] = useState('');
@@ -40,11 +41,11 @@ export function AddRoomModal({ floorLevel, onClose, onCreate }: { floorLevel: nu
           <div className="flex gap-4">
             <label className="flex flex-col gap-1.5 flex-1 min-w-0">
               <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Width (ft)</span>
-              <input type="number" step={GRID_FT} value={widthFt} onChange={e => setWidthFt(Math.max(2, Number(e.target.value)))} min={2} className="bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-neutral-400 w-full" />
+              <NumberField value={widthFt} onChange={setWidthFt} min={2} max={200} ariaLabel="Width in feet" className="bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-neutral-400 w-full" />
             </label>
             <label className="flex flex-col gap-1.5 flex-1 min-w-0">
               <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Height (ft)</span>
-              <input type="number" step={GRID_FT} value={heightFt} onChange={e => setHeightFt(Math.max(2, Number(e.target.value)))} min={2} className="bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-neutral-400 w-full" />
+              <NumberField value={heightFt} onChange={setHeightFt} min={2} max={200} ariaLabel="Height in feet" className="bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-neutral-400 w-full" />
             </label>
           </div>
 

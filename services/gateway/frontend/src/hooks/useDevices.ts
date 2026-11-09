@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { openReconnectingSocket } from '../lib/reconnectingSocket';
+import { request, withPending } from '../lib/api';
+import { toast } from 'sonner';
 
 export interface DeviceState {
   state?: string;
@@ -77,57 +79,49 @@ export function useDevices() {
 
   // 3. Hardware Write Action
   // We use useCallback so this function reference is stable if passed to deeply nested cards
-  const sendCommand = useCallback(async (name: string, payload: Record<string, any>) => {
-    await authenticatedFetch(`/api/devices/${name}/set`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
-  }, []);
+  // Failures show a toast (lib/api), and the card shows it's busy while the device answers.
+  const sendCommand = useCallback((name: string, payload: Record<string, any>, what?: string) =>
+    withPending(name, () => request(what ?? `change ${name}`, () =>
+      authenticatedFetch(`/api/devices/${encodeURIComponent(name)}/set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }))),
+  []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper for simple toggles
   const toggleDevice = useCallback((name: string, currentState: string | undefined) => {
     const newState = currentState === 'ON' ? 'OFF' : 'ON';
-    sendCommand(name, { state: newState });
+    return sendCommand(name, { state: newState }, `turn ${newState === 'ON' ? 'on' : 'off'} ${name}`);
   }, [sendCommand]);
 
   // permit join control
-  const permitJoin = useCallback(async (value: boolean, time: number = 254) => {
-    try {
-      await authenticatedFetch('/api/bridge/permit_join', {
+  const permitJoin = useCallback((value: boolean, time: number = 254) =>
+    request(value ? 'start pairing mode' : 'stop pairing mode', () =>
+      authenticatedFetch('/api/bridge/permit_join', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ value, time })
-      });
-    } catch (e) {
-      console.error("Failed to set permit join", e);
-    }
-  }, []);
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value, time }),
+      })),
+  []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renameDevice = useCallback(async (old_name: string, new_name: string) => {
-    await authenticatedFetch(`/api/device/${old_name}/rename`, {
+    const ok = await request(`rename ${old_name}`, () =>
+      authenticatedFetch(`/api/device/${encodeURIComponent(old_name)}/rename`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ new_name })
-    });
-  }, []);
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_name }),
+      }));
+    if (ok) toast.success(`Renamed to ${new_name}`);
+    return ok;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const deleteDevice = useCallback(async (deviceId: string) => {
-    try {
-      await authenticatedFetch(`/api/devices/${deviceId}`, {
-        method: 'DELETE',
-        headers: { 
-          'Content-Type': 'application/json' 
-        }
-      });
-    } catch (e) {
-      console.error(`Failed to delete device ${deviceId}`, e);
-    }
-  }, []);
+  const deleteDevice = useCallback(async (deviceId: string, label?: string) => {
+    const ok = await request(`remove ${label ?? deviceId}`, () =>
+      authenticatedFetch(`/api/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }));
+    if (ok) toast.success(`Removed ${label ?? 'the device'}`);
+    return ok;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     devices,

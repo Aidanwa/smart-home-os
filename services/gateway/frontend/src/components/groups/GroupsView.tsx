@@ -10,7 +10,7 @@ interface Props {
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
 }
 
 const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
@@ -32,6 +32,15 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [editNameDraft, setEditNameDraft] = useState('');
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  // Requests in flight, keyed by what they act on, so buttons can't be tapped twice.
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const track = async (key: string, run: () => Promise<unknown>) => {
+    if (busy.has(key)) return;
+    setBusy(prev => new Set(prev).add(key));
+    try { await run(); } finally {
+      setBusy(prev => { const next = new Set(prev); next.delete(key); return next; });
+    }
+  };
 
   // Keep modal accurate when background WebSocket changes trickle into useGroups()
   useEffect(() => {
@@ -169,10 +178,10 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
               {/* Group Controls */}
               <div className="flex items-center gap-2 shrink-0">
                 <Tooltip text={`Turn all ${group.friendly_name} devices ON`}>
-                  <button onClick={() => sendGroupCommand(group.friendly_name, { state: 'ON' })} className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors">All On</button>
+                  <button disabled={busy.has(`set:${group.friendly_name}`)} onClick={() => track(`set:${group.friendly_name}`, () => sendGroupCommand(group.friendly_name, { state: 'ON' }, `turn on ${group.friendly_name}`))} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors">All On</button>
                 </Tooltip>
                 <Tooltip text={`Turn all ${group.friendly_name} devices OFF`}>
-                  <button onClick={() => sendGroupCommand(group.friendly_name, { state: 'OFF' })} className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors sm:mr-2">All Off</button>
+                  <button disabled={busy.has(`set:${group.friendly_name}`)} onClick={() => track(`set:${group.friendly_name}`, () => sendGroupCommand(group.friendly_name, { state: 'OFF' }, `turn off ${group.friendly_name}`))} className="disabled:opacity-50 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors sm:mr-2">All Off</button>
                 </Tooltip>
                 <Tooltip text="Add or remove devices">
                   <button onClick={() => setManagingGroup(group)} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
@@ -215,7 +224,11 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
             </div>
             
             <div className="p-4 max-h-[60vh] overflow-y-auto overflow-x-hidden space-y-2 rounded-b-2xl">
-              {Object.entries(devices).map(([deviceName, state]) => {
+              {Object.entries(devices)
+                .sort(([a, sa], [b, sb]) => (sa.friendly_name ?? a).localeCompare(sb.friendly_name ?? b))
+                .map(([deviceName, state]) => {
+                const target = state.ieee_address || state.friendly_name;
+                const working = busy.has(`member:${target}`);
                 const isInGroup = state.ieee_address 
                   ? managingGroup.members.some(m => m.ieee_address === state.ieee_address)
                   : managingGroup.members.some(m => m.name === deviceName);
@@ -225,19 +238,19 @@ export function GroupsView({ devices, sendCommand, toggleDevice, renameDevice, d
                     <span className="text-sm font-medium text-neutral-200">{state.friendly_name}</span>
                     <Tooltip text={isInGroup ? "Remove device from group" : "Add device to group"}>
                       <button
+                        disabled={working}
                         onClick={() => {
-                          const targetDevice = state.ieee_address || state.friendly_name;
-                          if (isInGroup) {
-                            removeDeviceFromGroup(managingGroup.friendly_name, targetDevice);
-                          } else {
-                            addDeviceToGroup(managingGroup.friendly_name, targetDevice);
-                          }
+                          const group = managingGroup.friendly_name;
+                          const label = state.friendly_name ?? deviceName;
+                          track(`member:${target}`, () => isInGroup
+                            ? removeDeviceFromGroup(group, target, label)
+                            : addDeviceToGroup(group, target, label));
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        className={`min-w-[4.5rem] disabled:opacity-60 disabled:cursor-wait px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           isInGroup ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
                         }`}
                       >
-                        {isInGroup ? 'Remove' : 'Add'}
+                        {working ? (isInGroup ? 'Removing…' : 'Adding…') : isInGroup ? 'Remove' : 'Add'}
                       </button>
                     </Tooltip>
                   </div>

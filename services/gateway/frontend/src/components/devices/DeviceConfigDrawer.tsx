@@ -26,7 +26,7 @@ interface DeviceConfigDrawerProps {
   onOpenChange: (open: boolean) => void;
   advancedConfig?: React.ReactNode;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (deviceId: string) => void;
+  deleteDevice: (deviceId: string, label?: string) => void;
 }
 
 export function DeviceConfigDrawer({ 
@@ -64,7 +64,7 @@ export function DeviceConfigDrawer({
 
   const confirmDelete = () => {
     // Use ieee_address if available, fallback to name
-    deleteDevice(state.ieee_address || name);
+    deleteDevice(state.ieee_address || name, name);
     setShowDeleteConfirm(false);
     onOpenChange(false);
   };

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { BatteryLow, MoreHorizontal } from 'lucide-react';
+import { BatteryLow, Loader2, MoreHorizontal } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import { isBatteryLow } from '../../lib/deviceUtils';
+import { usePending } from '../../lib/api';
 import { DeviceConfigDrawer } from './DeviceConfigDrawer';
 
 interface BaseDeviceCardProps {
@@ -15,7 +16,7 @@ interface BaseDeviceCardProps {
   children?: React.ReactNode;
   advancedConfig?: React.ReactNode;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (deviceId: string) => void;
+  deleteDevice: (deviceId: string, label?: string) => void;
 }
 
 export function BaseDeviceCard({
@@ -33,18 +34,21 @@ export function BaseDeviceCard({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isOn = state.state === 'ON';
   const lowBattery = isBatteryLow(state);
+  // A command is on its way; ignore further taps until the device answers (or fails),
+  // otherwise a second tap would flip it back based on the not-yet-updated state.
+  const busy = usePending(name);
 
   return (
     <>
       {/* The toggle is a full-size button behind the content; the content ignores pointer
           events except for the real controls (⋯ and sliders), which sit above it. */}
-      <div className={`relative flex flex-col justify-between p-4 min-h-[150px] w-full rounded-3xl border transition-all duration-300 ${
+      <div aria-busy={busy} className={`relative flex flex-col justify-between p-4 min-h-[150px] w-full rounded-3xl border transition-all duration-300 ${
         isOn ? 'bg-neutral-800/80 border-neutral-700 shadow-lg shadow-black/20' : 'bg-neutral-900/40 border-neutral-800/50'
       } ${onToggle ? 'hover:border-neutral-600 active:scale-[0.99]' : ''}`}>
         {onToggle && (
           <button
             type="button"
-            onClick={onToggle}
+            onClick={() => { if (!busy) onToggle(); }}
             aria-pressed={isOn}
             aria-label={`${name}: ${isOn ? 'on' : 'off'}. Turn ${isOn ? 'off' : 'on'}`}
             className="absolute inset-0 rounded-3xl cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
@@ -57,6 +61,9 @@ export function BaseDeviceCard({
             {icon}
           </div>
           <div className="flex items-center gap-1">
+            {busy && (
+              <Loader2 size={16} className="animate-spin text-neutral-400" aria-label="Sending" />
+            )}
             {lowBattery && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[11px] font-medium">
                 <BatteryLow size={12} /> Low battery

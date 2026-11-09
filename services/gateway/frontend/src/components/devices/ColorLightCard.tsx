@@ -15,7 +15,7 @@ interface Props {
   sendCommand: (name: string, payload: Record<string, unknown>) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
 }
 
 /** A slider with a big touch target that sends only when you let go (or on each key press). */

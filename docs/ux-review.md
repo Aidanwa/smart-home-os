@@ -6,12 +6,12 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 - [x] **Realtime sockets never reconnect.** `useDevices` opens `/api/ws` once; after a deploy, Pi restart or phone sleep the dashboard silently shows stale state. The agent chat is the same, and its "Reconnecting..." placeholder is never true. Server side: `/api/ws` only sends on device changes, so a half-open socket looks alive forever; the agent WS proxy in `main.py` uses `gather`, so when the agent restarts the browser side stays open ("Online") with nothing behind it. *(Fixed 2026-11-08: `lib/reconnectingSocket.ts`, server keepalives, proxy teardown, reconnect banner; deployed and tested on the Pi.)*
 - [x] **Phone bottom nav hid Settings and wasn't pinned.** Each tab laid icon and label side by side, so Settings was pushed off the right edge (x 385–482 on a 390 px screen). The outer layout only had a min-height, so `main` grew to the full device list, the whole page scrolled, and the nav sat at the end of the page. The draggable "Add Device" button then covered the nav. *(Fixed 2026-11-08: five equal stacked columns, definite `100dvh` layout, button anchored to `main`; checked with headless-Chrome renders at 360/390 px and desktop.)*
-- [ ] **Failed commands are silent.** `sendCommand` ignores the response, so `device_control`'s 502/504 vanish. No pending state on toggles; rename and group add/remove give no feedback. Needs a pending state on the card plus an error toast.
+- [x] **Failed commands are silent.** `sendCommand` ignores the response, so `device_control`'s 502/504 vanish. No pending state on toggles; rename and group add/remove give no feedback. Needs a pending state on the card plus an error toast. *(Fixed 2026-11-08: `lib/api.ts` `request()` toasts the hub's error via `sonner`; cards show a spinner and ignore taps while a command is in flight; rename, remove, pairing and every group action report failures.)*
 - [x] **Settings has no padding and can't scroll.** `App.tsx` renders `<SettingsView />` straight into the `overflow-hidden` `<main>` without the `overflow-y-auto p-6` wrapper other tabs have. Its five sub-tabs also overflow horizontally on phones. *(Fixed 2026-11-08: padded scrolling wrapper; short sub-tab labels that scroll sideways.)*
 - [x] **iOS zooms on every text field.** Inputs are `text-sm` (14px); Safari zooms on focus below 16px. Affects `routines/styles.ts` `input`, the chat box, settings, modals. Use `text-base` on mobile. *(Fixed 2026-11-08: one rule in `index.css` raises `text-sm`/`text-xs` fields to 16px on touch screens.)*
 - [x] **Light sliders.** 1px track under an invisible range input; commits only on `mouseup`/`touchend`, so keyboard changes never send (`ColorLightCard.tsx`). Use the shadcn Slider with `onValueCommit`. *(Fixed 2026-11-08: Radix slider, 32px touch row, sends on release or key press, value shown beside it.)*
 - [x] **Controls that do nothing.** "Power On Behavior" chips (`ColorLightCard.tsx`), firmware "Install" (`DeviceConfigDrawer.tsx`), the "Coming Soon" providers. The Admin tab is a placeholder (planned in todo.md); hide it until it has content. *(Fixed 2026-11-08: chips and Coming Soon options removed; Install became "Install from Zigbee2MQTT"; Admin hidden.)*
-- [ ] **Add Room width/height clamp on every keystroke** (`AddRoomModal.tsx`). Use `NumberField`.
+- [x] **Add Room width/height clamp on every keystroke** (`AddRoomModal.tsx`). Use `NumberField`. *(Done 2026-11-08.)*
 
 ## Home / devices
 
@@ -27,9 +27,9 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 
 ## Groups
 
-- [ ] Manage modal Add/Remove has no pending state and refreshes ~1 s later, so a second tap undoes the first. The device list isn't sorted.
+- [x] Manage modal Add/Remove has no pending state and refreshes ~1 s later, so a second tap undoes the first. The device list isn't sorted. *(Fixed 2026-11-08: buttons say Adding…/Removing… until the list refreshes; sorted by name.)*
 - [ ] No group brightness and no on/off state for the group.
-- [ ] Tooltip "Create a new room or group" conflates groups with the Rooms tab.
+- [x] Tooltip "Create a new room or group" conflates groups with the Rooms tab.
 
 ## Agent chat
 
@@ -47,7 +47,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] Placement needs "select a room, then click a device in the sidebar", otherwise a "Placement Error" modal. Drag from the sidebar or a "which room?" picker is easier.
 - [ ] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle.
 - [ ] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
-- [ ] Copy: "Autosaving soon..." rendered as a button; "F0" / "Floor 0" instead of `formatFloorName`; "Home Context Not Initialized" has no button to Settings → Home.
+- [x] Copy: "Autosaving soon..." rendered as a button; "F0" / "Floor 0" instead of `formatFloorName`; "Home Context Not Initialized" has no button to Settings → Home.
 
 ## Settings, login, shell
 
@@ -70,7 +70,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [ ] `focus:outline-none` everywhere (including nav) hides keyboard focus; use `focus-visible:ring`.
 - [ ] Tooltips are hover-only (useless on touch) and icon buttons lack `aria-label`.
 - [ ] ~8 hand-rolled modals: none close on Escape, none trap focus. Move to shadcn `Dialog` / `AlertDialog`, which also replaces the `window.confirm` calls.
-- [ ] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above.
+- [ ] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above. *(`sonner` added 2026-11-08 and used for device and group actions; Settings, Rooms and Routines still have their own messages.)*
 - [x] Tabs aren't in the URL: refresh always lands on Home, Back leaves the app, no deep links. A `#routines` hash is cheap. *(Done 2026-11-08; the Spotify sign-in return now lands on Settings, so the callback runs.)*
 - [ ] No PWA manifest and no `viewport-fit=cover` / safe-area padding, so the bottom nav can sit under the iPhone home indicator. *(Safe-area padding done 2026-11-08; manifest still open.)*
 

@@ -14,7 +14,7 @@ interface Props extends DeviceSection {
   sendCommand: (name: string, payload: any) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
 }
 
 export function DeviceCategorySection({ id, title, icon, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {

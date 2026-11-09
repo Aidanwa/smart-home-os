@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '../ErrorBoundary';
 import type { DeviceState } from '../../hooks/useDevices';
 import { getDeviceKind } from '../../lib/deviceUtils';
 import { SmartPlugCard } from './SmartPlugCard';
@@ -14,11 +15,21 @@ interface Props {
   sendCommand: (name: string, payload: Record<string, unknown>) => void;
   toggleDevice: (name: string, currentState?: string) => void;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
+}
+
+/** One card per device, each in its own error boundary: a device reporting data a card
+ *  can't handle breaks only that card. A new state report gives it another try. */
+export function DeviceRenderer(props: Props) {
+  return (
+    <ErrorBoundary variant="card" label={`card ${props.name}`} resetKey={props.state}>
+      <DeviceCard {...props} />
+    </ErrorBoundary>
+  );
 }
 
 /** Picks a card by `getDeviceKind`, the same rule the Home sections group by. */
-export function DeviceRenderer({ name, state, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
+function DeviceCard({ name, state, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   const manage = { name, state, renameDevice, deleteDevice };
   switch (getDeviceKind(state)) {
     case 'light':

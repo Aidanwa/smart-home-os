@@ -7,7 +7,7 @@ interface Props {
   name: string;
   state: DeviceState;
   renameDevice: (oldName: string, newName: string) => void;
-  deleteDevice: (name: string) => void;
+  deleteDevice: (name: string, label?: string) => void;
 }
 
 /** "brightness_move_up" -> "Brightness move up" */
