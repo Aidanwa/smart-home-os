@@ -28,7 +28,7 @@ Browser ──HTTPS──► gateway :8000 (FastAPI + built React SPA + routine 
 - `services/gateway/`: the FastAPI API, MQTT bus, and SPA hosting. The frontend lives in `services/gateway/frontend/`.
 - `services/agent/`: the LLM orchestrator, providers, and tools.
 - `services/database/`: a vestigial workspace member. `init.sql` is empty, and the schema comes **only** from Alembic.
-- `docs/`: short human notes. [docs/todo.md](docs/todo.md) is the roadmap and known-bugs list.
+- `docs/`: short human notes. [docs/todo.md](docs/todo.md) is the roadmap and known-bugs list; [docs/ux-review.md](docs/ux-review.md) is the frontend UX checklist with a ranked "What's next" queue.
 
 ## Running (Docker is the dev loop)
 
@@ -124,7 +124,7 @@ Built 2026-11-08 (design history is in git: the old `docs/scheduler-proposal.md`
   - `/spotify/devices` and `/spotify/search`.
   - `/alerts` and `/alerts/seen`: the tab's failure badge, using `ui_settings.routines_seen_at`.
   - Fixed paths must be declared before `/{routine_id}`.
-- **Units:** values are device-native (temperature is always °C). The UI always shows and accepts °F, converts on the way in and out, Colour temperature is stored and sent in mired everywhere, and shown as **warmth %**: a percentage of that bulb's own range from Z2M's exposes (0% = coolest, 100% = warmest, so it rises with mired and comparisons keep their meaning). Helpers are in the frontend's `lib/colorTemp.ts`; groups use the union of their members' ranges.
+- **Units:** values are device-native (temperature is always °C). The UI always shows and accepts °F and converts on the way in and out. Colour temperature is stored and sent in mired everywhere, and shown as **warmth %**: a percentage of that bulb's own range from Z2M's exposes (0% = coolest, 100% = warmest, so it rises with mired and comparisons keep their meaning). Helpers are in the frontend's `lib/colorTemp.ts`; groups use the union of their members' ranges.
 - **Next:** ntfy notifications (failure alerts, a `notify` action, reminders): see [docs/todo.md](docs/todo.md).
 
 ## Agent internals

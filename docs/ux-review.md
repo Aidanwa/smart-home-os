@@ -1,6 +1,6 @@
-# UX review (2026-11-08)
+# UX review (2026-11-08, updated 2026-11-09)
 
-A pass over the whole frontend (`services/gateway/frontend/src`), done by reading the code rather than clicking through the UI, so check each item on a phone before fixing it. Ordered by how much it hurts. Tick items off here as they land.
+A pass over the whole frontend (`services/gateway/frontend/src`), started by reading the code and since checked live in headless Chrome at phone and desktop sizes. Ordered by how much it hurts. Tick items off here as they land: `[x]` done, `[ ]` open, `[~]` won't do. **The open queue, ranked, is at the bottom ("What's next").**
 
 ## Fix first: broken or misleading
 
@@ -23,7 +23,7 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] Draggable "Add Device" FAB covers the last row of cards on phones; position isn't saved; the 254 s timeout isn't cleared; no "new device joined" feedback. Move to a header button with a countdown. *(Done 2026-11-08: `PairingButton` in the Home header, countdown from Z2M's `permit_join_end`, a toast per joined device.)*
 - [x] Sort toggle shows on the Groups view where it does nothing; sort, view and sidebar-collapsed choices aren't persisted. *(Fixed 2026-11-08: hidden on Groups; sort and view remembered; A-Z now sorts by name, not IEEE address.)*
 - [x] No loading or empty state (blank before the first fetch, nothing for zero devices). *(Done 2026-11-09: placeholder cards while loading, a retry if the hub doesn't answer, and a "No devices yet" card.)*
-- [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(Now 2200–6500 K.)*
+- [x] Colour temp slider shows "Warmth %" (hard-coded 153–455 mired) while Routines uses Kelvin. *(2026-11-09: everything is warmth % of each bulb's own range; the card shows just the number, e.g. "94%".)*
 - [ ] Waiting firmware updates are only visible inside each device's settings drawer. Add a small badge on the device card when `update.state` is `available` (and a progress hint while `updating`), so updates can be spotted without opening every device. (Logged 2026-11-09.)
 
 ## Groups
@@ -45,9 +45,10 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 ## Rooms
 
 - [x] The floor plan isn't a control surface: tapping a device only offers "Remove from room". Showing on/off on the icons and toggling with a tap is the main payoff of this tab. *(Done 2026-11-09: in View mode a tap switches lights and plugs; icons glow when on and show a dashed ring while a command is in flight. Edit mode keeps "Remove from room".)*
-- [ ] Placement needs "select a room, then click a device in the sidebar", otherwise a "Placement Error" modal. Drag from the sidebar or a "which room?" picker is easier.
+- [ ] Placement needs "select a room, then tap a device in the list" (the error modal became a hint on 2026-11-08). Dragging onto the plan or a "which room?" picker would be easier. On phones the Devices sheet covers the plan, so picking a room means closing it first.
+- [ ] On a phone the plan is zoomed out, so device icons are small and names overlap where devices sit close together (Aidan's Bedroom). Bigger markers, or zoom to a room on tap. Rooms now reopens on the last floor viewed.
 - [x] Rename is double-click only (no double-tap), so rooms can't be renamed on a phone. Rooms are always draggable, so panning on a phone moves them. Add a View/Edit toggle. *(Done 2026-11-08: View/Edit toggle; only the selected room drags; double-tap renames.)*
-- [x] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Done 2026-11-08: a "Devices" bottom sheet in Edit mode; the "pick a room first" error modal became a hint in the list.)* *(Partly fixed 2026-11-08: it took the full height and hid the floor plan completely; now a full-width strip of at most 40%. Also, the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
+- [x] On phones the device panel is a fixed `w-64` stacked under the canvas; use a bottom sheet. *(Done 2026-11-08: a "Devices" bottom sheet in Edit mode; the "pick a room first" error modal became a hint in the list. Along the way: the canvas was never measured because it mounts after the home check, so it stayed 1200×800 on every screen; found by `tests/layout`.)*
 - [x] Copy: "Autosaving soon..." rendered as a button; "F0" / "Floor 0" instead of `formatFloorName`; "Home Context Not Initialized" has no button to Settings → Home.
 
 ## Settings, login, shell
@@ -65,19 +66,40 @@ A pass over the whole frontend (`services/gateway/frontend/src`), done by readin
 - [x] **Priority: organise the list.** All routines show in one unsorted, ungrouped list, which gets hard to scan past a handful. Ideas: group by room or by trigger type (time, sun, device), or user-made folders/tags; sort by name, next run or last run; a search box; collapse disabled routines into their own section; show the next run time on each row. (Logged 2026-11-09.) *(Done 2026-11-09: compact rows, search, group by when it runs / room / none, sort by next run / name / last run, "Needs attention" and a collapsed "Off" section, a "Next up" line; choices remembered per device. User-made tags/folders deferred: they need a schema change.)*
 - [x] Device/group actions take colour temperature in mired (150–500); the fade action uses Kelvin (`ActionFields.tsx`). *(Fixed 2026-11-08: everything is mired underneath and shown as warmth %, scaled to each bulb's range, on cards, actions, fades, triggers and conditions.)*
 - [x] Closing the editor sheet discards unsaved edits without asking. *(Fixed 2026-11-08: swipe/outside/Escape asks; Cancel still closes directly.)*
-- [x] Icon buttons and chips are ~28px, below a 44px touch target. *(List rows fixed 2026-11-09: 44px switch, Run and ⋯ targets. The editor's own buttons are still small.)*
+- [ ] Icon buttons and chips are ~28px, below a 44px touch target. *(List rows fixed 2026-11-09: 44px switch, Run and ⋯ targets. The editor's own buttons and chips are still small.)*
+- [ ] User-made tags or folders for routines. Deferred 2026-11-09: needs a new column and a migration (Aidan's OK).
 
 ## Cross-cutting
 
 - [ ] `focus:outline-none` everywhere (including nav) hides keyboard focus; use `focus-visible:ring`.
 - [ ] Tooltips are hover-only (useless on touch) and icon buttons lack `aria-label`.
 - [ ] ~8 hand-rolled modals: none close on Escape, none trap focus. Move to shadcn `Dialog` / `AlertDialog`, which also replaces the `window.confirm` calls.
-- [ ] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above. *(`sonner` added 2026-11-08 and used for device and group actions; Settings, Rooms and Routines still have their own messages.)*
+- [ ] Every view invents its own status message. One toast system (shadcn `sonner`) would also serve the silent-failure item above. *(`sonner` added 2026-11-08: device, group, pairing, firmware, Lights off, memory editor, and Routines' Run now / Duplicate use it. Still their own: the Settings forms' inline banners, Rooms' save state, and the routine editor's save errors.)*
 - [x] Tabs aren't in the URL: refresh always lands on Home, Back leaves the app, no deep links. A `#routines` hash is cheap. *(Done 2026-11-08; the Spotify sign-in return now lands on Settings, so the callback runs.)*
 - [ ] No PWA manifest and no `viewport-fit=cover` / safe-area padding, so the bottom nav can sit under the iPhone home indicator. *(Safe-area padding done 2026-11-08; manifest still open.)*
 
-## Suggested order
+## Testing gaps
 
-1. Reconnection, Settings scroll, iOS zoom, then a toast system plus surfacing command failures.
-2. Whole-card toggles and fixing the device-type routing.
-3. The Rooms control surface.
+- [ ] `tests/layout` treats any `overflow: auto` box as a deliberate sideways scroller, and each tab's main area is one, so a row wider than the screen inside it passes. That's how the Routines long-name overflow (fixed 2026-11-09) got through. The check should only exempt boxes that are meant to scroll sideways.
+- [ ] Chat's red ✕ for a failed tool call hasn't been seen live (the test prompts didn't make a tool fail). The logic is `tool_outcome` in `services/agent/core/orchestrator.py`, shared with routine runs.
+
+## What's next (ranked, 2026-11-09)
+
+1. Rooms on a phone: bigger markers or zoom to a room (Rooms section).
+2. Offline badge on cards: turn on `last_seen` in Z2M first (Home section).
+3. Hub status on phones (Settings, login, shell).
+4. Voice input fixes (Agent chat).
+5. Groups: on/off state and brightness.
+6. Home profile: timezones, geocode feedback, reset warning.
+7. Proper dialogs (Escape, focus trap; replaces `window.confirm`).
+8. Remaining status messages onto toasts.
+9. Routine editor touch targets.
+10. Rooms device placement by drag or picker.
+11. Firmware badge on device cards.
+12. Accessibility: focus rings, `aria-label`s, touch-friendly tooltips.
+13. PWA manifest.
+14. Smaller Settings fixes: Spotify Disconnect confirm, "Connecting…" styling, API key field shown when unused.
+15. Chat suggestion chips.
+16. A never-pressed remote is classified as Other (`getDeviceKind` needs an `action` key, which Z2M only sends after a press; the exposes could tell instead).
+17. Whether the agent should talk about colour temperature as warmth % (adds prompt tokens; Aidan's call).
+18. Routine tags/folders (needs a migration).

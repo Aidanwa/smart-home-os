@@ -61,7 +61,7 @@ const MEASURE = `(() => {
   const r = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   const nav = document.querySelector('nav');
   const main = document.querySelector('main');
-  const fabBtn = [...document.querySelectorAll('main button')].find((b) => /Add Device|Pairing/.test(b.innerText));
+  const fabBtn = [...document.querySelectorAll('main button')].find((b) => /Add device|Pairing/i.test(b.innerText));
   // Elements that stick out past the right edge, unless a sideways scroller holds them on purpose.
   const overflow = [];
   for (const el of document.querySelectorAll('main *, nav *')) {

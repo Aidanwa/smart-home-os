@@ -18,15 +18,9 @@ Routines are built (2026-11-08; see the Routines section of CLAUDE.md). The next
 
 add admin account type with admin settings page that can edit all other users and permissions (no RBAC exists yet).
 
-## Mobile UI and general UI bugs
+## UI / UX
 
-Chat doesn't expand to full screen, margin at bottom.
-
-Bottom bar doesn't show on mobile, need to scroll to see it.
-
-Rooms canvas is unusable on mobile.
-
-General UI bug sweep.
+The detailed UX list, with what's done and a ranked queue, is [docs/ux-review.md](ux-review.md). The old mobile bugs here (bottom bar off-screen, Rooms canvas unusable on phones, chat layout) were fixed on 2026-11-08/09.
 
 # BIG FEATURES:
 
@@ -52,7 +46,7 @@ improve ui voice input to websocket instead of rest for faster processing.
 
 ## rooms
 
-add sorting by room to devices page.
+~~add sorting by room to devices page.~~ (done 2026-11-09: Home's "By room" grouping; Routines can group by room too)
 
 inform agent of device state by room organization
 
@@ -70,7 +64,7 @@ add scene integration options to groups/rooms
 
 add power on behavior adjustment
 
-automatic hardware updates for devices, like actually a version updates for the lightbulbs or whatever
+automatic hardware updates for devices, like actually a version updates for the lightbulbs or whatever (manual install from the device drawer works since 2026-11-09; automatic/scheduled updates are still open)
 
 # KNOWN BUGS:
 
