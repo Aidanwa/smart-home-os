@@ -38,6 +38,9 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
   const ctx = useMemo(() => ({ attributes, tempUnit }), [attributes]);
   const [panel, setPanel] = useState<Panel>(null);
+  // Delete from a card's menu. The routine stays set while the dialog animates closed.
+  const [deleting, setDeleting] = useState<Routine | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deepLink, setDeepLink] = useState<DeepLink>(parseDeepLink);
   useEffect(() => {
     const onHash = () => setDeepLink(parseDeepLink());
@@ -151,6 +154,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
           onRun={handleRun}
           onDuplicate={handleDuplicate}
           onReviewed={handleReviewed}
+          onDelete={r => { setDeleting(r); setConfirmDelete(true); }}
           onToggle={async r => {
             const err = await setEnabled(r.id, !r.enabled);
             if (err) toast.error(`Couldn’t turn ${r.enabled ? 'off' : 'on'} ${r.name}`, { description: err });
@@ -214,6 +218,26 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
         cancelLabel="Keep editing"
         destructive
         onConfirm={closePanel}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${deleting?.name ?? 'routine'}?`}
+        description="Its run history goes too. This can’t be undone."
+        confirmLabel="Delete"
+        busyLabel="Deleting…"
+        destructive
+        onConfirm={async () => {
+          if (!deleting) return;
+          const err = await remove(deleting.id);
+          if (err) {
+            toast.error(`Couldn’t delete ${deleting.name}`, { description: err });
+            throw new Error(err);  // keeps the confirm open
+          }
+          toast.success(`Deleted ${deleting.name}`);
+          // If its editor or history was open behind the dialog, close that too.
+          if (panel?.routine?.id === deleting.id) setPanel(null);
+        }}
       />
     </div>
   );

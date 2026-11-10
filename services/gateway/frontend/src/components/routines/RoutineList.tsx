@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -42,9 +42,10 @@ interface Props {
   onDuplicate: (r: Routine) => void;
   onToggle: (r: Routine) => void;
   onReviewed: (r: Routine) => void;
+  onDelete: (r: Routine) => void;
 }
 
-export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed }: Props) {
+export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed, onDelete }: Props) {
   const [groupBy, setGroupBy] = useStored<GroupBy>('routines.group', ['when', 'room', 'none'], 'when');
   const [sortBy, setSortBy] = useStored<SortBy>('routines.sort', ['next', 'name', 'last'], 'next');
   const [query, setQuery] = useState('');
@@ -189,7 +190,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
                 <div className={`grid grid-cols-1 gap-2 lg:grid-cols-2 ${s.tone === 'off' ? 'opacity-70' : ''}`}>
                   {s.routines.map(r => (
                     <RoutineRow key={r.id} r={r} summary={summaries.get(r.id) ?? ''} timezone={timezone} attention={s.tone === 'attention'}
-                      onOpen={() => onOpen(r)} onHistory={() => onHistory(r)} onRun={() => onRun(r)} onDuplicate={() => onDuplicate(r)} onToggle={() => onToggle(r)} onReviewed={() => onReviewed(r)} />
+                      onOpen={() => onOpen(r)} onHistory={() => onHistory(r)} onRun={() => onRun(r)} onDuplicate={() => onDuplicate(r)} onToggle={() => onToggle(r)} onReviewed={() => onReviewed(r)} onDelete={() => onDelete(r)} />
                   ))}
                 </div>
               )}
@@ -214,9 +215,9 @@ function Select({ label, value, onChange, options }: { label: string; value: str
   );
 }
 
-function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed }: {
+function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed, onDelete }: {
   r: Routine; summary: string; timezone: string; attention: boolean;
-  onOpen: () => void; onHistory: () => void; onRun: () => void; onDuplicate: () => void; onToggle: () => void; onReviewed: () => void;
+  onOpen: () => void; onHistory: () => void; onRun: () => void; onDuplicate: () => void; onToggle: () => void; onReviewed: () => void; onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -273,6 +274,8 @@ function RoutineRow({ r, summary, timezone, attention, onOpen, onHistory, onRun,
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-neutral-200 hover:bg-neutral-800"><History size={15} /> History</button>
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDuplicate(); }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-neutral-200 hover:bg-neutral-800"><Copy size={15} /> Duplicate</button>
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDelete(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10"><Trash2 size={15} /> Delete</button>
               </div>
             )}
           </div>
