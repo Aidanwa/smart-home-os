@@ -4,6 +4,7 @@ import { getDeviceKind } from '../../lib/deviceUtils';
 import { SmartPlugCard } from './SmartPlugCard';
 import { ColorLightCard } from './ColorLightCard';
 import { SensorCard } from './SensorCard';
+import { PresenceCard } from './PresenceCard';
 import { RemoteCard } from './RemoteCard';
 import { BasicSwitchCard } from './BasicSwitchCard';
 import { BaseDeviceCard } from './BaseDeviceCard';
@@ -38,6 +39,8 @@ function DeviceCard({ name, state, sendCommand, toggleDevice, renameDevice, dele
       return <SmartPlugCard {...manage} toggleDevice={toggleDevice} />;
     case 'switch':
       return <BasicSwitchCard {...manage} toggleDevice={toggleDevice} />;
+    case 'presence':
+      return <PresenceCard {...manage} sendCommand={sendCommand} />;
     case 'sensor':
     case 'climate':
       return <SensorCard {...manage} />;

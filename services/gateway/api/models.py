@@ -35,6 +35,16 @@ class DeviceState(BaseModel):
     vibration: Optional[bool] = None
     tamper: Optional[bool] = None
     action: Optional[str] = None
+    # Presence sensors (mmWave, e.g. Aqara FP300): presence is the radar+PIR verdict,
+    # pir_detection the PIR alone, target_distance metres to the nearest person.
+    presence: Optional[bool] = None
+    pir_detection: Optional[bool] = None
+    target_distance: Optional[float] = None
+    illuminance: Optional[float] = None
+    # Their settings (shown and set in the device drawer)
+    absence_delay_timer: Optional[int] = None
+    motion_sensitivity: Optional[str] = None
+    presence_detection_options: Optional[str] = None
     # Last message from the device (Z2M advanced.last_seen: ISO_8601)
     last_seen: Optional[str] = None
     # Z2M OTA status: {"state": "idle"|"available"|"scheduled"|"updating", "progress", ...}
@@ -60,6 +70,10 @@ class DeviceSetRequest(BaseModel):
     brightness: Optional[int] = Field(None, ge=0, le=254)
     color_temp: Optional[int] = Field(None, ge=150, le=500)
     transition: Optional[float] = Field(None, ge=0)
+    # Presence sensor settings (Z2M's FP300 ranges)
+    absence_delay_timer: Optional[int] = Field(None, ge=1, le=300)
+    motion_sensitivity: Optional[Literal["low", "medium", "high"]] = None
+    presence_detection_options: Optional[Literal["both", "mmwave", "pir"]] = None
 
     model_config = ConfigDict(extra="ignore")
 

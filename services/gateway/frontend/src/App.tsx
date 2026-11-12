@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, type ComponentProps } from 'react';
 import { useDevices, type DeviceState } from './hooks/useDevices';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
-  Lightbulb, Zap, Thermometer, ToggleRight, Box, Gamepad2, DoorOpen, MapPinOff, PowerOff, ChevronDown, Plug, RefreshCw
+  Lightbulb, Zap, Thermometer, ToggleRight, Box, Gamepad2, DoorOpen, MapPinOff, PowerOff, ChevronDown, Plug, RefreshCw, PersonStanding
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDeviceCategory, getDeviceKind } from './lib/deviceUtils';
@@ -111,6 +111,7 @@ function AuthenticatedDashboard() {
     const groups: Record<string, DeviceSection> = {
       'Lights': { id: 'lights', title: 'Lights', icon: <Lightbulb size={18} />, devices: [] },
       'Smart Plugs': { id: 'plugs', title: 'Smart Plugs', icon: <Zap size={18} />, devices: [] },
+      'Presence': { id: 'presence', title: 'Presence', icon: <PersonStanding size={18} />, devices: [] },
       'Sensors': { id: 'sensors', title: 'Sensors', icon: <Thermometer size={18} />, devices: [] },
       'Remotes': { id: 'remotes', title: 'Remotes', icon: <Gamepad2 size={18} />, devices: [] },
       'Switches': { id: 'switches', title: 'Switches', icon: <ToggleRight size={18} />, devices: [] },

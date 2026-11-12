@@ -72,7 +72,10 @@ class GatewayClient:
                 
                 attr_list = [
                     f"{k}: {v}" for k, v in attributes.items() 
-                    if k not in ('ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen')
+                    if k not in ('ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen',
+                                 # sensor settings and a distance that changes on every report
+                                 'absence_delay_timer', 'motion_sensitivity', 'presence_detection_options',
+                                 'target_distance', 'pir_detection')
                 ]
                 
                 attributes_string = ", ".join(attr_list)

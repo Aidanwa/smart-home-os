@@ -12,6 +12,7 @@ const DEVICE_PATHS = {
   light: "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.9 1.3 1.5 1.5 2.5 M9 18h6 M10 22h4 M9 18c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2",
   plug: "M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z",
   temp: "M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z",
+  person: "M13 5a1 1 0 1 1-2 0a1 1 0 1 1 2 0 M9 20l3-6 3 6 M6 8l6 2 6-2 M12 10v4",
   radio: "M4.9 19.1C1 15.2 1 8.8 4.9 4.9 M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5 M13.8 13.8 12 12 M22 12h-4 M18 9l-3 3 M18 15l-3-3"
 };
 
@@ -19,6 +20,7 @@ const getDeviceVisuals = (device: any) => {
   const name = device.friendly_name?.toLowerCase() || '';
   if (name.includes('light') || name.includes('lamp') || device.brightness !== undefined) return { path: DEVICE_PATHS.light, color: "#fbbf24" };
   if (name.includes('plug') || name.includes('outlet') || device.power !== undefined) return { path: DEVICE_PATHS.plug, color: "#34d399" };
+  if (device.presence !== undefined || device.occupancy !== undefined) return { path: DEVICE_PATHS.person, color: "#34d399" };
   if (name.includes('temp') || name.includes('sensor')) return { path: DEVICE_PATHS.temp, color: "#60a5fa" };
   return { path: DEVICE_PATHS.radio, color: "#a1a1aa" };
 };
@@ -58,11 +60,12 @@ function crowdedMarkers(points: { id: string; x: number; y: number }[], markerSc
   return crowded;
 }
 
-/** A device's dot on the plan. Switchable devices glow when on and pulse while a command is in flight. */
-function DeviceMarker({ device, color, path, name }: { device: { state?: unknown }; color: string; path: string; name: string }) {
+/** A device's dot on the plan. Switchable devices glow when on and pulse while a command is in flight;
+ *  presence and motion sensors glow while someone's there. */
+function DeviceMarker({ device, color, path, name }: { device: { state?: unknown; presence?: unknown; occupancy?: unknown }; color: string; path: string; name: string }) {
   const busy = usePending(name);
   const switchable = typeof device.state === 'string';
-  const isOn = device.state === 'ON';
+  const isOn = device.state === 'ON' || device.presence === true || device.occupancy === true;
   return (
     <>
       {isOn && <Circle radius={20} fill={color} opacity={0.22} listening={false} />}

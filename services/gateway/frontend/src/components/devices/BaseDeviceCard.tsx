@@ -11,6 +11,8 @@ interface BaseDeviceCardProps {
   icon: React.ReactNode;
   iconColorClass?: string;
   subtitle?: React.ReactNode;
+  /** Draw the card lit, as a light that's on is (default: `state.state === 'ON'`). */
+  active?: boolean;
   /** When set, tapping anywhere on the card (outside its own controls) calls it. */
   onToggle?: () => void;
   children?: React.ReactNode;
@@ -25,6 +27,7 @@ export function BaseDeviceCard({
   icon,
   iconColorClass = 'text-neutral-500 bg-neutral-800',
   subtitle,
+  active,
   onToggle,
   children,
   advancedConfig,
@@ -32,7 +35,7 @@ export function BaseDeviceCard({
   deleteDevice,
 }: BaseDeviceCardProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const isOn = state.state === 'ON';
+  const isOn = active ?? state.state === 'ON';
   const lowBattery = isBatteryLow(state);
   // Z2M's OTA status: update.state is idle | available | scheduled | updating
   const ota = state.update?.state;

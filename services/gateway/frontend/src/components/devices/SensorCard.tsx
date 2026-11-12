@@ -1,5 +1,6 @@
 import { DoorClosed, DoorOpen, Droplets, Flame, Activity, Thermometer, ShieldAlert } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
+import { formatTemperature } from '../../lib/deviceUtils';
 import { BaseDeviceCard } from './BaseDeviceCard';
 
 interface Props {
@@ -22,21 +23,16 @@ function primaryReading(s: DeviceState): Reading | null {
   if (s.contact !== undefined) return s.contact
     ? { text: 'Closed', alert: false, icon: <DoorClosed size={22} strokeWidth={2.5} /> }
     : { text: 'Open', alert: true, icon: <DoorOpen size={22} strokeWidth={2.5} /> };
-  if (s.occupancy !== undefined) return { text: s.occupancy ? 'Motion' : 'No motion', alert: !!s.occupancy, icon: <Activity size={22} strokeWidth={2.5} /> };
   if (s.vibration !== undefined) return { text: s.vibration ? 'Vibration' : 'Still', alert: !!s.vibration, icon: <Activity size={22} strokeWidth={2.5} /> };
   return null;
 }
 
 export function SensorCard({ name, state, renameDevice, deleteDevice }: Props) {
   const reading = primaryReading(state);
-  const hasTemp = typeof state.temperature === 'number';
-  const temperature = hasTemp
-    ? (state.temperature_units === 'fahrenheit' ? Math.round(state.temperature! * 9 / 5 + 32) : state.temperature)
-    : null;
-  const unit = state.temperature_units === 'fahrenheit' ? 'F' : 'C';
+  const temp = formatTemperature(state);
 
   const details: string[] = [];
-  if (reading && hasTemp) details.push(`${temperature}°${unit}`);
+  if (reading && temp) details.push(`${temp.value}°${temp.unit}`);
   if (state.humidity !== undefined) details.push(`${state.humidity}% humidity`);
   if (state.tamper) details.push('Tampered');
 
@@ -59,10 +55,10 @@ export function SensorCard({ name, state, renameDevice, deleteDevice }: Props) {
         <span className={`text-3xl font-light tracking-tight ${reading.alert ? 'text-amber-300' : 'text-neutral-200'}`}>
           {reading.text}
         </span>
-      ) : hasTemp ? (
+      ) : temp ? (
         <div className="flex items-baseline gap-1 text-neutral-200">
-          <span className="text-4xl font-light tracking-tight">{temperature}</span>
-          <span className="text-sm font-medium text-neutral-500">°{unit}</span>
+          <span className="text-4xl font-light tracking-tight">{temp.value}</span>
+          <span className="text-sm font-medium text-neutral-500">°{temp.unit}</span>
         </div>
       ) : null}
     </BaseDeviceCard>
