@@ -111,7 +111,7 @@ export function BaseDeviceCard({
 
         {/* Bottom row: name and status */}
         <div className={`relative mt-auto pointer-events-none ${children ? 'pt-4' : 'pt-3'}`}>
-          <h3 className="font-semibold text-base leading-tight text-neutral-200 line-clamp-2 pr-2">
+          <h3 className="font-semibold text-base leading-tight text-neutral-200 line-clamp-2 pr-2 [overflow-wrap:anywhere]">
             {name}
           </h3>
           {subtitle && (

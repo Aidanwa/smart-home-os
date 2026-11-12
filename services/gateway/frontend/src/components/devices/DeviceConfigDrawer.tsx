@@ -177,27 +177,29 @@ export function DeviceConfigDrawer({
                 autoFocus
                 value={editDraft}
                 onChange={(e) => setEditDraft(e.target.value)}
-                className="bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xl font-medium tracking-tight focus:outline-none focus:border-blue-500 text-white w-full"
+                className="bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xl font-medium tracking-tight focus:outline-none focus:border-blue-500 text-white min-w-0 flex-1"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleRenameSubmit();
                   if (e.key === 'Escape') setIsEditing(false);
                 }}
               />
               <Tooltip text="Save">
-                <button onClick={handleRenameSubmit} className="p-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
+                <button onClick={handleRenameSubmit} aria-label="Save name" className="shrink-0 p-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
                   <Check size={18} />
                 </button>
               </Tooltip>
               <Tooltip text="Cancel">
-                <button onClick={() => setIsEditing(false)} className="p-2 rounded-lg bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition-colors">
+                <button onClick={() => setIsEditing(false)} aria-label="Cancel rename" className="shrink-0 p-2 rounded-lg bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition-colors">
                   <X size={18} />
                 </button>
               </Tooltip>
             </div>
           ) : (
-            <div className="flex items-start justify-between group">
-              <div className="flex flex-col">
-                <SheetTitle className="text-2xl font-semibold tracking-tight text-white pr-4">
+            <div className="flex items-start justify-between gap-2 group">
+              {/* min-w-0 + overflow-wrap: a long name with no spaces (an IEEE address) wraps
+                  instead of pushing the rename button off a phone screen. */}
+              <div className="flex flex-col min-w-0 flex-1">
+                <SheetTitle className="text-2xl font-semibold tracking-tight text-white [overflow-wrap:anywhere]">
                   {name}
                 </SheetTitle>
                 {state.ieee_address && (
@@ -209,7 +211,8 @@ export function DeviceConfigDrawer({
               <Tooltip text="Rename Device">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="p-2 rounded-full text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors mt-1"
+                  aria-label="Rename device"
+                  className="shrink-0 p-2 rounded-full text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors mt-1"
                 >
                   <Pencil size={16} />
                 </button>
