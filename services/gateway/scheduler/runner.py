@@ -22,9 +22,11 @@ def _now() -> datetime:
 
 
 async def execute(bus: AsyncMqttBus, routine_id: uuid.UUID, name: str, run_id: uuid.UUID,
-                  spec: RoutineSpec, owner_id, is_stopping) -> str:
-    """Runs every action, persisting progress after each step. Returns the final status."""
-    ctx = RunContext(bus=bus, owner_id=str(owner_id), routine_id=routine_id, routine_name=name)
+                  spec: RoutineSpec, owner_id, is_stopping, chain: tuple = (), call_routine=None) -> str:
+    """Runs every action, persisting progress after each step. Returns the final status.
+    `chain` is the routines that called this one (oldest first), for routine actions."""
+    ctx = RunContext(bus=bus, owner_id=str(owner_id), routine_id=routine_id, routine_name=name,
+                     chain=(*chain, routine_id), call_routine=call_routine)
     steps: list[dict] = []
     background: list[tuple[dict, asyncio.Task, float]] = []
     status = "running"
@@ -80,8 +82,10 @@ async def execute(bus: AsyncMqttBus, routine_id: uuid.UUID, name: str, run_id: u
             await store.update_run(run_id, steps=steps)
 
         failures = sum(1 for s in steps if s["status"] == "failed")
-        # an agent step skipped by its hourly cap means the routine didn't do everything asked
-        partials = sum(1 for s in steps if s["status"] == "partial" or (s["type"] == "agent" and s["status"] == "skipped"))
+        # an agent step skipped by its hourly cap, or a routine that couldn't be started (turned
+        # off, or already running), means the routine didn't do everything asked
+        partials = sum(1 for s in steps if s["status"] == "partial"
+                       or (s["type"] in ("agent", "routine") and s["status"] == "skipped"))
         if stopped_early or (failures and failures == len(steps)):
             status = "failed"
         elif failures or partials:

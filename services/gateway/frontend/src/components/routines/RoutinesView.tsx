@@ -179,6 +179,8 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                 tempUnit={tempUnit}
                 timezone={timezone}
                 preview={preview}
+                routineId={editing?.id}
+                routineOptions={routines.filter(r => r.id !== editing?.id && !r.done).map(r => ({ id: r.id, name: r.name, enabled: r.enabled }))}
                 onSave={async spec => {
                   const err = await save(spec, editing?.id);
                   if (!err) closePanel();

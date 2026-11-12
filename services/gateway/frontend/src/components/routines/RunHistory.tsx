@@ -9,7 +9,7 @@ interface Props {
   fetchRuns: (id: string) => Promise<RoutineRun[]>;
 }
 
-const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', manual: 'Run now' };
+const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', manual: 'Run now', routine: 'Called' };
 
 export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
@@ -74,6 +74,7 @@ export function RunItem({ run, timezone, expanded, onToggle, title, timeOnly, fo
               {typeof run.trigger_detail.held_s === 'number' ? ` (held ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
             </p>
           )}
+          {typeof run.trigger_detail?.called_by === 'string' && <p className="text-neutral-400">Started by the routine {run.trigger_detail.called_by}</p>}
           {run.error && <p className="text-red-400 whitespace-pre-line">{run.error}</p>}
           {run.steps.map((s, i) => <StepRow key={`${s.id}-${i}`} step={s} />)}
           {footer}
@@ -96,6 +97,7 @@ function StepRow({ step }: { step: RunStep }) {
     : step.type === 'spotify_play' ? `Play ${String(d.playing ?? '')} on ${String(d.speaker ?? '')}`
     : step.type === 'spotify_ctrl' ? `${String(d.cmd ?? '')} on ${String(d.speaker ?? '')}`
     : step.type === 'agent' ? 'Ask the agent'
+    : step.type === 'routine' ? `Run ${String(d.routine ?? 'routine')}${d.wait ? ' and wait' : ''}${typeof d.outcome === 'string' ? `: ${d.outcome}` : ''}`
     : step.type === 'notify' ? `Notify ${d.to === 'everyone' ? 'everyone' : 'owner'}: ${String(d.title ?? '')}${typeof d.devices === 'number' ? ` (${d.sent ?? 0} of ${d.devices} device${d.devices === 1 ? '' : 's'})` : ''}`
     : `${target ?? step.type}${d.sent ? ` → ${Object.entries(d.sent as Record<string, unknown>).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`;
   const notes = ['message', 'ramp', 'ramp_stopped', 'stopped_early', 'note']

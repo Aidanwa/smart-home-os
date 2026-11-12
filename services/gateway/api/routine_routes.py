@@ -19,7 +19,8 @@ from api.auth import get_current_user
 from scheduler.engine import Scheduler
 from scheduler import agent_client
 from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, NotifyAction,
-                              RoutineSpec, SpotifyCtrlAction, SpotifyPlayAction, is_one_time, leaf_conditions)
+                              RoutineAction, RoutineSpec, SpotifyCtrlAction, SpotifyPlayAction, is_one_time,
+                              leaf_conditions)
 from core import push
 from scheduler.timing import upcoming
 
@@ -87,6 +88,49 @@ def _require_location_for_sun(spec: RoutineSpec, sched: Scheduler):
         raise HTTPException(status_code=422, detail="Sunrise/sunset needs the home location: set your address in Settings → Home first.")
 
 
+def _called(actions) -> list[str]:
+    """Routine ids that a routine's actions start (parsed actions or the stored JSON)."""
+    out = []
+    for a in actions or []:
+        kind, target = (a.get("type"), a.get("routine")) if isinstance(a, dict) else (a.type, getattr(a, "routine", None))
+        if kind == "routine" and target:
+            out.append(str(target))
+    return out
+
+
+async def _check_calls(db: AsyncSession, spec: RoutineSpec, routine_id: uuid.UUID | None):
+    """Routine actions must name existing routines and must not lead back to this one."""
+    targets = _called(spec.actions)
+    if not targets:
+        return
+    rows = (await db.execute(select(Routine.id, Routine.name, Routine.actions))).all()
+    names = {str(i): n for i, n, _ in rows}
+    calls = {str(i): _called(acts) for i, _, acts in rows}
+    me = str(routine_id) if routine_id else None
+    for t in targets:
+        if t not in names:
+            raise HTTPException(status_code=422, detail=f"A 'run routine' action names a routine that doesn't exist ({t})")
+    if me is None:
+        return  # a new routine: nothing can call it yet
+    calls[me] = targets
+    names[me] = spec.name
+
+    def path_back(node: str, seen: list[str]) -> list[str] | None:
+        for nxt in calls.get(node, []):
+            if nxt == me:
+                return seen + [nxt]
+            if nxt not in seen:
+                found = path_back(nxt, seen + [nxt])
+                if found:
+                    return found
+        return None
+
+    loop = path_back(me, [me])
+    if loop:
+        chain = " → ".join(names.get(i, i) for i in loop)
+        raise HTTPException(status_code=422, detail=f"Routines can't call each other in a loop: {chain}")
+
+
 async def _get_or_404(db: AsyncSession, routine_id: uuid.UUID) -> Routine:
     r = await db.get(Routine, routine_id)
     if not r:
@@ -113,6 +157,7 @@ async def list_routines(db: AsyncSession = Depends(get_db), user=Depends(get_cur
 async def create_routine(spec: RoutineSpec, db: AsyncSession = Depends(get_db),
                          user: User = Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
     _require_location_for_sun(spec, sched)
+    await _check_calls(db, spec, None)
     r = Routine(owner_user_id=user.id)
     _apply(r, spec)
     db.add(r)
@@ -123,11 +168,19 @@ async def create_routine(spec: RoutineSpec, db: AsyncSession = Depends(get_db),
 
 
 @router.post("/preview")
-async def preview_routine(spec: RoutineSpec, request: Request, user=Depends(get_current_user),
+async def preview_routine(spec: RoutineSpec, request: Request, routine_id: uuid.UUID | None = None,
+                          db: AsyncSession = Depends(get_db), user=Depends(get_current_user),
                           sched: Scheduler = Depends(get_scheduler)):
-    """Validates a draft (422 on errors) and returns upcoming fire times plus non-fatal warnings."""
+    """Validates a draft (422 on errors) and returns upcoming fire times plus non-fatal warnings.
+    `routine_id`: the routine being edited, so routine actions that would loop are caught."""
     bus = request.app.state.bus
+    await _check_calls(db, spec, routine_id)
     warnings = []
+    if _called(spec.actions):
+        off = {str(i): n for i, n in (await db.execute(select(Routine.id, Routine.name).where(Routine.enabled.is_(False)))).all()}
+        for a in spec.actions:
+            if isinstance(a, RoutineAction) and str(a.routine) in off:
+                warnings.append(f"Action {a.id}: {off[str(a.routine)]} is turned off, so it won't run")
     raw_groups = await bus.redis.get("gateway:groups")
     group_ids = {g.get("id") for g in json.loads(raw_groups)} if raw_groups else set()
     twin = {k: json.loads(v) for k, v in (await bus.redis.hgetall("gateway:digital_twin")).items()}
@@ -303,6 +356,7 @@ async def update_routine(routine_id: uuid.UUID, spec: RoutineSpec, db: AsyncSess
                          user=Depends(get_current_user), sched: Scheduler = Depends(get_scheduler)):
     r = await _get_or_404(db, routine_id)
     _require_location_for_sun(spec, sched)
+    await _check_calls(db, spec, routine_id)
     _apply(r, spec)
     await db.commit()
     await db.refresh(r)

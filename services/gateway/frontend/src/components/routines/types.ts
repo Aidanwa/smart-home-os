@@ -105,13 +105,15 @@ export type Action =
       speaker: string | null; volume: number | null; stop_on_error: boolean;
     }
   | { id: string; type: 'agent'; prompt: string; notify?: 'owner' | 'everyone' | null; stop_on_error: boolean }
-  | { id: string; type: 'notify'; title: string | null; message: string; to: 'owner' | 'everyone'; stop_on_error: boolean };
+  | { id: string; type: 'notify'; title: string | null; message: string; to: 'owner' | 'everyone'; stop_on_error: boolean }
+  /** Start another routine (by id) as its own run; wait = finish it before the next action. */
+  | { id: string; type: 'routine'; routine: string; wait: boolean; check_conditions: boolean; stop_on_error: boolean };
 
 export const AGENT_RUNS_PER_HOUR = 2;  // mirrors scheduler/schema.py
 
 export const ACTION_LABEL: Record<Action['type'], string> = {
   device: 'Device', group: 'Group', delay: 'Wait', fade: 'Fade', spotify_play: 'Play music', spotify_ctrl: 'Music control',
-  agent: 'Ask the agent', notify: 'Notify',
+  agent: 'Ask the agent', notify: 'Notify', routine: 'Run routine',
 };
 
 

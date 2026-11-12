@@ -96,8 +96,9 @@ export function useRoutines() {
     return res.ok ? (res.data as RoutineRun[]) : [];
   };
 
-  const preview = async (spec: RoutineSpec): Promise<{ result: PreviewResult | null; error: string | null }> => {
-    const res = await call('/api/routines/preview', { method: 'POST', body: JSON.stringify(spec) });
+  const preview = async (spec: RoutineSpec, routineId?: string): Promise<{ result: PreviewResult | null; error: string | null }> => {
+    const qs = routineId ? `?routine_id=${encodeURIComponent(routineId)}` : '';
+    const res = await call(`/api/routines/preview${qs}`, { method: 'POST', body: JSON.stringify(spec) });
     return { result: res.ok ? (res.data as PreviewResult) : null, error: res.error };
   };
 

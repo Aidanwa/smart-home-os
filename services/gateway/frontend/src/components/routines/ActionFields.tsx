@@ -12,7 +12,11 @@ export interface ActionFieldsProps {
   onChange: (a: Action) => void;
   deviceOptions: { ieee: string; name: string; hasColorTemp: boolean; hasBrightness: boolean; range: MiredRange }[];
   groups: GroupInfo[];
+  /** Routines a 'run routine' action can start (the one being edited is left out). */
+  routineOptions: RoutineOption[];
 }
+
+export interface RoutineOption { id: string; name: string; enabled: boolean }
 
 /** A group's warmth scale spans all its members' ranges. */
 function groupRange(group: GroupInfo | undefined, deviceOptions: ActionFieldsProps['deviceOptions']): MiredRange {
@@ -20,8 +24,9 @@ function groupRange(group: GroupInfo | undefined, deviceOptions: ActionFieldsPro
   return unionRange(deviceOptions.filter(d => d.hasColorTemp && members.has(d.ieee)).map(d => d.range));
 }
 
-export function ActionFields({ action, onChange, deviceOptions, groups }: ActionFieldsProps) {
+export function ActionFields({ action, onChange, deviceOptions, groups, routineOptions }: ActionFieldsProps) {
   if (action.type === 'delay') return <DelayFields action={action} onChange={onChange} />;
+  if (action.type === 'routine') return <RoutineCallFields action={action} onChange={onChange} options={routineOptions} />;
   if (action.type === 'spotify_play') return <MusicFields action={action} onChange={onChange} />;
   if (action.type === 'spotify_ctrl') return <MusicCtrlFields action={action} onChange={onChange} />;
   if (action.type === 'agent') return <AgentFields action={action} onChange={onChange} />;
@@ -381,6 +386,39 @@ export function AgentFields({ action, onChange }: { action: AgentAction; onChang
       <p className="text-xs text-amber-400/90">
         Uses the AI: costs tokens and can do things a little differently each time. Runs at most {AGENT_RUNS_PER_HOUR}× per hour for this routine;
         extra triggers skip this step. Its reply and everything it did show in History.
+      </p>
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
+        Stop the routine if this fails
+      </label>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ run another routine
+
+type RoutineCallAction = Extract<Action, { type: 'routine' }>;
+
+export function RoutineCallFields({ action, onChange, options }: { action: RoutineCallAction; onChange: (a: Action) => void; options: RoutineOption[] }) {
+  const selected = options.find(o => o.id === action.routine);
+  return (
+    <div className="space-y-2">
+      <select className={input} value={action.routine} onChange={e => onChange({ ...action, routine: e.target.value })}>
+        {!selected && <option value={action.routine}>{action.routine ? 'Missing routine (deleted?)' : 'Pick a routine'}</option>}
+        {options.map(o => <option key={o.id} value={o.id}>{o.name}{o.enabled ? '' : ' (off)'}</option>)}
+      </select>
+      {selected && !selected.enabled && <p className="text-xs text-amber-400">That routine is turned off, so it won’t run until you turn it back on.</p>}
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.wait} onChange={e => onChange({ ...action, wait: e.target.checked })} />
+        Wait for it to finish before the next action
+      </label>
+      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.check_conditions} onChange={e => onChange({ ...action, check_conditions: e.target.checked })} />
+        Only if its own conditions pass
+      </label>
+      <p className="text-xs text-neutral-500">
+        It runs as its own routine and shows in its own history. {action.check_conditions ? 'If its conditions don’t pass, it’s skipped.' : 'Its conditions are ignored, like Run now.'}
+        {action.wait ? ' If it fails, this step fails too.' : ''}
       </p>
       <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
         <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />

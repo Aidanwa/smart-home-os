@@ -44,6 +44,9 @@ ACTIONS (in order):
  {"type":"notify","title":str or null (null = routine name),"message":str,"to":"owner"|"everyone"}
   Push notification to the phone app. "owner" = the user you're talking to. E.g. "remind me at 6 to take
   the bins out" = one-time time trigger + notify; "tell me when the washer is done" = power trigger + notify.
+ {"type":"routine","routine":ROUTINE_NAME,"wait":false,"check_conditions":false}
+  Starts another routine (its own run). wait: finish it before the next action. check_conditions: obey its
+  conditions (default: ignored, like Run now). Off routines don't run; loops are refused.
 Values are device-native: temperature is always °C (convert from °F), brightness 0-254 (50% = 127).
 """
 
@@ -51,7 +54,8 @@ Values are device-native: temperature is always °C (convert from °F), brightne
 _SPEC_FIELDS = ("name", "description", "enabled", "mode", "grace_minutes", "triggers", "conditions", "actions")
 
 # Fields left out of rt_list output when they hold their default (saves tokens; rt_save fills them back in).
-_DEFAULTS = {"stop_on_error": False, "wait": False, "fire_on_start": False, "cooldown_s": 0, "method": "native"}
+_DEFAULTS = {"stop_on_error": False, "wait": False, "check_conditions": False, "fire_on_start": False, "cooldown_s": 0,
+             "method": "native"}
 
 
 def _strip_nulls(v):
@@ -71,12 +75,17 @@ class RoutineTools:
     async def _call(self, user_id, method: str, path: str, **kw):
         return await self.gw.client.request(method, path, cookies=self.gw._mint_user_context_cookie(user_id), **kw)
 
-    async def _names(self, user_id) -> tuple[dict, dict]:
-        """({ieee: device name}, {group id: group name})."""
+    async def _names(self, user_id, routines: list | None = None) -> tuple[dict, dict, dict]:
+        """({ieee: device name}, {group id: group name}, {routine id: routine name}).
+        Pass `routines` (the /api/routines list) when it's already fetched."""
         devs = (await self._call(user_id, "GET", "/api/devices")).json().get("devices", {})
         groups = (await self._call(user_id, "GET", "/api/groups")).json() or []
+        if routines is None:
+            res = await self._call(user_id, "GET", "/api/routines")
+            routines = res.json().get("routines", []) if res.status_code == 200 else []
         return ({ieee: d.get("friendly_name", ieee) for ieee, d in devs.items()},
-                {g["id"]: g["friendly_name"] for g in groups})
+                {g["id"]: g["friendly_name"] for g in groups},
+                {r["id"]: r["name"] for r in routines})
 
     # ---------------------------------------------------------------- name translation
 
@@ -92,13 +101,20 @@ class RoutineTools:
         for a in routine.get("actions") or []:
             yield a
 
-    def _to_ids(self, routine: dict, devices: dict, groups: dict) -> list[str]:
+    def _to_ids(self, routine: dict, devices: dict, groups: dict, routines: dict) -> list[str]:
         dev_by_name = {n.lower(): ieee for ieee, n in devices.items()}
         grp_by_name = {n.lower(): gid for gid, n in groups.items()}
+        rt_by_name = {n.lower(): rid for rid, n in routines.items()}
         problems = []
         for item in self._walk(routine):
             if not isinstance(item, dict):
                 continue
+            if item.get("type") == "routine" and isinstance(item.get("routine"), str):
+                r = item["routine"]
+                if r.lower() in rt_by_name:
+                    item["routine"] = rt_by_name[r.lower()]
+                elif r not in routines:
+                    problems.append(f"unknown routine '{r}' (routines: {', '.join(sorted(routines.values())) or 'none'})")
             d = item.get("device")
             if isinstance(d, str) and d and not d.startswith("0x"):
                 if d.lower() in dev_by_name:
@@ -117,9 +133,11 @@ class RoutineTools:
             problems.append(f"devices: {', '.join(sorted(devices.values()))}; groups: {', '.join(sorted(groups.values())) or 'none'}")
         return problems
 
-    def _to_names(self, routine: dict, devices: dict, groups: dict) -> dict:
+    def _to_names(self, routine: dict, devices: dict, groups: dict, routines: dict) -> dict:
         for item in self._walk(routine):
             if isinstance(item, dict):
+                if item.get("type") == "routine" and item.get("routine") in routines:
+                    item["routine"] = routines[item["routine"]]
                 if isinstance(item.get("device"), str) and item["device"] in devices:
                     item["device"] = devices[item["device"]]
                 if isinstance(item.get("group"), int) and item["group"] in groups:
@@ -145,9 +163,9 @@ class RoutineTools:
             return None
         return datetime.fromisoformat(iso).astimezone(ZoneInfo(tz)).strftime("%a %d %b %H:%M")
 
-    def _brief(self, r: dict, tz: str, devices: dict, groups: dict) -> dict:
+    def _brief(self, r: dict, tz: str, devices: dict, groups: dict, routines: dict) -> dict:
         definition = {k: r.get(k) for k in ("mode", "grace_minutes", "triggers", "conditions", "actions")}
-        definition = _strip_nulls(self._to_names(json.loads(json.dumps(definition)), devices, groups))
+        definition = _strip_nulls(self._to_names(json.loads(json.dumps(definition)), devices, groups, routines))
         if definition.get("mode") == "single":
             definition.pop("mode")
         if definition.get("grace_minutes") == 5:
@@ -171,12 +189,12 @@ class RoutineTools:
         if res.status_code != 200:
             return {"status": "error", "message": f"Couldn't list routines (HTTP {res.status_code})"}
         data = res.json()
-        devices, groups = await self._names(user_id)
+        devices, groups, routines = await self._names(user_id, data["routines"])
         # Reminders that already fired are history, not something to edit: leave them out.
         done = [r for r in data["routines"] if r.get("done")]
         live = [r for r in data["routines"] if r not in done]
         out = {"status": "success", "timezone": data["timezone"],
-               "routines": [self._brief(r, data["timezone"], devices, groups) for r in live]}
+               "routines": [self._brief(r, data["timezone"], devices, groups, routines) for r in live]}
         if done:
             out["finished_reminders_hidden"] = len(done)
         return out
@@ -197,8 +215,8 @@ class RoutineTools:
                 return {"status": "error", "message": f"No routine with id {id}; use rt_list."}
             saved = cur.json()
             body = {**{k: saved[k] for k in _SPEC_FIELDS if k in saved}, **body}
-        devices, groups = await self._names(user_id)
-        problems = self._to_ids(body, devices, groups)
+        devices, groups, routines = await self._names(user_id)
+        problems = self._to_ids(body, devices, groups, routines)
         if problems:
             return {"status": "error", "message": "; ".join(problems)}
         self._fill_ids(body)
@@ -216,8 +234,10 @@ class RoutineTools:
         if res.status_code not in (200, 201):
             return {"status": "error", "message": f"Gateway refused the routine (HTTP {res.status_code}): {res.text[:200]}"}
         saved = res.json()
-        tz = (await self._call(user_id, "GET", "/api/routines")).json().get("timezone", "UTC")
-        brief = self._brief(saved, tz, devices, groups)
+        listing = (await self._call(user_id, "GET", "/api/routines")).json()
+        tz = listing.get("timezone", "UTC")
+        routines = {r["id"]: r["name"] for r in listing.get("routines", [])}
+        brief = self._brief(saved, tz, devices, groups, routines)
         message = "Saved. Read back what it does in one short sentence."
         if saved.get("done"):
             message = "Saved, but that time has already passed, so it won't run. Fix the date/time with rt_save."

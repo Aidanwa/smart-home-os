@@ -5,7 +5,7 @@ import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
 import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, TempUnit, Trigger } from './types';
 import { ACTION_LABEL, formatInTz, joinConditions, nextId, splitConditions } from './types';
-import { ActionFields } from './ActionFields';
+import { ActionFields, type RoutineOption } from './ActionFields';
 import { findInfo } from './fieldLogic';
 import { miredRange } from '../../lib/colorTemp';
 import { NumberField } from './NumberField';
@@ -24,7 +24,11 @@ interface Props {
   attributes: AttributeMap;
   tempUnit: TempUnit;
   timezone: string;
-  preview: (spec: RoutineSpec) => Promise<{ result: PreviewResult | null; error: string | null }>;
+  preview: (spec: RoutineSpec, routineId?: string) => Promise<{ result: PreviewResult | null; error: string | null }>;
+  /** Other routines, for 'Run routine' actions (the one being edited is left out). */
+  routineOptions: RoutineOption[];
+  /** The routine being edited (undefined for a new one), so the preview can catch call loops. */
+  routineId?: string;
   onSave: (spec: RoutineSpec) => Promise<string | null>;
   onDelete?: () => Promise<void>;
   onCancel: () => void;
@@ -34,7 +38,7 @@ interface Props {
 
 const addBtn = 'flex items-center gap-1.5 px-3 min-h-11 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
 
-export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, onSave, onDelete, onCancel, onDirtyChange }: Props) {
+export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, routineOptions, routineId, onSave, onDelete, onCancel, onDirtyChange }: Props) {
   const [spec, setSpec] = useState<RoutineSpec>(initial);
   // Snapshot once: the parent builds `initial` afresh on every render (and a new routine gets new ids).
   const [initialJson] = useState(() => JSON.stringify(initial));
@@ -60,10 +64,10 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
 
   // Live validation + next fire times, debounced. Only meaningful once there's a name and an action.
   const previewable = spec.name.trim().length > 0 && spec.actions.length > 0
-    && !spec.actions.some(a => (a.type === 'spotify_play' && !a.uri) || (a.type === 'agent' && !a.prompt.trim()) || (a.type === 'notify' && !a.message.trim()));
+    && !spec.actions.some(a => (a.type === 'spotify_play' && !a.uri) || (a.type === 'agent' && !a.prompt.trim()) || (a.type === 'notify' && !a.message.trim()) || (a.type === 'routine' && !a.routine));
   useEffect(() => {
     if (!previewable) return;
-    const handle = setTimeout(() => preview(spec).then(setPv), 400);
+    const handle = setTimeout(() => preview(spec, routineId).then(setPv), 400);
     return () => clearTimeout(handle);
   }, [spec]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -84,6 +88,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   const missingMusic = spec.actions.some(a => a.type === 'spotify_play' && !a.uri);
   const emptyPrompt = spec.actions.some(a => a.type === 'agent' && !a.prompt.trim());
   const emptyMessage = spec.actions.some(a => a.type === 'notify' && !a.message.trim());
+  const noRoutinePicked = spec.actions.some(a => a.type === 'routine' && !a.routine);
 
   const handleSave = async () => {
     setSaving(true);
@@ -187,11 +192,11 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
                 <button type="button" className={`${iconBtn} hover:text-red-400`} onClick={() => patch({ actions: without(spec.actions, i) })} aria-label="Remove"><Trash2 size={16} /></button>
               </div>
             </div>
-            <ActionFields action={a} onChange={na => patch({ actions: setAt<Action>(spec.actions, i, na) })} deviceOptions={deviceOptions} groups={groups} />
+            <ActionFields action={a} onChange={na => patch({ actions: setAt<Action>(spec.actions, i, na) })} deviceOptions={deviceOptions} groups={groups} routineOptions={routineOptions} />
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          {(['device', 'group', 'fade', 'delay', 'notify', 'spotify_play', 'spotify_ctrl', 'agent'] as const).map(t => (
+          {(['device', 'group', 'fade', 'delay', 'notify', 'routine', 'spotify_play', 'spotify_ctrl', 'agent'] as const).map(t => (
             <button key={t} type="button" onClick={() => addAction(t)} className={addBtn}>
               <Plus size={14} /> {ACTION_LABEL[t]}
             </button>
@@ -228,6 +233,8 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           <p className="text-amber-400">Write an instruction for the Ask the agent action.</p>
         ) : emptyMessage ? (
           <p className="text-amber-400">Write a message for the Notify action.</p>
+        ) : noRoutinePicked ? (
+          <p className="text-amber-400">Pick which routine the Run routine action starts.</p>
         ) : !previewable ? (
           <p className="text-neutral-500">Add a name and at least one action to see when it will run.</p>
         ) : pv.error ? (

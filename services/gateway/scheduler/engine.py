@@ -19,6 +19,7 @@ from core.mqtt_bus import AsyncMqttBus
 from shared.database.core import engine as db_engine
 from shared.database.models import Routine
 from scheduler import alerts, runner, store
+from scheduler.actions import CallResult
 from scheduler.matching import compare, device_reading, failing_condition, released
 from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoutineSpec, SunTrigger, TimeTrigger
 from scheduler.timing import Location, is_scheduled, next_fire, prev_fire
@@ -290,11 +291,32 @@ class Scheduler:
 
     # ------------------------------------------------------------ firing
 
+    async def call_routine(self, target_id: uuid.UUID, chain: tuple, caller_name: str,
+                           check_conditions: bool) -> CallResult:
+        """A routine action starting another routine (the action checks for loops first)."""
+        r = self._routines.get(target_id)
+        if r is None:
+            raise LookupError("The routine to run no longer exists (or is invalid; see the gateway logs)")
+        if not r.spec.enabled:
+            return CallResult(r.name, reason=f"{r.name} is turned off")
+        detail = {"called_by": caller_name, "caller_id": str(chain[-1]) if chain else None}
+        return await self._try_start(r, "routine", detail=detail, check_conditions=check_conditions, chain=chain)
+
     async def _start_run(self, r: LoadedRoutine, trigger_type: str, trigger_id: str | None = None,
                          scheduled_for: datetime | None = None, late_seconds: int | None = None,
                          detail: dict | None = None) -> uuid.UUID | None:
+        return (await self._try_start(r, trigger_type, trigger_id, scheduled_for, late_seconds, detail)).run_id
+
+    async def _try_start(self, r: LoadedRoutine, trigger_type: str, trigger_id: str | None = None,
+                         scheduled_for: datetime | None = None, late_seconds: int | None = None,
+                         detail: dict | None = None, check_conditions: bool | None = None,
+                         chain: tuple = ()) -> CallResult:
+        """Starts a run, or says why it didn't. Conditions are checked for everything but Run now,
+        unless check_conditions says otherwise."""
         now = _utcnow()
         detail = detail or {}
+        if check_conditions is None:
+            check_conditions = trigger_type != "manual"
 
         def skipped(reason: str):
             return store.create_run(
@@ -302,19 +324,19 @@ class Scheduler:
                 started_at=now, finished_at=now, status="skipped", trigger_detail={**detail, "reason": reason},
             )
 
-        if trigger_type != "manual" and r.spec.conditions:
+        if check_conditions and r.spec.conditions:
             reason = await failing_condition(r.spec.conditions, self.bus, now, self.tz, self.loc)
             if reason:
                 logger.info(f"Routine '{r.name}' skipped: {reason}")
                 await skipped(reason)
-                return None
+                return CallResult(r.name, reason=f"its conditions weren't met ({reason})", expected=True)
 
         current = self._runs.get(r.id)
         if current and not current.done():
             if r.spec.mode == "single":
                 if trigger_type != "manual":
                     await skipped("previous run still in progress (mode: single)")
-                return None
+                return CallResult(r.name, reason=f"{r.name} was already running (mode: single)")
             current.cancel()  # mode == restart
             await asyncio.wait([current], timeout=5)
 
@@ -323,12 +345,13 @@ class Scheduler:
             started_at=now, status="running", late_seconds=late_seconds, trigger_detail=detail,
         )
         if run_id is None:
-            return None  # this occurrence was already recorded
+            return CallResult(r.name, reason="this occurrence was already recorded")
 
-        task = asyncio.create_task(runner.execute(self.bus, r.id, r.name, run_id, r.spec, r.owner_id, lambda: self._stopping))
+        task = asyncio.create_task(runner.execute(self.bus, r.id, r.name, run_id, r.spec, r.owner_id,
+                                                  lambda: self._stopping, chain=chain, call_routine=self.call_routine))
         self._runs[r.id] = task
         task.add_done_callback(lambda t, rid=r.id: self._run_done(rid, t))
-        return run_id
+        return CallResult(r.name, run_id=run_id, task=task)
 
     def _run_done(self, routine_id: uuid.UUID, task: asyncio.Task):
         if self._runs.get(routine_id) is task:

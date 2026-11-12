@@ -6,14 +6,15 @@ import json
 import math
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from core import device_control, push
 from core.mqtt_bus import AsyncMqttBus
 from scheduler import agent_client, store
-from scheduler.schema import (AGENT_RUNS_PER_HOUR, AgentAction, DelayAction, DeviceAction, FadeAction, GroupAction,
-                              NotifyAction, SpotifyCtrlAction, SpotifyPlayAction)
+from scheduler.schema import (AGENT_RUNS_PER_HOUR, MAX_CALL_DEPTH, AgentAction, DelayAction, DeviceAction, FadeAction,
+                              GroupAction, NotifyAction, RoutineAction, SpotifyCtrlAction, SpotifyPlayAction)
 
 GROUP_VERIFY_SECONDS = 3.0
 # Manual-change detection for stepped fades. Bulbs report their in-between level during a
@@ -35,11 +36,26 @@ class StepFailed(Exception):
 
 
 @dataclass
+class CallResult:
+    """What Scheduler.call_routine did. run_id/task are set when a run started; otherwise `reason`
+    says why not, and `expected` is true when that's a normal outcome (its conditions didn't pass)."""
+    name: str
+    run_id: uuid.UUID | None = None
+    task: asyncio.Task | None = None
+    reason: str | None = None
+    expected: bool = False
+
+
+@dataclass
 class RunContext:
     bus: AsyncMqttBus
     owner_id: str  # whose Spotify account / LLM settings the routine uses
     routine_id: uuid.UUID | None = None
     routine_name: str = ""
+    # Routines that led to this run, oldest first, ending with this one (routine actions).
+    chain: tuple[uuid.UUID, ...] = ()
+    # Scheduler.call_routine(target, chain, caller_name, check_conditions) -> CallResult
+    call_routine: Callable[..., Awaitable[CallResult]] | None = None
 
 
 # ------------------------------------------------------------------ helpers
@@ -103,6 +119,8 @@ async def perform(ctx: RunContext, action) -> tuple[str, dict, object]:
             return (*await _agent(ctx, action), None)
         if isinstance(action, NotifyAction):
             return (*await _notify(ctx, action), None)
+        if isinstance(action, RoutineAction):
+            return (*await _call_routine(ctx, action), None)
     except TimeoutError:
         raise StepFailed("Device did not confirm in time (offline or unresponsive?)")
     except (device_control.DeviceStateMismatch, device_control.MqttDisconnected, agent_client.AgentError) as e:
@@ -370,3 +388,47 @@ async def _notify(ctx: RunContext, a: NotifyAction):
     if result["sent"] == 0:
         raise StepFailed("The push service didn't accept the notification", detail)
     return ("ok" if result["failed"] == 0 else "partial"), detail
+
+
+# ------------------------------------------------------------------ run another routine
+
+async def _call_routine(ctx: RunContext, a: RoutineAction):
+    if ctx.call_routine is None:
+        raise StepFailed("Routines can't be started from here")
+    if a.routine in ctx.chain:
+        raise StepFailed("This would loop: that routine is already running earlier in this chain of calls")
+    if len(ctx.chain) >= MAX_CALL_DEPTH:
+        raise StepFailed(f"Too many routines calling each other (at most {MAX_CALL_DEPTH} in a chain)")
+    try:
+        res = await ctx.call_routine(a.routine, ctx.chain, ctx.routine_name, a.check_conditions)
+    except LookupError as e:
+        raise StepFailed(str(e))
+    detail = {"routine": res.name, "routine_id": str(a.routine), "wait": a.wait}
+    if res.run_id is None:
+        if res.expected:  # its conditions said no: that's the routine working as designed
+            return "ok", {**detail, "note": f"Didn't run: {res.reason}"}
+        return "skipped", {**detail, "reason": res.reason}
+    detail["run_id"] = str(res.run_id)
+    if not a.wait:
+        return "ok", detail
+
+    task = res.task
+    try:
+        await asyncio.wait([task])  # unlike `await task`, doesn't raise if that run is cancelled
+    except asyncio.CancelledError:
+        task.cancel()  # this run is being stopped: the run it's waiting on is part of it
+        raise
+    if task.cancelled():
+        outcome = "cancelled"
+    elif task.exception() is not None:
+        outcome = "failed"
+    else:
+        outcome = task.result()
+    detail["outcome"] = outcome
+    if outcome == "success":
+        return "ok", detail
+    if outcome == "partial":
+        return "partial", detail
+    if outcome == "cancelled":
+        raise StepFailed(f"{res.name} was cancelled before it finished (restarted, turned off or deleted)", detail)
+    raise StepFailed(f"{res.name} {outcome}", detail)

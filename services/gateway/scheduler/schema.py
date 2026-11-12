@@ -3,9 +3,11 @@
 Kept flat and plain-worded so the agent can write them (tools/routines_api.py). See the Routines section of CLAUDE.md.
 Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
 the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
-spotify_ctrl, agent, notify (Spotify and agent actions go through the agent as the routine's
-owner; see agent_client.py; notify is a web push, core/push.py).
+spotify_ctrl, agent, notify, routine (Spotify and agent actions go through the agent as the
+routine's owner; see agent_client.py; notify is a web push, core/push.py; routine starts another
+routine).
 """
+import uuid
 from datetime import date as date_
 from typing import Annotated, Literal, Union
 
@@ -315,9 +317,25 @@ class NotifyAction(_Strict):
     stop_on_error: bool = False
 
 
+class RoutineAction(_Strict):
+    """Start another routine as its own run (it shows in that routine's history). wait=true carries
+    on only once it has finished, and its outcome becomes this step's. Its conditions are skipped,
+    as with Run now, unless check_conditions. A routine that's turned off isn't run. Loops are
+    refused when saving (api/routine_routes.py) and again at run time (MAX_CALL_DEPTH)."""
+    id: ShortId
+    type: Literal["routine"]
+    routine: uuid.UUID
+    wait: bool = False
+    check_conditions: bool = False
+    stop_on_error: bool = False
+
+
+MAX_CALL_DEPTH = 5  # routines calling routines, counting the first one
+
+
 Action = Annotated[
     Union[DeviceAction, GroupAction, DelayAction, FadeAction, SpotifyPlayAction, SpotifyCtrlAction, AgentAction,
-          NotifyAction],
+          NotifyAction, RoutineAction],
     Field(discriminator="type"),
 ]
 
