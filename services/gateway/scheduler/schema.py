@@ -219,6 +219,8 @@ class SetPayload(DeviceSetRequest):
             raise ValueError("set at least one of state, brightness, color_temp, transition")
         if self.spatial_learning is not None:
             raise ValueError("spatial learning can't be run from a routine (start it from the sensor's settings)")
+        if self.color_options is not None:
+            raise ValueError("'remember warmth while off' is a light setting; change it in the light's settings")
         return self
 
     def to_mqtt(self) -> dict:

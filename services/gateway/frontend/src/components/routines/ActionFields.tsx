@@ -40,6 +40,13 @@ export function ActionFields({ action, onChange, deviceOptions, groups, routineO
   }
 
   const selectedDevice = action.type === 'device' ? deviceOptions.find(d => d.ieee === action.device) : undefined;
+  const groupMembers = action.type === 'group'
+    ? new Set(groups.find(g => g.id === action.group)?.members.map(m => m.ieee_address)) : new Set<string>();
+  // Brightness (and a transition, which is a fade) only for dimmable devices: not plugs like a heater.
+  // A device that isn't reporting yet (missing) keeps every option.
+  const dimmable = action.type === 'group'
+    ? deviceOptions.some(d => d.hasBrightness && groupMembers.has(d.ieee))
+    : !selectedDevice || selectedDevice.hasBrightness;
   const showColorTemp = action.type === 'group' || !!selectedDevice?.hasColorTemp;
   const range = action.type === 'device'
     ? selectedDevice?.range
@@ -48,7 +55,14 @@ export function ActionFields({ action, onChange, deviceOptions, groups, routineO
   return (
     <>
       {action.type === 'device' ? (
-        <select className={input} value={action.device} onChange={e => onChange({ ...action, device: e.target.value })}>
+        <select className={input} value={action.device} onChange={e => {
+          // Switching to a device that can't dim drops the settings it can't use.
+          const next = deviceOptions.find(d => d.ieee === e.target.value);
+          const set = { ...action.set };
+          if (next && !next.hasBrightness) { delete set.brightness; delete set.transition; }
+          if (next && !next.hasColorTemp) delete set.color_temp;
+          onChange({ ...action, device: e.target.value, set: Object.keys(set).length ? set : { state: 'ON' } });
+        }}>
           {!selectedDevice && <option value={action.device}>{action.device ? `Missing device (${action.device})` : 'Pick a device'}</option>}
           {deviceOptions.map(d => <option key={d.ieee} value={d.ieee}>{d.name}</option>)}
         </select>
@@ -58,7 +72,7 @@ export function ActionFields({ action, onChange, deviceOptions, groups, routineO
           {groups.map(g => <option key={g.id} value={g.id}>{g.friendly_name}</option>)}
         </select>
       )}
-      <PayloadFields value={action.set} showColorTemp={showColorTemp} range={range} onChange={set => onChange({ ...action, set })} />
+      <PayloadFields value={action.set} showBrightness={dimmable} showColorTemp={showColorTemp} range={range} onChange={set => onChange({ ...action, set })} />
       <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-500">
         <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={action.stop_on_error} onChange={e => onChange({ ...action, stop_on_error: e.target.checked })} />
         Stop the routine if this fails
@@ -92,7 +106,9 @@ function DelayFields({ action, onChange }: { action: DelayAction; onChange: (a: 
   );
 }
 
-function PayloadFields({ value, onChange, showColorTemp, range }: { value: SetPayload; onChange: (v: SetPayload) => void; showColorTemp: boolean; range?: MiredRange }) {
+function PayloadFields({ value, onChange, showBrightness, showColorTemp, range }: {
+  value: SetPayload; onChange: (v: SetPayload) => void; showBrightness: boolean; showColorTemp: boolean; range?: MiredRange;
+}) {
   const set = (k: keyof SetPayload, v: SetPayload[keyof SetPayload]) => {
     const next = { ...value, [k]: v };
     if (v === null || v === undefined) delete next[k];
@@ -107,30 +123,41 @@ function PayloadFields({ value, onChange, showColorTemp, range }: { value: SetPa
           <button key={text} type="button" className={chip((value.state ?? null) === v)} onClick={() => set('state', v)}>{text}</button>
         ))}
       </div>
-      <OptionalNumber label="Brightness (%)" value={pct} min={1} max={100} defaultValue={100}
-        onChange={v => set('brightness', v == null ? null : Math.round((v / 100) * 254))} />
+      {/* Hidden for devices that can't dim, unless an older routine already sets it (so it can be unticked). */}
+      {(showBrightness || pct != null) && (
+        <OptionalNumber label="Brightness (%)" value={pct} min={1} max={100} defaultValue={100}
+          unsupported={!showBrightness} onChange={v => set('brightness', v == null ? null : Math.round((v / 100) * 254))} />
+      )}
       {showColorTemp && (
         <OptionalNumber label="Warmth (%, 0 coolest – 100 warmest)" min={0} max={100} defaultValue={75}
           value={value.color_temp != null && range ? miredToWarmth(value.color_temp, range) : null}
           onChange={v => set('color_temp', v == null || !range ? null : warmthToMired(v, range))} />
       )}
-      <OptionalNumber label="Transition (seconds)" value={value.transition ?? null} min={0} max={3600} defaultValue={2}
-        onChange={v => set('transition', v)} />
+      {(showBrightness || value.transition != null) && (
+        <OptionalNumber label="Transition (seconds)" value={value.transition ?? null} min={0} max={3600} defaultValue={2}
+          unsupported={!showBrightness} onChange={v => set('transition', v)} />
+      )}
     </div>
   );
 }
 
-function OptionalNumber({ label: text, value, min, max, defaultValue, onChange }: {
+function OptionalNumber({ label: text, value, min, max, defaultValue, onChange, unsupported }: {
   label: string; value: number | null; min: number; max: number; defaultValue: number; onChange: (v: number | null) => void;
+  unsupported?: boolean;  // set by an older routine on a device that can't use it
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400 flex-1">
-        <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={value != null} onChange={e => onChange(e.target.checked ? defaultValue : null)} />
-        {text}
-      </label>
-      {value != null && (
-        <NumberField min={min} max={max} className={`${input} w-24`} value={value} onChange={onChange} />
+    <div>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400 flex-1">
+          <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={value != null} onChange={e => onChange(e.target.checked ? defaultValue : null)} />
+          {text}
+        </label>
+        {value != null && (
+          <NumberField min={min} max={max} className={`${input} w-24`} value={value} onChange={onChange} />
+        )}
+      </div>
+      {unsupported && value != null && (
+        <p className="text-xs text-amber-400/90">This device can’t dim, so this has no effect. Untick it to remove it.</p>
       )}
     </div>
   );

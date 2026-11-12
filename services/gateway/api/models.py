@@ -20,6 +20,8 @@ class DeviceState(BaseModel):
     brightness: Optional[int] = None
     color_temp: Optional[int] = None
     color: Optional[Dict[str, Any]] = None  # e.g. {"x": 0.5, "y": 0.5}
+    # {"execute_if_off": bool}: the bulb keeps colour/warmth changes made while it's off
+    color_options: Optional[Dict[str, Any]] = None
     
     # Sensors
     temperature: Optional[float] = None
@@ -69,6 +71,11 @@ class DeviceListResponse(BaseModel):
     # A dictionary mapping friendly_name to its cleaned state
     devices: Dict[str, DeviceState]
 
+class ColorOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    execute_if_off: bool
+
+
 class DeviceSetRequest(BaseModel):
     state: Optional[Literal["ON", "OFF", "TOGGLE"]] = None
     brightness: Optional[int] = Field(None, ge=0, le=254)
@@ -83,6 +90,8 @@ class DeviceSetRequest(BaseModel):
     # Write-only command: the sensor never reports it back, so it's sent without waiting
     # (WRITE_ONLY_FIELDS, routes.py).
     spatial_learning: Optional[Literal["Start Learning"]] = None
+    # Light setting (Zigbee ExecuteIfOff): keep warmth/colour changes sent while the light is off.
+    color_options: Optional[ColorOptions] = None
 
     model_config = ConfigDict(extra="ignore")
 

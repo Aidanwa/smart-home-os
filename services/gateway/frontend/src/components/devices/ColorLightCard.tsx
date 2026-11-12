@@ -77,6 +77,22 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
       iconColorClass={isOn ? 'bg-yellow-500/10 text-yellow-500' : 'bg-neutral-800 text-neutral-500'}
       subtitle={subtitle}
       onToggle={() => toggleDevice(name, state.state)}
+      advancedConfig={state.color_temp !== undefined ? (
+        // Zigbee "execute if off": the bulb stores warmth changes sent while it's off (a sunset
+        // routine) and comes on with them. Z2M keeps the setting in the state as color_options.
+        <label className="flex items-start justify-between gap-3 p-3 rounded-xl border border-neutral-800/50 bg-neutral-900/50 cursor-pointer">
+          <span className="min-w-0">
+            <span className="block text-sm text-neutral-200">Remember warmth while off</span>
+            <span className="block text-xs text-neutral-500 mt-0.5">
+              Warmth changes made while the light is off, like a sunset routine’s, are used when it next turns on.
+              Brightness can’t be stored this way: setting it turns the light on.
+            </span>
+          </span>
+          <input type="checkbox" className="size-5 shrink-0 mt-0.5 accent-blue-500"
+            checked={state.color_options?.execute_if_off === true}
+            onChange={e => sendCommand(name, { color_options: { execute_if_off: e.target.checked } })} />
+        </label>
+      ) : undefined}
       renameDevice={renameDevice}
       deleteDevice={deleteDevice}
     >

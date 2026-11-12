@@ -19,6 +19,7 @@ _HIDDEN_ATTRIBUTES = {
     'ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen',
     'absence_delay_timer', 'motion_sensitivity', 'presence_detection_options',
     'detection_range', 'led_disabled_night', 'target_distance', 'pir_detection', 'presence_changed_at',
+    'color_options',
 }
 
 
