@@ -475,49 +475,25 @@ async def set_group_state(
 async def delete_group(group_name: str, bus=Depends(get_mqtt_bus)):
     """
     Delete a Zigbee group from the network.
-    Workaround: Z2M fails to delete populated groups cleanly. 
-    We must iterate through the Digital Twin cache, remove all members individually, 
-    and then destroy the group shell.
+    Z2M (2.x) removes every member from the group itself before deleting it
+    (force: false), so a populated group needs no manual eviction first.
     """
     try:
-        # 1. Fetch current groups from the Digital Twin
-        raw_groups = await bus.redis.get("gateway:groups")
-        groups_list = []
-        
-        if raw_groups:
-            groups_list = json.loads(raw_groups)
-            # Find the specific group we are trying to delete
-            target_group = next((g for g in groups_list if g.get("friendly_name") == group_name), None)
-            
-            # 2. If the group has members, evict them one by one
-            if target_group and target_group.get("members"):
-                for member in target_group["members"]:
-                    device_ref = member.get("name")
-                    if not device_ref:
-                        continue
-                        
-                    # Fire RPC to remove this specific device from the group
-                    # We don't strictly check the response here, we just need to forcefully evict
-                    await bus.rpc(
-                        "zigbee2mqtt/bridge/request/group/members/remove", 
-                        {"group": group_name, "device": device_ref}
-                    )
-
-        # 3. Now that the group is guaranteed empty, delete the group itself
         res = await bus.rpc(
-            "zigbee2mqtt/bridge/request/group/remove", 
+            "zigbee2mqtt/bridge/request/group/remove",
             {"id": group_name}
         )
-        
-        if res.get("status") != "ok":
-            raise HTTPException(status_code=400, detail=res.get("error", "Failed to delete empty group"))
 
-        # 4. Digital Twin Cohesion: Prune the deleted group from Redis so the UI instantly updates
+        if res.get("status") != "ok":
+            raise HTTPException(status_code=400, detail=res.get("error", "Failed to delete group"))
+
+        # Prune the deleted group from the cache so the UI updates before Z2M republishes bridge/groups
+        raw_groups = await bus.redis.get("gateway:groups")
         if raw_groups:
-            updated_groups = [g for g in groups_list if g.get("friendly_name") != group_name]
+            updated_groups = [g for g in json.loads(raw_groups) if g.get("friendly_name") != group_name]
             await bus.redis.set("gateway:groups", json.dumps(updated_groups))
-            
-        return {"status": "success", "message": f"Group '{group_name}' completely emptied and deleted."}
+
+        return {"status": "success", "message": f"Group '{group_name}' deleted."}
         
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Bridge timeout during group deletion.")
