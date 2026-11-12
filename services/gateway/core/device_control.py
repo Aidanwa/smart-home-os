@@ -27,6 +27,30 @@ def remove_command_hook(fn: CommandHook) -> None:
         _command_hooks.remove(fn)
 
 
+# Called with (IEEE addresses, payload) after the hooks above; returns the payload to send. The
+# day-curve controller adds its brightness and warmth to a plain "on", so lights come on at them.
+PayloadFilter = Callable[[list[str], dict], Awaitable[dict]]
+_payload_filters: list[PayloadFilter] = []
+
+
+def add_payload_filter(fn: PayloadFilter) -> None:
+    _payload_filters.append(fn)
+
+
+def remove_payload_filter(fn: PayloadFilter) -> None:
+    if fn in _payload_filters:
+        _payload_filters.remove(fn)
+
+
+async def _filter(ieees: list[str], payload: dict) -> dict:
+    for fn in list(_payload_filters):
+        try:
+            payload = await fn(ieees, payload)
+        except Exception:
+            logger.exception("Device payload filter failed; sending the command as it was")
+    return payload
+
+
 async def _notify(ieees: list[str], payload: dict) -> None:
     for fn in list(_command_hooks):
         try:
@@ -86,7 +110,9 @@ async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_st
         raise MqttDisconnected("MQTT Bus is disconnected")
 
     friendly_name = await resolve_friendly_name(bus, device_id)
-    await _notify([bus._device_registry.get(friendly_name, device_id)], payload)
+    ieee = bus._device_registry.get(friendly_name, device_id)
+    await _notify([ieee], payload)
+    payload = await _filter([ieee], payload)
     topic = f"{bus.z2m_base}/{friendly_name}/set"
     requested = payload.get("state") if verify_state else None
     if requested not in ("ON", "OFF"):
@@ -129,5 +155,7 @@ async def set_group(bus: AsyncMqttBus, group_name: str, payload: dict) -> None:
     """Fire-and-forget group command; member updates trickle into the twin."""
     if not bus.client:
         raise MqttDisconnected("MQTT Bus is disconnected")
-    await _notify(await group_members(bus, group_name), payload)
+    members = await group_members(bus, group_name)
+    await _notify(members, payload)
+    payload = await _filter(members, payload)
     await bus.client.publish(f"{bus.z2m_base}/{group_name}/set", json.dumps(payload))

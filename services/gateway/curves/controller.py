@@ -6,11 +6,15 @@ and sends what changed:
 
 - Warmth goes to lights whether they're on or off: with the bulb's "execute if off" option (set
   when a light starts following) an off bulb stores it and comes on at it.
+- Brightness goes only to lights that are on (setting it turns a light on), up or down.
+- A plain "on" sent through the hub (app, routine, agent) gets the curve's brightness and warmth
+  added (device_control's payload filter), so the light comes on at them. A light switched on
+  any other way (wall switch, remote) is corrected as soon as it reports on.
 - Lights in a Z2M group that all want the same thing get one group command.
 - Commands are published directly, not through device_control, so they never count as someone
   changing the light by hand.
 
-Pausing: warmth set through the hub (app, routine, agent; device_control's command hook) pauses
+Pausing: warmth or brightness set through the hub (app, routine, agent; device_control's command hook) pauses
 that light, and so does a report far from what the curve last sent (a remote, the Hue app). A
 paused light is left alone until it reports off, then it follows again. Pauses live in Redis
 (gateway:curve_paused) so a restart doesn't undo them.
@@ -25,7 +29,7 @@ from sqlalchemy import select
 
 from core import device_control
 from core.mqtt_bus import AsyncMqttBus
-from curves.compute import FALLBACK_MIRED, next_changes, target, warmth_to_mired
+from curves.compute import FALLBACK_MIRED, brightness_to_254, next_changes, target, warmth_to_mired
 from curves.schema import CurvePoint
 from shared.database.core import AsyncSessionLocal
 from shared.database.models import LightCurve, LightCurveMember
@@ -35,8 +39,10 @@ logger = logging.getLogger(__name__)
 TICK_S = 60
 PAUSED_KEY = "gateway:curve_paused"
 MIRED_STEP = 2          # don't resend warmth for a change smaller than this
+BRIGHTNESS_STEP = 3     # ... or brightness (of 254)
 TRANSITION_S = 10       # soft change while a light is on
 EXTERNAL_MIRED = 12     # a report this far from what we sent means someone else changed it
+EXTERNAL_BRIGHTNESS = 15
 REPORT_GRACE_S = 20     # bulbs report late and in-between values after our own command
 
 
@@ -69,6 +75,7 @@ class CurveController:
             self.paused = {k: json.loads(v) for k, v in raw.items()}
             await self._load()
             device_control.add_command_hook(self._on_command)
+            device_control.add_payload_filter(self._on_payload)
             self.active = True
             self._loop_task = asyncio.create_task(self._loop())
             self._event_task = asyncio.create_task(self._events())
@@ -78,6 +85,7 @@ class CurveController:
 
     async def stop(self):
         device_control.remove_command_hook(self._on_command)
+        device_control.remove_payload_filter(self._on_payload)
         for t in (self._loop_task, self._event_task):
             if t:
                 t.cancel()
@@ -162,20 +170,38 @@ class CurveController:
         lo, hi = ct.get("value_min"), ct.get("value_max")
         return (lo, hi) if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and hi > lo else FALLBACK_MIRED
 
-    def _wanted(self, ieee: str, exposes: dict, twin: dict, force: bool) -> dict | None:
-        """The payload this light needs now, or None."""
+    def _goal(self, ieee: str, exposes: dict) -> dict | None:
+        """{color_temp?, brightness?} the curve wants for this light now (device units), or None
+        if it doesn't follow an enabled curve or is paused."""
         c = self.curves.get(self.members.get(ieee, ""))
         if not c or not c["enabled"] or ieee in self.paused:
             return None
         goal = target(c["points"], _now(), self.scheduler.tz, self.scheduler.loc)
-        rng = self._mired_range(exposes.get(ieee))
-        payload = {}
+        props = exposes.get(ieee) or []
+        rng = self._mired_range(props)
+        out = {}
         if goal["warmth"] is not None and rng is not None:
-            m = warmth_to_mired(goal["warmth"], rng)
-            sent = (self.last_sent.get(ieee) or {}).get("color_temp")
-            reported = (twin.get(ieee) or {}).get("color_temp")
-            if force or (sent is None and reported != m) or (sent is not None and abs(m - sent) >= MIRED_STEP):
-                payload["color_temp"] = m
+            out["color_temp"] = warmth_to_mired(goal["warmth"], rng)
+        if goal["brightness"] is not None and any(p.get("property") == "brightness" for p in props):
+            out["brightness"] = brightness_to_254(goal["brightness"])
+        return out
+
+    def _wanted(self, ieee: str, exposes: dict, twin: dict, force: bool) -> dict | None:
+        """The payload this light needs now (only what moved enough), or None."""
+        goal = self._goal(ieee, exposes)
+        if not goal:
+            return None
+        st = twin.get(ieee) or {}
+        sent = self.last_sent.get(ieee) or {}
+        payload = {}
+        for key, step in (("color_temp", MIRED_STEP), ("brightness", BRIGHTNESS_STEP)):
+            if key not in goal:
+                continue
+            if key == "brightness" and str(st.get("state", "")).upper() != "ON":
+                continue  # setting brightness would turn it on
+            v, last, reported = goal[key], sent.get(key), st.get(key)
+            if force or (last is None and reported != v) or (last is not None and abs(v - last) >= step):
+                payload[key] = v
         return payload or None
 
     async def tick(self, only: set[str] | None = None, force: bool = False):
@@ -250,12 +276,26 @@ class CurveController:
             self.bus.broadcast({"type": "curve_update", "device": ieee})
 
     async def _on_command(self, ieees: list[str], payload: dict):
-        """device_control hook: warmth set through the hub pauses the curve for those lights."""
-        if "color_temp" not in payload:
+        """device_control hook: warmth or brightness set through the hub pauses those lights."""
+        if "color_temp" not in payload and "brightness" not in payload:
             return
         for ieee in ieees:
             if ieee in self.members:
                 await self._pause(ieee, "set")
+
+    async def _on_payload(self, ieees: list[str], payload: dict) -> dict:
+        """device_control filter: a plain "on" for following lights comes on at the curve. For a
+        group, only when every member wants the same values (the rest are fixed on their report)."""
+        if (not self.active or str(payload.get("state", "")).upper() != "ON"
+                or "brightness" in payload or "color_temp" in payload or not ieees):
+            return payload
+        exposes = json.loads(await self.bus.redis.get("gateway:device_exposes") or "{}")
+        goals = [self._goal(i, exposes) for i in ieees]
+        if not goals[0] or any(g != goals[0] for g in goals):
+            return payload
+        for i in ieees:
+            self._record(i, goals[0])
+        return {**payload, **goals[0]}
 
     async def _events(self):
         q = self.bus.subscribe()
@@ -291,8 +331,10 @@ class CurveController:
             await self.tick(only={ieee}, force=True)
             return
         sent = self.last_sent.get(ieee) or {}
-        ct = st.get("color_temp")
-        if (isinstance(ct, (int, float)) and isinstance(sent.get("color_temp"), (int, float))
-                and abs(ct - sent["color_temp"]) > EXTERNAL_MIRED
-                and monotime.monotonic() - sent.get("at", 0) > REPORT_GRACE_S):
-            await self._pause(ieee, "external")
+        if monotime.monotonic() - sent.get("at", 0) <= REPORT_GRACE_S:
+            return
+        for key, limit in (("color_temp", EXTERNAL_MIRED), ("brightness", EXTERNAL_BRIGHTNESS)):
+            now, last = st.get(key), sent.get(key)
+            if isinstance(now, (int, float)) and isinstance(last, (int, float)) and abs(now - last) > limit:
+                await self._pause(ieee, "external")
+                return

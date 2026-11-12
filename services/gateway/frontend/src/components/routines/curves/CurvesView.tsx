@@ -61,8 +61,9 @@ export function CurvesView({ devices, timezone, editing, setEditing }: {
   return (
     <div className="space-y-3">
       <p className="text-sm text-neutral-400 leading-relaxed">
-        Lights following a curve change warmth on their own through the day, even while they’re off, so they come on right.
-        Changing a light by hand (or from a routine) pauses its curve until the light is turned off.
+        Lights following a curve change warmth through the day, even while they’re off, and brightness while they’re on.
+        Turned on from the app, a routine or the agent, they come on at the curve’s values. Changing one by hand
+        (or from a routine or a remote) pauses its curve until the light is turned off.
       </p>
       {curves.length === 0 ? (
         <div className="py-12 text-center text-neutral-500">

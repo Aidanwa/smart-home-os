@@ -25,7 +25,12 @@ export function DayCurveSection({ ieee, name }: { ieee: string; name: string }) 
   };
 
   if (loading) return null;
-  const next = status?.next.warmth;
+  const t = status?.target;
+  const now = t ? [t.warmth !== null && `${t.warmth}% warm`, t.brightness !== null && `${t.brightness}% bright`].filter(Boolean).join(', ') : '';
+  const nextParts = status ? [
+    status.next.warmth && `${Math.round(status.next.warmth.value)}% warm by ${homeTime(status.next.warmth.at, tz)}`,
+    status.next.brightness && `${Math.round(status.next.brightness.value)}% bright by ${homeTime(status.next.brightness.at, tz)}`,
+  ].filter(Boolean) : [];
   return (
     <div className="p-3 rounded-xl border border-neutral-800/50 bg-neutral-900/50 space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -41,10 +46,10 @@ export function DayCurveSection({ ieee, name }: { ieee: string; name: string }) 
         )}
       </div>
       {status && !status.enabled && <p className="text-xs text-neutral-500">That curve is turned off.</p>}
-      {status?.enabled && !status.paused && status.target.warmth !== null && (
+      {status?.enabled && !status.paused && now && (
         <p className="text-xs text-neutral-500">
-          Now {status.target.warmth}% warm{next ? `, ${Math.round(next.value)}% by ${homeTime(next.at, tz)}` : ''}.
-          It changes on its own, even while the light is off.
+          Now {now}{nextParts.length > 0 ? `; ${nextParts.join(', ')}` : ''}.
+          Warmth changes even while the light is off; brightness while it’s on.
         </p>
       )}
       {status?.enabled && status.paused && (
