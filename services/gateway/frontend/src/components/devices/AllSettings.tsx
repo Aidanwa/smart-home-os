@@ -71,7 +71,7 @@ function SettingControl({ item, value, busy, save }: {
   if (item.type === 'enum') {
     const known = typeof value === 'string' && item.values?.includes(value);
     return (
-      <select aria-label={label} disabled={busy} className={`${inputClass} max-w-[11rem]`}
+      <select aria-label={label} disabled={busy} className={`${inputClass} w-full`}
         value={known ? String(value) : ''} onChange={e => save(e.target.value)}>
         {!known && <option value="" disabled>Unknown</option>}
         {item.values?.map(v => <option key={v} value={v}>{humanize(v)}</option>)}
@@ -106,7 +106,7 @@ function SettingControl({ item, value, busy, save }: {
       setText(null);
     };
     return (
-      <input aria-label={label} disabled={busy} className={`${inputClass} w-28`} value={text ?? current}
+      <input aria-label={label} disabled={busy} className={`${inputClass} w-full`} value={text ?? current}
         onChange={e => setText(e.target.value)} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLElement).blur(); }} />
     );
@@ -188,7 +188,10 @@ export function AllSettings({ deviceId, name, state, isOpen, handled = [] }: {
           {settings.length > 0 && (
             <div className="bg-neutral-900/50 rounded-xl border border-neutral-800/50 divide-y divide-neutral-800/50">
               {settings.map(item => (
-                <div key={item.property} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                // Lists and text get their own line under the label: long option names otherwise
+                // squeeze the label into a one-word column on a phone.
+                <div key={item.property} className={`flex gap-3 px-3 py-2.5 ${item.type === 'enum' || item.type === 'text'
+                  ? 'flex-col' : 'items-center justify-between'}`}>
                   <div className="min-w-0">
                     <div className="text-sm text-neutral-200 [overflow-wrap:anywhere]">{item.label || humanize(item.property)}</div>
                     {item.description && <div className="text-xs text-neutral-500 mt-0.5">{item.description}</div>}
