@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, PersonStanding, Play, PowerOff, Radio, Search, Sunrise, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Music, PersonStanding, Play, Power, PowerOff, Radio, Search, Sparkles, Sunrise, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -7,7 +7,7 @@ import { formatFloorName } from '../rooms/constants';
 import type { DescribeCtx, Routine, RunStatus } from './types';
 import { STATUS_STYLE, formatInTz, relativeTime, summarizeRoutine } from './types';
 
-type GroupBy = 'when' | 'room' | 'none';
+type GroupBy = 'when' | 'room' | 'affects' | 'none';
 type SortBy = 'next' | 'name' | 'last';
 
 /** A remembered choice (per device; harmless if storage is unavailable). */
@@ -47,7 +47,7 @@ interface Props {
 }
 
 export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory, onRun, onDuplicate, onToggle, onReviewed, onDelete }: Props) {
-  const [groupBy, setGroupBy] = useStored<GroupBy>('routines.group', ['when', 'room', 'none'], 'when');
+  const [groupBy, setGroupBy] = useStored<GroupBy>('routines.group', ['when', 'room', 'affects', 'none'], 'when');
   const [sortBy, setSortBy] = useStored<SortBy>('routines.sort', ['next', 'name', 'last'], 'next');
   const [query, setQuery] = useState('');
   const roomIndex = useRoomIndex(groupBy === 'room');
@@ -95,6 +95,8 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
         // A routine with several kinds of trigger goes under its first one.
         out.push({ ...s, routines: rest.filter(r => (r.triggers[0]?.type ?? 'manual') === s.key) });
       }
+    } else if (groupBy === 'affects') {
+      out.push(...affectsSections(rest, routines, groups, ctx));
     } else if (roomIndex) {
       const memberIeees = new Map(groups.map(g => [g.id, g.members.map(m => m.ieee_address)]));
       const roomsOf = (r: Routine) => {
@@ -130,7 +132,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
     if (off.length) out.push({ key: 'off', title: 'Off', icon: <PowerOff size={16} />, routines: off, tone: 'off', defaultOpen: false });
     if (oneTime.length) out.push({ key: 'once', title: 'One-time', icon: <BellRing size={16} />, routines: oneTime });
     return out.filter(s => s.routines.length > 0);
-  }, [routines, query, sortBy, groupBy, roomIndex, groups, summaries]);
+  }, [routines, query, sortBy, groupBy, roomIndex, groups, summaries, ctx]);
 
   const nextUp = useMemo(() => routines
     .filter(r => r.enabled && r.next_fire_at)
@@ -156,7 +158,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
         </label>
         <div className="flex gap-2">
           <Select label="Group routines" value={groupBy} onChange={v => setGroupBy(v as GroupBy)}
-            options={[['when', 'Group: When it runs'], ['room', 'Group: Room'], ['none', 'No grouping']]} />
+            options={[['when', 'Group: When it runs'], ['room', 'Group: Room'], ['affects', 'Group: What it changes'], ['none', 'No grouping']]} />
           <Select label="Sort routines" value={sortBy} onChange={v => setSortBy(v as SortBy)}
             options={[['next', 'Sort: Next run'], ['name', 'Sort: Name'], ['last', 'Sort: Last run']]} />
         </div>
@@ -204,6 +206,55 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
       )}
     </div>
   );
+}
+
+/** "What it changes": a section per device a routine switches or fades, then music, notifications and the
+ *  agent. A routine is listed under every one that applies. Group actions count for each member device,
+ *  and "Run routine" actions count what the called routine changes too (so turning off the heater from a
+ *  called routine still lists the caller under the heater). */
+function affectsSections(list: Routine[], all: Routine[], groups: GroupInfo[], ctx: DescribeCtx): Section[] {
+  const members = new Map(groups.map(g => [g.id, g.members.map(m => m.ieee_address)]));
+  const byId = new Map(all.map(r => [r.id, r]));
+  const OTHER = { music: 'Music', notify: 'Notifications', agent: 'Ask the agent' } as const;
+  type Other = keyof typeof OTHER;
+
+  const targets = (r: Routine, seen = new Set<string>()): Set<string> => {
+    const out = new Set<string>();
+    if (seen.has(r.id)) return out;  // loops are refused on save, but don't trust that here
+    seen.add(r.id);
+    for (const a of r.actions) {
+      if ((a.type === 'device' || a.type === 'fade') && a.device) out.add(a.device);
+      if ((a.type === 'group' || a.type === 'fade') && a.group != null) members.get(a.group)?.forEach(i => out.add(i));
+      if (a.type === 'spotify_play' || a.type === 'spotify_ctrl') out.add('other:music');
+      if (a.type === 'notify') out.add('other:notify');
+      if (a.type === 'agent') {
+        out.add('other:agent');
+        if (a.notify) out.add('other:notify');  // its reply is pushed to phones too
+      }
+      if (a.type === 'routine') {
+        const called = byId.get(a.routine);
+        if (called) targets(called, seen).forEach(t => out.add(t));
+      }
+    }
+    return out;
+  };
+
+  const buckets = new Map<string, Routine[]>();
+  const nothing: Routine[] = [];
+  for (const r of list) {
+    const ts = targets(r);
+    if (ts.size === 0) nothing.push(r);
+    ts.forEach(t => buckets.set(t, [...(buckets.get(t) ?? []), r]));
+  }
+  const name = (ieee: string) => ctx.attributes[ieee]?.friendly_name ?? `Missing device (${ieee})`;
+  const devices: Section[] = [...buckets.keys()].filter(k => !k.startsWith('other:'))
+    .sort((a, b) => name(a).localeCompare(name(b)))
+    .map(ieee => ({ key: `act-${ieee}`, title: name(ieee), icon: <Power size={16} />, routines: buckets.get(ieee)! }));
+  const icons: Record<Other, ReactNode> = { music: <Music size={16} />, notify: <BellRing size={16} />, agent: <Sparkles size={16} /> };
+  const others: Section[] = (Object.keys(OTHER) as Other[])
+    .filter(k => buckets.has(`other:${k}`))
+    .map(k => ({ key: `act-${k}`, title: OTHER[k], icon: icons[k], routines: buckets.get(`other:${k}`)! }));
+  return [...devices, ...others, { key: 'act-none', title: 'Nothing else (waits only)', icon: <Hand size={16} />, routines: nothing }];
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {
