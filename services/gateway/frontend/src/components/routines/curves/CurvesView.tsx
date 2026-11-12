@@ -10,6 +10,7 @@ import { NumberField } from '../NumberField';
 import { card, iconBtn, input, label } from '../styles';
 import type { Curve, CurvePoint, CurvePreview, CurveSpec, CurveWhen } from './types';
 import { defaultCurve, homeTime, newPointId, whenLabel } from './types';
+import { CurveChart } from './CurveChart';
 
 const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-lg p-4 sm:p-6 gap-4';
 
@@ -260,7 +261,8 @@ function CurveEditor({ curve, curves, devices, timezone, onSave, onDelete, onCan
       <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3 text-sm">
         {preview ? (
           <>
-            <div className="text-neutral-200">Now: {nowText(preview.now) || 'nothing set'}</div>
+            <CurveChart preview={preview} />
+            <div className="text-neutral-200 mt-3">Now: {nowText(preview.now) || 'nothing set'}</div>
             {(preview.next.warmth || preview.next.brightness) && (
               <div className="text-xs text-neutral-500 mt-1">
                 {[preview.next.warmth && `${Math.round(preview.next.warmth.value)}% warm by ${homeTime(preview.next.warmth.at, timezone)}`,

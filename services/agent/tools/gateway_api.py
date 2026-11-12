@@ -114,6 +114,14 @@ class GatewayClient:
     # ---------------------------------------------------------
     # Core Context Route
     # ---------------------------------------------------------
+    async def _curve_status(self, user_id: str) -> dict:
+        """{ieee: status} for lights following a day curve; {} if unavailable."""
+        try:
+            res = await self.client.get("/api/curves/status", cookies=self._mint_user_context_cookie(user_id))
+            return res.json().get("lights", {}) if res.status_code == 200 else {}
+        except Exception:
+            return {}
+
     async def get_filtered_context(self, user_id: str) -> str:
         """
         Fetches the current state of the home using an identity-bound request.
@@ -129,6 +137,7 @@ class GatewayClient:
             data = response.json()
             devices = data.get("devices", {})
 
+            curves = await self._curve_status(user_id)
             formatted_lines = []
 
             for ieee, attributes in devices.items():
@@ -143,6 +152,10 @@ class GatewayClient:
                         v = f"{v} (for {since})"
                     attr_list.append(f"{k}: {v}")
 
+                c = curves.get(ieee)
+                if c and c.get("enabled"):
+                    # Day curve: the hub sets warmth/brightness on its own; a manual change pauses it
+                    attr_list.append(f"day curve: {c.get('curve_name')}" + (" (paused until turned off)" if c.get("paused") else ""))
                 attributes_string = ", ".join(attr_list)
                 formatted_lines.append(f"{friendly_name}: {attributes_string}")
 
