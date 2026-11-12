@@ -15,15 +15,21 @@ _EXPOSE_KEYS = ("property", "type", "unit", "values", "value_on", "value_off", "
 
 def summarize_exposes(devices: list) -> dict:
     """{ieee: [{property, type, unit, values, ...}]} for the properties each device publishes.
-    Composite/list exposes (e.g. colour x/y) are skipped: their values are objects, not scalars."""
-    def flat(exposes):
+    Composite/list exposes (e.g. colour x/y) are skipped: their values are objects, not scalars.
+    Z2M tags only some settings with category "config", so an untagged top-level property that can
+    be set (access bit 2) counts as one too. A light's or plug's own controls (state, brightness) sit
+    inside its typed group (light/switch/...) and stay readings; sensor readings are read-only."""
+    def flat(exposes, nested=False):
         for e in exposes:
             if not isinstance(e, dict) or e.get("type") in ("composite", "list"):
                 continue
             if e.get("features"):
-                yield from flat(e["features"])
+                yield from flat(e["features"], nested=True)
             elif e.get("property") and e.get("access", 1) & 1 and e["property"] != "linkquality":
-                yield {k: e[k] for k in _EXPOSE_KEYS if k in e}
+                item = {k: e[k] for k in _EXPOSE_KEYS if k in e}
+                if not item.get("category") and not nested and e.get("access", 1) & 2:
+                    item["category"] = "config"
+                yield item
 
     out = {}
     for d in devices:
