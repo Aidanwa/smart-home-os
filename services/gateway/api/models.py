@@ -41,10 +41,14 @@ class DeviceState(BaseModel):
     pir_detection: Optional[bool] = None
     target_distance: Optional[float] = None
     illuminance: Optional[float] = None
+    # Added by the gateway: when presence/occupancy last flipped (ISO, UTC)
+    presence_changed_at: Optional[str] = None
     # Their settings (shown and set in the device drawer)
     absence_delay_timer: Optional[int] = None
     motion_sensitivity: Optional[str] = None
     presence_detection_options: Optional[str] = None
+    detection_range: Optional[int] = None  # FP300: bitmask of 24 slices of 0.25 m, nearest first
+    led_disabled_night: Optional[bool] = None
     # Last message from the device (Z2M advanced.last_seen: ISO_8601)
     last_seen: Optional[str] = None
     # Z2M OTA status: {"state": "idle"|"available"|"scheduled"|"updating", "progress", ...}
@@ -74,8 +78,17 @@ class DeviceSetRequest(BaseModel):
     absence_delay_timer: Optional[int] = Field(None, ge=1, le=300)
     motion_sensitivity: Optional[Literal["low", "medium", "high"]] = None
     presence_detection_options: Optional[Literal["both", "mmwave", "pir"]] = None
+    detection_range: Optional[int] = Field(None, ge=1, le=(1 << 24) - 1)
+    led_disabled_night: Optional[bool] = None
+    # Write-only command: the sensor never reports it back, so it's sent without waiting
+    # (WRITE_ONLY_FIELDS, routes.py).
+    spatial_learning: Optional[Literal["Start Learning"]] = None
 
     model_config = ConfigDict(extra="ignore")
+
+
+# DeviceSetRequest fields that the device never confirms with a state report.
+WRITE_ONLY_FIELDS = {"spatial_learning"}
 
 class RPCResponse(BaseModel):
     status: str

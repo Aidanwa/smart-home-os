@@ -9,7 +9,7 @@ interface Props {
   fetchRuns: (id: string) => Promise<RoutineRun[]>;
 }
 
-const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', manual: 'Run now', routine: 'Called' };
+const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', room: 'Room', manual: 'Run now', routine: 'Called' };
 
 export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
@@ -72,6 +72,12 @@ export function RunItem({ run, timezone, expanded, onToggle, title, timeOnly, fo
             <p className="text-neutral-400">
               Triggered by {String(run.trigger_detail.device)} {String(run.trigger_detail.attribute)} = {String(run.trigger_detail.value)}
               {typeof run.trigger_detail.held_s === 'number' ? ` (held ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
+            </p>
+          )}
+          {typeof run.trigger_detail?.room === 'string' && (
+            <p className="text-neutral-400">
+              {String(run.trigger_detail.room)} became {run.trigger_detail.occupied ? 'occupied' : 'empty'}
+              {typeof run.trigger_detail.held_s === 'number' ? ` (for ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
             </p>
           )}
           {typeof run.trigger_detail?.called_by === 'string' && <p className="text-neutral-400">Started by the routine {run.trigger_detail.called_by}</p>}

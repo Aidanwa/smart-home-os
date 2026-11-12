@@ -21,6 +21,10 @@ TRIGGERS (any one starts it; [] = manual only):
  {"type":"time","at":"HH:MM","days":["mon",..,"sun"] or null (= every day),"date":null}
   One-time (a reminder): "date":"YYYY-MM-DD" with "days":null; it fires once; finished ones drop out of rt_list.
  {"type":"sun","event":"sunrise"|"sunset","offset_min":-30,"days":null}
+ {"type":"room","room":ROOM_NAME,"state":"occupied"|"empty","for_s":seconds or null,"cooldown_s":0,"fire_on_start":false}
+  A room is occupied while any presence/motion sensor in it (see Rooms in Home State) detects someone.
+  Prefer this over a sensor's presence reading. E.g. "lights off when the bedroom's been empty 10 min" =
+  room trigger state "empty", for_s 600.
  {"type":"device","device":NAME,"attribute":"state"|"temperature"|"power"|"action"|...,
   "op":"eq"|"ne"|"gt"|"gte"|"lt"|"lte"|"changes","value":X (null for changes),
   "rearm":margin or null (numeric ops only: won't refire until it moves back past threshold by this much),
@@ -29,6 +33,8 @@ TRIGGERS (any one starts it; [] = manual only):
 CONDITIONS (all must hold; for OR use one {"type":"any","conditions":[...]}):
  {"type":"time_window","after":"22:00","before":"06:00"}  {"type":"days","days":["sat","sun"]}
  {"type":"sun","state":"up"|"down"}  {"type":"device","device":NAME,"attribute":..,"op":"eq"|"ne"|"gt"|"gte"|"lt"|"lte","value":X}
+ {"type":"room","room":ROOM_NAME,"state":"occupied"|"empty","for_s":seconds or null (has been for at least this long)}
+ Only when it's dark in a room: a device condition on its sensor's "illuminance" (lux), e.g. "lt" 30.
 ACTIONS (in order):
  {"type":"device","device":NAME,"set":{"state":"ON"|"OFF"|"TOGGLE","brightness":0-254,"color_temp":150-500,"transition":s}}
  {"type":"group","group":GROUP_NAME,"set":{...same...}}
@@ -71,6 +77,7 @@ def _strip_nulls(v):
 class RoutineTools:
     def __init__(self, gateway: GatewayClient):
         self.gw = gateway
+        self._rooms: dict[str, str] = {}  # room id -> name, loaded by _names
 
     async def _call(self, user_id, method: str, path: str, **kw):
         return await self.gw.client.request(method, path, cookies=self.gw._mint_user_context_cookie(user_id), **kw)
@@ -83,6 +90,8 @@ class RoutineTools:
         if routines is None:
             res = await self._call(user_id, "GET", "/api/routines")
             routines = res.json().get("routines", []) if res.status_code == 200 else []
+        rooms_res = await self._call(user_id, "GET", "/api/zones/occupancy")
+        self._rooms = {rid: r.get("name", rid) for rid, r in rooms_res.json().items()} if rooms_res.status_code == 200 else {}
         return ({ieee: d.get("friendly_name", ieee) for ieee, d in devs.items()},
                 {g["id"]: g["friendly_name"] for g in groups},
                 {r["id"]: r["name"] for r in routines})
@@ -105,10 +114,17 @@ class RoutineTools:
         dev_by_name = {n.lower(): ieee for ieee, n in devices.items()}
         grp_by_name = {n.lower(): gid for gid, n in groups.items()}
         rt_by_name = {n.lower(): rid for rid, n in routines.items()}
+        room_by_name = {n.lower(): rid for rid, n in self._rooms.items()}
         problems = []
         for item in self._walk(routine):
             if not isinstance(item, dict):
                 continue
+            if item.get("type") == "room" and isinstance(item.get("room"), str):
+                rm = item["room"]
+                if rm.lower() in room_by_name:
+                    item["room"] = room_by_name[rm.lower()]
+                elif rm not in self._rooms:
+                    problems.append(f"unknown room '{rm}' (rooms: {', '.join(sorted(self._rooms.values())) or 'none'})")
             if item.get("type") == "routine" and isinstance(item.get("routine"), str):
                 r = item["routine"]
                 if r.lower() in rt_by_name:
@@ -136,6 +152,8 @@ class RoutineTools:
     def _to_names(self, routine: dict, devices: dict, groups: dict, routines: dict) -> dict:
         for item in self._walk(routine):
             if isinstance(item, dict):
+                if item.get("type") == "room" and item.get("room") in self._rooms:
+                    item["room"] = self._rooms[item["room"]]
                 if item.get("type") == "routine" and item.get("routine") in routines:
                     item["routine"] = routines[item["routine"]]
                 if isinstance(item.get("device"), str) and item["device"] in devices:

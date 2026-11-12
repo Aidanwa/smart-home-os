@@ -7,7 +7,7 @@ import {
   Lightbulb, Zap, Thermometer, ToggleRight, Box, Gamepad2, DoorOpen, MapPinOff, PowerOff, ChevronDown, Plug, RefreshCw, PersonStanding
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getDeviceCategory, getDeviceKind } from './lib/deviceUtils';
+import { getDeviceCategory, getDeviceKind, isPresenceSensor } from './lib/deviceUtils';
 import { useRoomIndex } from './hooks/useRoomIndex';
 import { formatFloorName } from './components/rooms/constants';
 import { DeviceCategorySection } from './components/devices/DeviceCategorySection';
@@ -105,6 +105,17 @@ function AuthenticatedDashboard() {
         const room = roomIndex.roomOf[d.state.ieee_address ?? d.name];
         ((room && byId.get(room)) || unplaced).devices.push(d);
       });
+      // Rooms with a presence or motion sensor say whether someone's there.
+      for (const s of sections) {
+        const sensors = s.devices.filter(d => isPresenceSensor(d.state));
+        if (!sensors.length) continue;
+        const here = sensors.some(d => d.state.presence !== undefined ? d.state.presence === true : d.state.occupancy === true);
+        s.badge = (
+          <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium normal-case tracking-normal ${here ? 'bg-emerald-500/15 text-emerald-300' : 'bg-neutral-800 text-neutral-500'}`}>
+            {here ? 'Occupied' : 'Empty'}
+          </span>
+        );
+      }
       return [...sections, unplaced].filter(s => s.devices.length > 0);
     }
 

@@ -13,6 +13,33 @@ logger = logging.getLogger(__name__)
 from shared.security import JWT_SECRET_KEY
 ALGORITHM = "HS256"
 
+# Left out of the agent's home state: identifiers and noise, sensor settings, and a distance that
+# changes on every report. presence_changed_at is shown as "(for 25 min)" next to the reading.
+_HIDDEN_ATTRIBUTES = {
+    'ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen',
+    'absence_delay_timer', 'motion_sensitivity', 'presence_detection_options',
+    'detection_range', 'led_disabled_night', 'target_distance', 'pir_detection', 'presence_changed_at',
+}
+
+
+def _ago(iso: str | None) -> str | None:
+    """How long ago an ISO time was: "25 min", "3 h 10 min", "2 days"."""
+    if not iso:
+        return None
+    try:
+        s = (datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00"))).total_seconds()
+    except ValueError:
+        return None
+    m = max(0, int(s // 60))
+    if m < 1:
+        return "under a minute"
+    if m < 60:
+        return f"{m} min"
+    if m < 48 * 60:
+        return f"{m // 60} h {m % 60} min" if m % 60 else f"{m // 60} h"
+    return f"{m // 1440} days"
+
+
 class GatewayClient:
     """
     The HTTP client responsible for communicating with the main Gateway Service.
@@ -47,6 +74,40 @@ class GatewayClient:
         # Return in the exact format httpx expects for cookie injection
         return {"access_token": token}
 
+    async def _rooms_section(self, user_id: str, devices: dict) -> str:
+        """The prompt's Rooms section, from the Rooms floor plan: each room's devices and, where it has a presence
+        or motion sensor, whether it's occupied and for how long. Empty if rooms can't be read."""
+        try:
+            cookies = self._mint_user_context_cookie(user_id)
+            occ_res, place_res = await asyncio.gather(
+                self.client.get("/api/zones/occupancy", cookies=cookies),
+                self.client.get("/api/zones/placements", cookies=cookies),
+            )
+            occ_res.raise_for_status()
+            place_res.raise_for_status()
+            rooms, placements = occ_res.json(), place_res.json()
+        except Exception as e:
+            logger.warning(f"Couldn't load rooms for the prompt: {e}")
+            return ""
+        members: dict[str, list[str]] = {}
+        for p in placements:
+            d = devices.get(p.get("ieee_address"))
+            if d and p.get("zone_id") in rooms:
+                members.setdefault(p["zone_id"], []).append(d.get("friendly_name", p["ieee_address"]))
+        lines = []
+        for rid, room in sorted(rooms.items(), key=lambda kv: (kv[1].get("floor", 0), kv[1].get("name", ""))):
+            occupied = room.get("occupied")
+            if occupied is None:
+                status = "no presence sensor"
+            else:
+                status = "occupied" if occupied else "empty"
+                since = _ago(room.get("since"))
+                if since:
+                    status += f" for {since}"
+            names = ", ".join(sorted(members.get(rid, []))) or "no devices"
+            lines.append(f"- {room.get('name', rid)} ({status}): {names}")
+        return "Rooms:\n" + "\n".join(lines) if lines else ""
+
     # ---------------------------------------------------------
     # Core Context Route
     # ---------------------------------------------------------
@@ -69,21 +130,22 @@ class GatewayClient:
 
             for ieee, attributes in devices.items():
                 friendly_name = attributes.get('friendly_name', 'UnknownDevice')
-                
-                attr_list = [
-                    f"{k}: {v}" for k, v in attributes.items() 
-                    if k not in ('ieee_address', 'linkquality', 'friendly_name', 'update', 'last_seen',
-                                 # sensor settings and a distance that changes on every report
-                                 'absence_delay_timer', 'motion_sensitivity', 'presence_detection_options',
-                                 'target_distance', 'pir_detection')
-                ]
-                
+                since = _ago(attributes.get('presence_changed_at'))
+
+                attr_list = []
+                for k, v in attributes.items():
+                    if k in _HIDDEN_ATTRIBUTES:
+                        continue
+                    if k in ('presence', 'occupancy') and since:
+                        v = f"{v} (for {since})"
+                    attr_list.append(f"{k}: {v}")
+
                 attributes_string = ", ".join(attr_list)
                 formatted_lines.append(f"{friendly_name}: {attributes_string}")
 
-            final_output = "\n".join(formatted_lines)
-            return final_output
-            
+            rooms = await self._rooms_section(user_id, devices)
+            return (rooms + "\nDevices:\n" if rooms else "") + "\n".join(formatted_lines)
+
         except httpx.HTTPStatusError as e:
             logger.error(f"Gateway returned HTTP error {e.response.status_code}: {e.response.text}")
             raise Exception("Failed to fetch context from Gateway.")

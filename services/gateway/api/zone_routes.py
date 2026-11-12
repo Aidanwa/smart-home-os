@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -7,9 +9,29 @@ from uuid import UUID
 from shared.database.core import get_db
 from shared.database.models import LogicalZone, DevicePlacement
 from api.auth import get_current_user
+from core.rooms import all_rooms
 from .models import ZoneCreate, ZoneRename, ZoneUpdateLayout, ZoneResponse, BatchPlacementUpdate, PlacementResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/zones", tags=["Spatial Layout"], dependencies=[Depends(get_current_user)])
+
+
+async def _rooms_changed(request: Request):
+    """Rooms or placements changed: recompute room occupancy (core/rooms.py). Never fails the request."""
+    rooms = getattr(request.app.state, "rooms", None)
+    if rooms is None:
+        return
+    try:
+        await rooms.reload()
+    except Exception:
+        logger.exception("Room occupancy reload failed")
+
+
+@router.get("/occupancy")
+async def room_occupancy(request: Request):
+    """{room id: {name, floor, occupied (null = no presence/motion sensor), since, sensors}}."""
+    return await all_rooms(request.app.state.bus.redis)
 
 @router.get("", response_model=list[ZoneResponse])
 async def get_floor_zones(floor_level: int = 1, db: AsyncSession = Depends(get_db)):
@@ -20,20 +42,21 @@ async def get_floor_zones(floor_level: int = 1, db: AsyncSession = Depends(get_d
     return result.scalars().all()
 
 @router.post("", response_model=ZoneResponse)
-async def create_zone(zone_in: ZoneCreate, db: AsyncSession = Depends(get_db)):
+async def create_zone(zone_in: ZoneCreate, request: Request, db: AsyncSession = Depends(get_db)):
     """Create a new room canvas."""
     new_zone = LogicalZone(**zone_in.model_dump())
     db.add(new_zone)
     try:
         await db.commit()
         await db.refresh(new_zone)
+        await _rooms_changed(request)
         return new_zone
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Zone creation failed. Name may already exist.")
 
 @router.patch("/{zone_id}", response_model=ZoneResponse)
-async def rename_zone(zone_id: UUID, payload: ZoneRename, db: AsyncSession = Depends(get_db)):
+async def rename_zone(zone_id: UUID, payload: ZoneRename, request: Request, db: AsyncSession = Depends(get_db)):
     """Rename an existing room."""
     result = await db.execute(select(LogicalZone).where(LogicalZone.id == zone_id))
     zone = result.scalar_one_or_none()
@@ -48,6 +71,7 @@ async def rename_zone(zone_id: UUID, payload: ZoneRename, db: AsyncSession = Dep
 
     await db.commit()
     await db.refresh(zone)
+    await _rooms_changed(request)
     return zone
 
 @router.put("/{zone_id}/layout", response_model=ZoneResponse)
@@ -70,7 +94,7 @@ async def update_zone_layout(zone_id: UUID, layout: ZoneUpdateLayout, db: AsyncS
     return zone
 
 @router.put("/placements/batch")
-async def batch_update_placements(batch: BatchPlacementUpdate, db: AsyncSession = Depends(get_db)):
+async def batch_update_placements(batch: BatchPlacementUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     """
     CRITICAL ENDPOINT: Accepts a mass payload of device coordinates when a user 
     hits 'Save Layout' after dragging multiple devices around a room.
@@ -92,6 +116,7 @@ async def batch_update_placements(batch: BatchPlacementUpdate, db: AsyncSession 
 
         # Execute everything as one lightning-fast transaction
         await db.commit()
+        await _rooms_changed(request)
         return {"status": "success", "updated_count": len(batch.placements)}
         
     except Exception as e:
@@ -111,6 +136,7 @@ async def get_all_placements(db: AsyncSession = Depends(get_db)):
 @router.delete("/{zone_id}")
 async def delete_zone(
     zone_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -127,5 +153,6 @@ async def delete_zone(
 
     await db.delete(zone)
     await db.commit()
+    await _rooms_changed(request)
 
     return {"status": "success"}

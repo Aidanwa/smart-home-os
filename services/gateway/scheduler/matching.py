@@ -4,7 +4,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.mqtt_bus import AsyncMqttBus
-from scheduler.schema import DAYS, AnyCondition, DaysCondition, DeviceCondition, SunCondition, TimeWindowCondition
+from core.rooms import ROOM_PREFIX, room_state
+from scheduler.schema import DAYS, AnyCondition, DaysCondition, DeviceCondition, RoomCondition, SunCondition, TimeWindowCondition
 from scheduler.timing import Location, local_hhmm, sun_is_up
 
 
@@ -39,8 +40,20 @@ def released(op: str, actual, threshold, rearm: float | None) -> bool:
 
 
 async def device_reading(bus: AsyncMqttBus, ieee: str) -> dict | None:
+    """A device's latest state; for the pseudo-device "room:<id>", {"occupied", "friendly_name"}
+    (what room triggers watch)."""
+    if ieee.startswith(ROOM_PREFIX):
+        room = await room_state(bus.redis, ieee[len(ROOM_PREFIX):])
+        if room is None or room.get("occupied") is None:
+            return None
+        return {"occupied": room["occupied"], "friendly_name": room["name"], "since": room.get("since")}
     raw = await bus.redis.hget("gateway:digital_twin", ieee)
     return json.loads(raw) if raw else None
+
+
+def _minutes(seconds: float) -> str:
+    m = round(seconds / 60)
+    return f"{m} min" if m < 120 else f"{m / 60:.1f} h"
 
 
 async def failing_condition(conditions: list, bus: AsyncMqttBus, now: datetime, tz: ZoneInfo, loc: Location) -> str | None:
@@ -82,4 +95,18 @@ async def _check(c, bus, now, tz, loc) -> str | None:
             return f"{name} hasn't reported {c.attribute}"
         actual = state[c.attribute]
         return None if compare(c.op, actual, c.value) else f"{name} {c.attribute} is {actual}"
+    if isinstance(c, RoomCondition):
+        room = await room_state(bus.redis, str(c.room))
+        if room is None:
+            return "that room no longer exists"
+        if room.get("occupied") is None:
+            return f"{room['name']} has no presence sensor"
+        want = c.state == "occupied"
+        if room["occupied"] != want:
+            return f"{room['name']} is {'occupied' if room['occupied'] else 'empty'}"
+        if c.for_s and room.get("since"):
+            held = (now - datetime.fromisoformat(room["since"].replace("Z", "+00:00"))).total_seconds()
+            if held < c.for_s:
+                return f"{room['name']} has only been {c.state} for {_minutes(held)}"
+        return None
     return f"unknown condition type {getattr(c, 'type', '?')}"

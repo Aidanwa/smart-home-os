@@ -1,7 +1,7 @@
 """Pydantic shapes for routines. The single source of truth for what a stored routine may contain.
 
 Kept flat and plain-worded so the agent can write them (tools/routines_api.py). See the Routines section of CLAUDE.md.
-Triggers: time, sun, device. Conditions: time_window, days, device, sun, and an 'any' group (OR);
+Triggers: time, sun, device, room. Conditions: time_window, days, device, sun, room, and an 'any' group (OR);
 the routine's condition list itself is AND. Actions: device, group, delay, fade, spotify_play,
 spotify_ctrl, agent, notify, routine (Spotify and agent actions go through the agent as the
 routine's owner; see agent_client.py; notify is a web push, core/push.py; routine starts another
@@ -121,7 +121,20 @@ class DeviceTrigger(_Strict):
         return self
 
 
-Trigger = Annotated[Union[TimeTrigger, SunTrigger, DeviceTrigger], Field(discriminator="type")]
+class RoomTrigger(_Strict):
+    """Fires when a room becomes occupied or empty: occupied while any presence or motion sensor
+    placed in it (Rooms floor plan) says someone's there (core/rooms.py). Runs on the device-trigger
+    machinery, watching the pseudo-device "room:<id>" (see Scheduler._watch)."""
+    id: ShortId
+    type: Literal["room"]
+    room: uuid.UUID
+    state: Literal["occupied", "empty"]
+    for_s: int | None = Field(None, ge=1, le=86400)
+    cooldown_s: int = Field(0, ge=0, le=86400)
+    fire_on_start: bool = False
+
+
+Trigger = Annotated[Union[TimeTrigger, SunTrigger, DeviceTrigger, RoomTrigger], Field(discriminator="type")]
 
 
 # ---------------------------------------------------------------- conditions (all must pass)
@@ -166,7 +179,15 @@ class SunCondition(_Strict):
     state: Literal["up", "down"]
 
 
-LeafCondition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition], Field(discriminator="type")]
+class RoomCondition(_Strict):
+    """The room is occupied / empty (optionally: has been for at least for_s)."""
+    type: Literal["room"]
+    room: uuid.UUID
+    state: Literal["occupied", "empty"]
+    for_s: int | None = Field(None, ge=1, le=86400)
+
+
+LeafCondition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition], Field(discriminator="type")]
 
 
 class AnyCondition(_Strict):
@@ -175,7 +196,7 @@ class AnyCondition(_Strict):
     conditions: list[LeafCondition] = Field(min_length=1, max_length=20)
 
 
-Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, AnyCondition], Field(discriminator="type")]
+Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition, AnyCondition], Field(discriminator="type")]
 
 
 def leaf_conditions(conditions: list) -> list:
@@ -196,6 +217,8 @@ class SetPayload(DeviceSetRequest):
     def _not_empty(self):
         if not self.to_mqtt():
             raise ValueError("set at least one of state, brightness, color_temp, transition")
+        if self.spatial_learning is not None:
+            raise ValueError("spatial learning can't be run from a routine (start it from the sensor's settings)")
         return self
 
     def to_mqtt(self) -> dict:

@@ -21,7 +21,8 @@ from shared.database.models import Routine
 from scheduler import alerts, runner, store
 from scheduler.actions import CallResult
 from scheduler.matching import compare, device_reading, failing_condition, released
-from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoutineSpec, SunTrigger, TimeTrigger
+from core.rooms import ROOM_PREFIX
+from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoomTrigger, RoutineSpec, SunTrigger, TimeTrigger
 from scheduler.timing import Location, is_scheduled, next_fire, prev_fire
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,21 @@ def describe_trigger(trig) -> str:
         return f"{trig.date} {trig.at}" if trig.date else trig.at
     if isinstance(trig, SunTrigger):
         return trig.event + (f" {trig.offset_min:+d} min" if trig.offset_min else "")
+    if isinstance(trig, RoomTrigger):
+        return f"room {trig.room} {trig.state}"
     return f"{trig.attribute} {trig.op} {trig.value}"
+
+
+def watch_trigger(trig) -> DeviceTrigger | None:
+    """The device trigger the engine evaluates for a trigger: device triggers as they are; a room
+    trigger as one on the pseudo-device "room:<id>" reading `occupied` (fed by core/rooms.py)."""
+    if isinstance(trig, DeviceTrigger):
+        return trig
+    if isinstance(trig, RoomTrigger):
+        return DeviceTrigger(id=trig.id, type="device", device=f"{ROOM_PREFIX}{trig.room}", attribute="occupied",
+                             op="eq", value=trig.state == "occupied", for_s=trig.for_s,
+                             cooldown_s=trig.cooldown_s, fire_on_start=trig.fire_on_start)
+    return None
 
 
 @dataclass
@@ -61,6 +76,7 @@ class LoadedRoutine:
     updated_at: datetime
     spec: RoutineSpec
     owner_id: uuid.UUID | None = None  # run-as user (Spotify account)
+    watch: dict = field(default_factory=dict)  # trigger id -> DeviceTrigger evaluated for it (watch_trigger)
 
     @property
     def name(self) -> str:
@@ -181,8 +197,9 @@ class Scheduler:
                 t = next_fire(trig, now, self.tz, self.loc)
                 if t:
                     self._next[key] = t
-            elif isinstance(trig, DeviceTrigger):
-                self._dev_index.setdefault(trig.device, []).append(key)
+            elif (watched := watch_trigger(trig)) is not None:
+                r.watch[trig.id] = watched
+                self._dev_index.setdefault(watched.device, []).append(key)
                 self._dev_state[key] = DeviceTriggerState()
 
     def _forget(self, routine_id: uuid.UUID):
@@ -203,11 +220,10 @@ class Scheduler:
         r = self._routines.get(routine_id)
         if not r or not r.spec.enabled:
             return
-        for trig in r.spec.triggers:
-            if isinstance(trig, DeviceTrigger):
-                state = await device_reading(self.bus, trig.device)
-                if state and trig.attribute in state:
-                    self._evaluate(r, trig, state[trig.attribute], state.get("friendly_name", trig.device), seed=True)
+        for trig in r.watch.values():  # device triggers, and room triggers as "room:<id>"
+            state = await device_reading(self.bus, trig.device)
+            if state and trig.attribute in state:
+                self._evaluate(r, trig, state[trig.attribute], state.get("friendly_name", trig.device), seed=True)
 
     def _cancel_run(self, routine_id: uuid.UUID):
         task = self._runs.get(routine_id)
@@ -448,6 +464,11 @@ class Scheduler:
             logger.debug(f"Routine '{r.name}' trigger {trig.id} in cooldown")
             return
         st.last_fired = now_m
+        if trig.device.startswith(ROOM_PREFIX):
+            detail = {"room": name, "occupied": value, **extra}
+            logger.info(f"Routine '{r.name}' triggered by {name} {'occupied' if value else 'empty'}")
+            self._spawn(self._start_run(r, "room", trig.id, detail=detail))
+            return
         detail = {"device": name, "attribute": trig.attribute, "value": value, **extra}
         logger.info(f"Routine '{r.name}' triggered by {name} {trig.attribute}={value}")
         self._spawn(self._start_run(r, "device", trig.id, detail=detail))
@@ -457,7 +478,7 @@ class Scheduler:
         try:
             while True:
                 msg = await q.get()
-                if msg.get("type") != "device_update":
+                if msg.get("type") not in ("device_update", "room_update"):
                     continue
                 keys = self._dev_index.get(msg.get("device"))
                 if not keys:
@@ -466,8 +487,8 @@ class Scheduler:
                 try:
                     for rid, tid in list(keys):
                         r = self._routines.get(rid)
-                        trig = r.trigger(tid) if r else None
-                        if isinstance(trig, DeviceTrigger) and trig.attribute in payload:
+                        trig = r.watch.get(tid) if r else None
+                        if trig is not None and trig.attribute in payload:
                             self._evaluate(r, trig, payload[trig.attribute], payload.get("friendly_name", trig.device), seed=False)
                 except Exception:
                     logger.exception("Device trigger evaluation failed; continuing")

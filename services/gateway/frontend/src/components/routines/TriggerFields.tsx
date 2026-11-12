@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import type { AttributeMap, Day, DeviceTrigger, SunTrigger, TempUnit, TimeTrigger, Trigger, TriggerOp } from './types';
+import type { AttributeMap, Day, DeviceTrigger, RoomOption, RoomTrigger, SunTrigger, TempUnit, TimeTrigger, Trigger, TriggerOp } from './types';
 import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDisplay, describeDays, displayUnit, formatDate } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, isNumericOp, opsFor } from './fieldLogic';
@@ -43,11 +43,13 @@ function RowHeader({ title, onRemove }: { title: string; onRemove: () => void })
 interface Ctx {
   attributes: AttributeMap;
   tempUnit: TempUnit;
+  rooms?: RoomOption[];
 }
 
 export function TriggerRow({ trigger, onChange, onRemove, ctx }: { trigger: Trigger; onChange: (t: Trigger) => void; onRemove: () => void; ctx: Ctx }) {
   if (trigger.type === 'time') return <TimeRow trigger={trigger} onChange={onChange} onRemove={onRemove} />;
   if (trigger.type === 'sun') return <SunRow trigger={trigger} onChange={onChange} onRemove={onRemove} />;
+  if (trigger.type === 'room') return <RoomRow trigger={trigger} onChange={onChange} onRemove={onRemove} rooms={ctx.rooms ?? []} />;
   return <DeviceRow trigger={trigger} onChange={onChange} onRemove={onRemove} ctx={ctx} />;
 }
 
@@ -106,7 +108,60 @@ function SunRow({ trigger, onChange, onRemove }: { trigger: SunTrigger; onChange
   );
 }
 
-function MinutesField({ text, seconds, onChange, hint }: { text: string; seconds: number | null; onChange: (s: number | null) => void; hint?: string }) {
+/** Room picker shared by the room trigger and room condition. Rooms without a sensor are listed
+ *  (the plan may just not have it placed yet) but marked, with a hint underneath. */
+export function RoomPicker({ rooms, room, onPick }: { rooms: RoomOption[]; room: string; onPick: (id: string) => void }) {
+  const picked = rooms.find(r => r.id === room);
+  return (
+    <div className="space-y-1">
+      <select className={input} value={room} onChange={e => onPick(e.target.value)} aria-label="Room">
+        {!picked && <option value={room}>{room ? 'A deleted room' : 'Pick a room'}</option>}
+        {rooms.map(r => <option key={r.id} value={r.id}>{r.name}{r.hasSensor ? '' : ' (no sensor)'}</option>)}
+      </select>
+      {picked && !picked.hasSensor && (
+        <p className="text-xs text-amber-400/90">No presence or motion sensor is placed in {picked.name}. Place one there in Rooms.</p>
+      )}
+      {rooms.length === 0 && <p className="text-xs text-neutral-500">No rooms yet. Draw them in the Rooms tab.</p>}
+    </div>
+  );
+}
+
+export function OccupiedChoice({ state, onChange }: { state: 'occupied' | 'empty'; onChange: (s: 'occupied' | 'empty') => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {(['occupied', 'empty'] as const).map(s => (
+        <button key={s} type="button" className={chip(state === s)} onClick={() => onChange(s)}>
+          {s === 'occupied' ? 'Someone’s there' : 'It’s empty'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RoomRow({ trigger, onChange, onRemove, rooms }: { trigger: RoomTrigger; onChange: (t: RoomTrigger) => void; onRemove: () => void; rooms: RoomOption[] }) {
+  return (
+    <div className={card}>
+      <RowHeader title="Room occupancy" onRemove={onRemove} />
+      <RoomPicker rooms={rooms} room={trigger.room} onPick={room => onChange({ ...trigger, room })} />
+      <OccupiedChoice state={trigger.state} onChange={state => onChange({ ...trigger, state })} />
+      <MinutesField text={trigger.state === 'empty' ? 'Only once it has been empty for' : 'Only once someone has been there for'}
+        seconds={trigger.for_s} onChange={for_s => onChange({ ...trigger, for_s })}
+        hint={trigger.state === 'empty' ? 'e.g. 10 minutes, so stepping out briefly doesn’t turn the lights off.' : undefined} />
+      <details className="text-xs">
+        <summary className="cursor-pointer text-neutral-500 select-none min-h-10 flex items-center">Options</summary>
+        <div className="mt-2 space-y-3">
+          <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+            <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
+            Also fire if it's already {trigger.state} when saved or when the hub restarts
+          </label>
+          <MinutesField text="At most once every" seconds={trigger.cooldown_s || null} onChange={s => onChange({ ...trigger, cooldown_s: s ?? 0 })} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+export function MinutesField({ text, seconds, onChange, hint }: { text: string; seconds: number | null; onChange: (s: number | null) => void; hint?: string }) {
   return (
     <div>
       <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
@@ -158,7 +213,7 @@ function DeviceRow({ trigger, onChange, onRemove, ctx }: { trigger: DeviceTrigge
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <OpSelect ops={ops} op={trigger.op} attribute={trigger.attribute} onChange={setOp} />
         {trigger.op !== 'changes' && (
-          <ValueInput info={info} value={trigger.value} tempUnit={ctx.tempUnit} onChange={value => onChange({ ...trigger, value })} />
+          <ValueInput info={info} attribute={trigger.attribute} value={trigger.value} tempUnit={ctx.tempUnit} onChange={value => onChange({ ...trigger, value })} />
         )}
       </div>
       <CurrentReading attributes={ctx.attributes} device={trigger.device} attribute={trigger.attribute} tempUnit={ctx.tempUnit} />

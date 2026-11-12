@@ -17,7 +17,7 @@ from api.dependencies import get_mqtt_bus
 from api.models import (
     DeviceListResponse, DeviceStateResponse, DeviceSetRequest, GroupInfo,
     BridgeHealthResponse, BridgeInfoResponse, PermitJoinRequest, GroupCreateRequest, 
-    GroupMemberRequest, RenameRequest,
+    GroupMemberRequest, RenameRequest, WRITE_ONLY_FIELDS,
 )
 from api.auth import get_current_user, get_ws_authenticated_user
 
@@ -122,6 +122,10 @@ async def set_device_state(
         )
 
     try:
+        if set(payload) <= WRITE_ONLY_FIELDS:
+            # Commands the device never reports back (e.g. start spatial learning): just send.
+            await device_control.send_device(bus, device_id, payload)
+            return {"status": "sent", "device": device_id}
         # Awaits the device's next state publish; ON/OFF requests are checked against it.
         result = await device_control.set_device(bus, device_id, payload)
 

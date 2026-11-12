@@ -1,9 +1,18 @@
 // Non-component helpers for the trigger/condition editors (kept apart for React fast refresh).
-import type { Action, AttributeInfo, AttributeMap, ConditionOp, LeafCondition, Scalar, Trigger, TriggerOp } from './types';
+import type { Action, AttributeInfo, AttributeMap, ConditionOp, LeafCondition, RoomOption, Scalar, Trigger, TriggerOp } from './types';
 import { EVENT_ATTRIBUTES, NUMERIC_OPS, OP_TEXT } from './types';
 
-const NICE_NAMES: Record<string, string> = { action: 'button press', state: 'on/off state', color_temp: 'colour temperature' };
-export const attributeLabel = (p: string) => NICE_NAMES[p] ?? p.replace(/_/g, ' ');
+export { attributeLabel } from './types';
+
+/** A live reading (presence, temperature, a button), not a device setting or housekeeping value. */
+export const isReading = (p: AttributeInfo) => !p.category;
+
+/** The property a new trigger/condition starts on: the first real reading. */
+const firstReading = (props: AttributeInfo[] | undefined, skipButtons = false) =>
+  props?.find(p => isReading(p) && !(skipButtons && EVENT_ATTRIBUTES.includes(p.property))) ?? props?.[0];
+
+/** A room with a presence or motion sensor first, else any room. */
+const firstRoom = (rooms: RoomOption[]) => rooms.find(r => r.hasSensor) ?? rooms[0];
 
 export function findInfo(attributes: AttributeMap, device: string, attribute: string): AttributeInfo | undefined {
   return attributes[device]?.properties.find(p => p.property === attribute);
@@ -36,21 +45,24 @@ export function defaultComparison(info: AttributeInfo | undefined, attribute: st
 
 export const isNumericOp = (op: TriggerOp) => NUMERIC_OPS.includes(op);
 
-export function newTrigger(type: Trigger['type'], id: string, attributes: AttributeMap): Trigger {
+export function newTrigger(type: Trigger['type'], id: string, attributes: AttributeMap, rooms: RoomOption[] = []): Trigger {
   if (type === 'time') return { id, type, at: '07:00', days: null };
   if (type === 'sun') return { id, type, event: 'sunset', offset_min: 0, days: null };
+  if (type === 'room') return { id, type, room: firstRoom(rooms)?.id ?? '', state: 'occupied', for_s: null, cooldown_s: 0, fire_on_start: false };
   const [device, info] = Object.entries(attributes).sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name))[0] ?? ['', undefined];
-  const attribute = info?.properties[0]?.property ?? '';
-  const { op, value } = defaultComparison(info?.properties[0], attribute, info?.current?.[attribute]);
+  const prop = firstReading(info?.properties);
+  const attribute = prop?.property ?? '';
+  const { op, value } = defaultComparison(prop, attribute, info?.current?.[attribute]);
   return { id, type: 'device', device, attribute, op, value, rearm: null, for_s: null, cooldown_s: 0, fire_on_start: false };
 }
 
-export function newCondition(type: LeafCondition['type'], attributes: AttributeMap): LeafCondition {
+export function newCondition(type: LeafCondition['type'], attributes: AttributeMap, rooms: RoomOption[] = []): LeafCondition {
   if (type === 'time_window') return { type, after: '22:00', before: '06:00' };
   if (type === 'days') return { type, days: ['mon', 'tue', 'wed', 'thu', 'fri'] };
   if (type === 'sun') return { type, state: 'down' };
+  if (type === 'room') return { type, room: firstRoom(rooms)?.id ?? '', state: 'occupied', for_s: null };
   const [device, info] = Object.entries(attributes).sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name))[0] ?? ['', undefined];
-  const attribute = info?.properties.find(p => p.property !== 'action')?.property ?? '';
+  const attribute = firstReading(info?.properties, true)?.property ?? '';
   const d = defaultComparison(findInfo(attributes, device, attribute), attribute, info?.current?.[attribute]);
   return { type: 'device', device, attribute, op: (d.op === 'changes' ? 'eq' : d.op) as ConditionOp, value: d.value };
 }

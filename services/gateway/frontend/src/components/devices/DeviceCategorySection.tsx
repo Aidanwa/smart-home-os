@@ -7,6 +7,8 @@ export interface DeviceSection {
   id: string;
   title: string | null;
   icon?: React.ReactNode;
+  /** Shown after the title, e.g. a room's "Occupied". */
+  badge?: React.ReactNode;
   devices: Array<{ name: string; state: DeviceState }>;
 }
 
@@ -19,7 +21,7 @@ interface Props extends DeviceSection {
   deleteDevice: (name: string, label?: string) => void;
 }
 
-export function DeviceCategorySection({ id, title, icon, action, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
+export function DeviceCategorySection({ id, title, icon, badge, action, devices, sendCommand, toggleDevice, renameDevice, deleteDevice }: Props) {
   // 1. Create a unique storage key for this specific category (e.g., "section-expanded-lights")
   const storageKey = `section-expanded-${id}`;
 
@@ -45,6 +47,7 @@ export function DeviceCategorySection({ id, title, icon, action, devices, sendCo
         >
           {icon}
           <h2 className="text-sm font-semibold uppercase tracking-wider">{title}</h2>
+          {badge}
           <div className="h-px bg-neutral-800 flex-1 ml-4 transition-colors group-hover:bg-neutral-700" />
           {action && <div onClick={(e) => e.stopPropagation()}>{action}</div>}
           <ChevronDown 

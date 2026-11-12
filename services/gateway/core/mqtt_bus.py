@@ -2,13 +2,15 @@ import asyncio
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 import aiomqtt
 import redis.asyncio as redis
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-_EXPOSE_KEYS = ("property", "type", "unit", "values", "value_on", "value_off", "value_min", "value_max")
+# category: Z2M marks settings "config" and housekeeping "diagnostic"; the routine pickers hide those by default.
+_EXPOSE_KEYS = ("property", "type", "unit", "values", "value_on", "value_off", "value_min", "value_max", "category")
 
 
 def summarize_exposes(devices: list) -> dict:
@@ -252,7 +254,19 @@ class AsyncMqttBus:
                 if ieee_address:
                     payload["ieee_address"] = ieee_address
                     payload["friendly_name"] = device_name
-                
+
+                # Presence/motion sensors: remember when the reading last flipped, so the UI and
+                # the agent can say "empty for 2 hours". Z2M resends the full state each time, so
+                # carry the previous timestamp over while the value is unchanged.
+                watched = "presence" if "presence" in payload else "occupancy" if "occupancy" in payload else None
+                if watched and isinstance(payload, dict):
+                    prev_raw = await self.redis.hget("gateway:digital_twin", twin_key)
+                    prev = json.loads(prev_raw) if prev_raw else {}
+                    if prev.get(watched) == payload[watched] and prev.get("presence_changed_at"):
+                        payload["presence_changed_at"] = prev["presence_changed_at"]
+                    else:
+                        payload["presence_changed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
                 logger.debug(f"Updating digital twin for {twin_key} ({device_name}): {payload}")
                 await self.redis.hset("gateway:digital_twin", twin_key, json.dumps(payload))
 

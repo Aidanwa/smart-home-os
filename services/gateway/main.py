@@ -26,6 +26,7 @@ from api.push_routes import router as push_router
 # The installed app's manifest (frontend/public); Python doesn't know the extension.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 from scheduler.engine import Scheduler
+from core.rooms import RoomOccupancy
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -61,7 +62,12 @@ async def lifespan(app: FastAPI):
     # Give the MQTT client a moment to establish connection
     await asyncio.sleep(0.5)
 
-    # 3. Routine scheduler (never raises; logs and stays inactive on failure)
+    # 3. Room occupancy from presence sensors (before the scheduler, whose room triggers read it)
+    rooms = RoomOccupancy(bus)
+    app.state.rooms = rooms
+    await rooms.start()
+
+    # 4. Routine scheduler (never raises; logs and stays inactive on failure)
     scheduler = Scheduler(bus)
     app.state.scheduler = scheduler
     await scheduler.start()
@@ -71,6 +77,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Gateway...")
     await scheduler.stop()
+    await rooms.stop()
     await bus.stop()
 
 # Create FastAPI app

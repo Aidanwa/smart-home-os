@@ -41,13 +41,26 @@ export interface DeviceTrigger {
   fire_on_start: boolean;  // also fire if already true when saved / when the hub starts
 }
 
-export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger;
+/** A room becomes occupied / empty: any presence or motion sensor placed in it (Rooms) counts. */
+export interface RoomTrigger {
+  id: string;
+  type: 'room';
+  room: string;        // room (zone) id
+  state: 'occupied' | 'empty';
+  for_s: number | null;
+  cooldown_s: number;
+  fire_on_start: boolean;
+}
+
+export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger | RoomTrigger;
 
 export type LeafCondition =
   | { type: 'time_window'; after: string; before: string }
   | { type: 'days'; days: Day[] }
   | { type: 'device'; device: string; attribute: string; op: ConditionOp; value: Scalar }
-  | { type: 'sun'; state: 'up' | 'down' };
+  | { type: 'sun'; state: 'up' | 'down' }
+  /** for_s: has been occupied/empty for at least this long. */
+  | { type: 'room'; room: string; state: 'occupied' | 'empty'; for_s: number | null };
 
 /** The routine's list is AND; an 'any' group inside it is OR. */
 export type Condition = LeafCondition | { type: 'any'; conditions: LeafCondition[] };
@@ -76,6 +89,8 @@ export interface AttributeInfo {
   value_off?: Scalar;
   value_min?: number;
   value_max?: number;
+  /** Z2M: "config" for settings, "diagnostic" for housekeeping (battery, voltage…); absent for readings. */
+  category?: 'config' | 'diagnostic' | string;
 }
 export type AttributeMap = Record<string, { friendly_name: string; properties: AttributeInfo[]; current: Record<string, unknown> }>;
 
@@ -248,13 +263,49 @@ export const OP_TEXT: Record<TriggerOp, string> = {
   eq: 'is', ne: 'is not', gt: 'above', gte: 'at least', lt: 'below', lte: 'at most', changes: 'changes',
 };
 
+/** A room for the room trigger/condition pickers; hasSensor: a presence or motion sensor is placed in it. */
+export interface RoomOption { id: string; name: string; hasSensor: boolean }
+
 export interface DescribeCtx {
   attributes: AttributeMap;
   tempUnit: TempUnit;
+  rooms?: RoomOption[];
 }
 
-export function formatValue(value: Scalar | null, info: UnitInfo, pref: TempUnit): string {
+// Plain words for readings and their values in pickers and summaries ("Presence is Clear").
+const ATTRIBUTE_NAMES: Record<string, string> = {
+  action: 'button press', state: 'on/off state', color_temp: 'colour temperature', presence: 'presence',
+  occupancy: 'motion', pir_detection: 'motion (PIR)', illuminance: 'light level', target_distance: 'distance',
+  contact: 'door/window', water_leak: 'water leak', battery_low: 'battery low', power_outage_count: 'power outages',
+};
+export const attributeLabel = (p: string) => ATTRIBUTE_NAMES[p] ?? p.replace(/_/g, ' ');
+
+const VALUE_NAMES: Record<string, Record<string, string>> = {
+  presence: { true: 'Occupied', false: 'Clear' },
+  occupancy: { true: 'Motion', false: 'No motion' },
+  pir_detection: { true: 'Motion', false: 'No motion' },
+  contact: { true: 'Closed', false: 'Open' },
+  water_leak: { true: 'Leak', false: 'Dry' },
+  smoke: { true: 'Smoke', false: 'Clear' },
+  vibration: { true: 'Vibration', false: 'Still' },
+  battery_low: { true: 'Low', false: 'OK' },
+};
+/** "Occupied" for presence true, "Open" for contact false; else the value as text. */
+export function valueLabel(attribute: string, value: Scalar | null): string {
   if (value === null) return '';
+  return VALUE_NAMES[attribute]?.[String(value)] ?? (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value));
+}
+
+export const roomName = (rooms: RoomOption[] | undefined, id: string) => rooms?.find(r => r.id === id)?.name ?? 'a deleted room';
+
+export function formatDuration(s: number): string {
+  if (s % 3600 === 0 && s >= 3600) return `${s / 3600} h`;
+  return s % 60 === 0 ? `${s / 60} min` : `${s}s`;
+}
+
+export function formatValue(value: Scalar | null, info: UnitInfo, pref: TempUnit, attribute?: string): string {
+  if (value === null) return '';
+  if (attribute && typeof value !== 'number') return valueLabel(attribute, value);
   if (typeof value === 'number') {
     const u = displayUnit(info, pref);
     return `${toDisplay(value, info, pref)}${u ? (u.startsWith('%') ? u : ' ' + u) : ''}`;
@@ -269,7 +320,7 @@ function describeDeviceRef(device: string, attribute: string, op: TriggerOp, val
   if (EVENT_ATTRIBUTES.includes(attribute)) {
     return op === 'changes' ? `${name} button pressed` : `${name} ${String(value)}`;
   }
-  return `${name} ${attribute} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, info, ctx?.tempUnit ?? 'F')}`;
+  return `${name} ${attributeLabel(attribute)} ${OP_TEXT[op]}${op === 'changes' ? '' : ' ' + formatValue(value, info, ctx?.tempUnit ?? 'F', attribute)}`;
 }
 
 /** "2026-12-25" -> "Fri, Dec 25" (plus the year if it isn't this year). A calendar date, no timezone maths. */
@@ -288,7 +339,8 @@ export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {
     const days = t.days ? ` (${describeDays(t.days)})` : '';
     return `${t.event === 'sunrise' ? 'Sunrise' : 'Sunset'}${off}${days}`;
   }
-  const held = t.for_s ? ` for ${t.for_s % 60 === 0 ? `${t.for_s / 60} min` : `${t.for_s}s`}` : '';
+  const held = t.for_s ? ` for ${formatDuration(t.for_s)}` : '';
+  if (t.type === 'room') return `When ${roomName(ctx?.rooms, t.room)} is ${t.state}${held}`;
   return `When ${describeDeviceRef(t.device, t.attribute, t.op, t.value, ctx)}${held}`;
 }
 

@@ -68,6 +68,14 @@ async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_st
     )
 
 
+async def send_device(bus: AsyncMqttBus, device_id: str, payload: dict) -> None:
+    """Fire-and-forget device command, for write-only settings the device never reports back."""
+    if not bus.client:
+        raise MqttDisconnected("MQTT Bus is disconnected")
+    friendly_name = await resolve_friendly_name(bus, device_id)
+    await bus.client.publish(f"{bus.z2m_base}/{friendly_name}/set", json.dumps(payload))
+
+
 async def set_group(bus: AsyncMqttBus, group_name: str, payload: dict) -> None:
     """Fire-and-forget group command; member updates trickle into the twin."""
     if not bus.client:

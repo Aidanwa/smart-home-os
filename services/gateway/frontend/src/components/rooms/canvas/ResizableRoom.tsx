@@ -156,6 +156,9 @@ export function ResizableRoom({
   // the room and zooms in (where they spread out and work). Otherwise a finger aimed at the
   // room would switch whichever light happened to be under it.
   const untappable = editable ? new Set<string>() : crowdedMarkers(markers, markerScale);
+  // Occupied: any presence or motion sensor placed in the room says someone's there.
+  const occupied = roomPlacements.some(p => devices[p.ieee_address]?.presence === true
+    || (devices[p.ieee_address]?.presence === undefined && devices[p.ieee_address]?.occupancy === true));
 
   return (
     <>
@@ -199,7 +202,13 @@ export function ResizableRoom({
         onDblTap={openRename}
       >
         <Rect name="room-bg" width={pxWidth} height={pxHeight} fill={isSelected ? `${roomColor}80` : `${roomColor}40`} stroke={isSelected ? '#ffffff' : roomColor} strokeWidth={isSelected ? 2 : 1.5} cornerRadius={8} shadowColor="black" shadowBlur={isSelected ? 20 : 10} shadowOpacity={isSelected ? 0.3 : 0.15} />
+        {occupied && (
+          <Rect width={pxWidth} height={pxHeight} fill="#34d399" opacity={0.12} stroke="#34d399" strokeWidth={2} cornerRadius={8} listening={false} />
+        )}
         <Text name="room-bg" text={zone.name} fontSize={16} fontFamily="sans-serif" fontStyle="600" fill={isSelected ? '#ffffff' : '#d4d4d8'} align="center" verticalAlign="middle" width={pxWidth} height={pxHeight} padding={0} listening={false} />
+        {occupied && (
+          <Text text="Occupied" fontSize={11} fontFamily="sans-serif" fontStyle="600" fill="#6ee7b7" align="center" width={pxWidth} y={pxHeight / 2 + 12} listening={false} />
+        )}
 
         {/* DEVICES */}
         {roomPlacements.map((placement) => {

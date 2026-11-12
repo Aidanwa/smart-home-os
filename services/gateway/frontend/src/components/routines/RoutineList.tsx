@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Play, PowerOff, Radio, Search, Sunrise, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, PersonStanding, Play, PowerOff, Radio, Search, Sunrise, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -25,6 +25,7 @@ const needsAttention = (r: Routine) => r.enabled && !r.running && !r.reviewed &&
 const WHEN_SECTIONS: { key: string; title: string; icon: ReactNode }[] = [
   { key: 'time', title: 'Schedule', icon: <Clock size={16} /> },
   { key: 'sun', title: 'Sunrise & sunset', icon: <Sunrise size={16} /> },
+  { key: 'room', title: 'Room occupancy', icon: <PersonStanding size={16} /> },
   { key: 'device', title: 'Sensors & buttons', icon: <Radio size={16} /> },
   { key: 'manual', title: 'Manual only', icon: <Hand size={16} /> },
 ];
@@ -104,7 +105,10 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
         }
         // Nothing controlled (music, "ask the agent"): place it by the devices that trigger it.
         if (ieees.size === 0) r.triggers.forEach(t => { if (t.type === 'device') ieees.add(t.device); });
-        return new Set([...ieees].map(i => roomIndex.roomOf[i]).filter(Boolean));
+        const found = new Set([...ieees].map(i => roomIndex.roomOf[i]).filter(Boolean));
+        // ...or by the room a room trigger watches.
+        if (found.size === 0) r.triggers.forEach(t => { if (t.type === 'room') found.add(t.room); });
+        return found;
       };
       const multiFloor = new Set(roomIndex.rooms.map(r => r.floor)).size > 1;
       const byRoom = new Map<string, Routine[]>();

@@ -9,7 +9,9 @@ import { RoutineEditor } from './RoutineEditor';
 import { RunHistory } from './RunHistory';
 import { RoutineList } from './RoutineList';
 import { RoutineActivity } from './RoutineActivity';
-import type { Routine, RoutineSpec, TempUnit } from './types';
+import type { RoomOption, Routine, RoutineSpec, TempUnit } from './types';
+import { useRoomIndex } from '../../hooks/useRoomIndex';
+import { isPresenceSensor } from '../../lib/deviceUtils';
 import { emptyRoutine } from './types';
 import { ConfirmDialog } from '../ui/dialog';
 
@@ -36,7 +38,13 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   const { groups } = useGroups();
   const attributes = useDeviceAttributes();
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
-  const ctx = useMemo(() => ({ attributes, tempUnit }), [attributes]);
+  // Rooms for room triggers/conditions and their summaries; hasSensor from what's placed in each.
+  const roomIndex = useRoomIndex(true);
+  const rooms = useMemo((): RoomOption[] => (roomIndex?.rooms ?? []).map(r => ({
+    id: r.id, name: r.name,
+    hasSensor: Object.entries(devices).some(([ieee, st]) => roomIndex?.roomOf[ieee] === r.id && isPresenceSensor(st)),
+  })), [roomIndex, devices]);
+  const ctx = useMemo(() => ({ attributes, tempUnit, rooms }), [attributes, rooms]);
   const [panel, setPanel] = useState<Panel>(null);
   // Delete from a card's menu. The routine stays set while the dialog animates closed.
   const [deleting, setDeleting] = useState<Routine | null>(null);
@@ -177,6 +185,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                 groups={groups}
                 attributes={attributes}
                 tempUnit={tempUnit}
+                rooms={rooms}
                 timezone={timezone}
                 preview={preview}
                 routineId={editing?.id}

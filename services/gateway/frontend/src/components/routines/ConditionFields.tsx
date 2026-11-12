@@ -1,20 +1,21 @@
 import { Trash2 } from 'lucide-react';
-import type { AttributeMap, ConditionOp, LeafCondition, TempUnit } from './types';
+import type { AttributeMap, ConditionOp, LeafCondition, RoomOption, TempUnit } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, opsFor } from './fieldLogic';
-import { DayChips } from './TriggerFields';
+import { DayChips, MinutesField, OccupiedChoice, RoomPicker } from './TriggerFields';
 import { card, chip, iconBtn, input } from './styles';
 
 const TITLES: Record<LeafCondition['type'], string> = {
-  time_window: 'Between times', days: 'On days', device: 'Device reading', sun: 'Sun',
+  time_window: 'Between times', days: 'On days', device: 'Device reading', sun: 'Sun', room: 'Room occupancy',
 };
 
-export function ConditionRow({ condition, onChange, onRemove, attributes, tempUnit }: {
+export function ConditionRow({ condition, onChange, onRemove, attributes, tempUnit, rooms = [] }: {
   condition: LeafCondition;
   onChange: (c: LeafCondition) => void;
   onRemove: () => void;
   attributes: AttributeMap;
   tempUnit: TempUnit;
+  rooms?: RoomOption[];
 }) {
   return (
     <div className={card}>
@@ -22,12 +23,21 @@ export function ConditionRow({ condition, onChange, onRemove, attributes, tempUn
         <span className="text-xs uppercase tracking-wider text-neutral-500">{TITLES[condition.type]}</span>
         <button type="button" className={`${iconBtn} hover:text-red-400`} onClick={onRemove} aria-label="Remove"><Trash2 size={16} /></button>
       </div>
-      <Fields condition={condition} onChange={onChange} attributes={attributes} tempUnit={tempUnit} />
+      <Fields condition={condition} onChange={onChange} attributes={attributes} tempUnit={tempUnit} rooms={rooms} />
     </div>
   );
 }
 
-function Fields({ condition: c, onChange, attributes, tempUnit }: { condition: LeafCondition; onChange: (c: LeafCondition) => void; attributes: AttributeMap; tempUnit: TempUnit }) {
+function Fields({ condition: c, onChange, attributes, tempUnit, rooms }: { condition: LeafCondition; onChange: (c: LeafCondition) => void; attributes: AttributeMap; tempUnit: TempUnit; rooms: RoomOption[] }) {
+  if (c.type === 'room') {
+    return (
+      <>
+        <RoomPicker rooms={rooms} room={c.room} onPick={room => onChange({ ...c, room })} />
+        <OccupiedChoice state={c.state} onChange={state => onChange({ ...c, state })} />
+        <MinutesField text="And has been for at least" seconds={c.for_s} onChange={for_s => onChange({ ...c, for_s })} />
+      </>
+    );
+  }
   if (c.type === 'time_window') {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-400">
@@ -66,7 +76,7 @@ function Fields({ condition: c, onChange, attributes, tempUnit }: { condition: L
           const numeric = ['gt', 'gte', 'lt', 'lte'].includes(op);
           onChange({ ...c, op: op as ConditionOp, value: numeric && typeof c.value !== 'number' ? 0 : c.value });
         }} />
-        <ValueInput info={info} value={c.value} tempUnit={tempUnit} onChange={value => onChange({ ...c, value })} />
+        <ValueInput info={info} attribute={c.attribute} value={c.value} tempUnit={tempUnit} onChange={value => onChange({ ...c, value })} />
       </div>
       <CurrentReading attributes={attributes} device={c.device} attribute={c.attribute} tempUnit={tempUnit} />
     </>

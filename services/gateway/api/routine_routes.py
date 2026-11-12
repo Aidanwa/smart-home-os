@@ -19,9 +19,10 @@ from api.auth import get_current_user
 from scheduler.engine import Scheduler
 from scheduler import agent_client
 from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, NotifyAction,
-                              RoutineAction, RoutineSpec, SpotifyCtrlAction, SpotifyPlayAction, is_one_time,
-                              leaf_conditions)
+                              RoomCondition, RoomTrigger, RoutineAction, RoutineSpec, SpotifyCtrlAction,
+                              SpotifyPlayAction, is_one_time, leaf_conditions)
 from core import push
+from core.rooms import all_rooms
 from scheduler.timing import upcoming
 
 ALERT_STATUSES = ("failed", "partial", "missed", "interrupted")
@@ -208,6 +209,16 @@ async def preview_routine(spec: RoutineSpec, request: Request, routine_id: uuid.
         elif item.attribute not in twin[item.device]:
             name = twin[item.device].get("friendly_name", item.device)
             warnings.append(f"{label}: {name} hasn't reported '{item.attribute}' yet")
+    room_refs = [(f"Trigger {t.id}", t.room) for t in spec.triggers if isinstance(t, RoomTrigger)]
+    room_refs += [(f"Condition {i}", c.room) for i, c in enumerate(leaf_conditions(spec.conditions), 1) if isinstance(c, RoomCondition)]
+    if room_refs:
+        rooms = await all_rooms(bus.redis)
+        for label, room_id in room_refs:
+            room = rooms.get(str(room_id))
+            if room is None:
+                warnings.append(f"{label}: that room no longer exists")
+            elif room.get("occupied") is None:
+                warnings.append(f"{label}: {room['name']} has no presence or motion sensor (place one there in Rooms)")
     if spec.uses_sun() and sched.loc is None:
         warnings.append("Sunrise/sunset needs the home location (Settings → Home)")
     if not spec.triggers:

@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Clock, Plus, Trash2 } from 'lucide-react';
 import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
-import type { Action, AttributeMap, ConditionMode, LeafCondition, RoutineSpec, TempUnit, Trigger } from './types';
+import type { Action, AttributeMap, ConditionMode, LeafCondition, RoomOption, RoutineSpec, TempUnit, Trigger } from './types';
 import { ACTION_LABEL, formatInTz, joinConditions, nextId, splitConditions } from './types';
 import { ActionFields, type RoutineOption } from './ActionFields';
 import { findInfo } from './fieldLogic';
@@ -23,6 +23,8 @@ interface Props {
   groups: GroupInfo[];
   attributes: AttributeMap;
   tempUnit: TempUnit;
+  /** Rooms from the floor plan, for room triggers and conditions. */
+  rooms: RoomOption[];
   timezone: string;
   preview: (spec: RoutineSpec, routineId?: string) => Promise<{ result: PreviewResult | null; error: string | null }>;
   /** Other routines, for 'Run routine' actions (the one being edited is left out). */
@@ -38,7 +40,7 @@ interface Props {
 
 const addBtn = 'flex items-center gap-1.5 px-3 min-h-11 rounded-lg text-sm bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600';
 
-export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, timezone, preview, routineOptions, routineId, onSave, onDelete, onCancel, onDirtyChange }: Props) {
+export function RoutineEditor({ initial, isNew, devices, groups, attributes, tempUnit, rooms, timezone, preview, routineOptions, routineId, onSave, onDelete, onCancel, onDirtyChange }: Props) {
   const [spec, setSpec] = useState<RoutineSpec>(initial);
   // Snapshot once: the parent builds `initial` afresh on every render (and a new routine gets new ids).
   const [initialJson] = useState(() => JSON.stringify(initial));
@@ -101,7 +103,7 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   const setConditions = (mode: ConditionMode, leaves: LeafCondition[]) => patch({ conditions: joinConditions(mode, leaves) });
 
   const canSave = previewable && !saving;
-  const ctx = { attributes, tempUnit };
+  const ctx = { attributes, tempUnit, rooms };
 
   return (
     <div className="flex flex-col gap-6 pb-6">
@@ -126,9 +128,9 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
           <p className="text-xs text-neutral-500">Nothing starts it automatically: it only runs when you press Run now.</p>
         )}
         <div className="flex flex-wrap gap-2">
-          {([['time', 'Time'], ['sun', 'Sunrise/sunset'], ['device', 'Device or sensor']] as const).map(([type, text]) => (
+          {([['time', 'Time'], ['sun', 'Sunrise/sunset'], ['room', 'Room occupied/empty'], ['device', 'Device or sensor']] as const).map(([type, text]) => (
             <button key={type} type="button" className={addBtn}
-              onClick={() => patch({ triggers: [...spec.triggers, newTrigger(type, nextId('t', spec.triggers), attributes)] })}>
+              onClick={() => patch({ triggers: [...spec.triggers, newTrigger(type, nextId('t', spec.triggers), attributes, rooms)] })}>
               <Plus size={14} /> {text}
             </button>
           ))}
@@ -162,15 +164,15 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
         {cond.leaves.map((c, i) => (
           <div key={i} className="space-y-3">
             {i > 0 && <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-center">{cond.mode === 'any' ? 'or' : 'and'}</p>}
-            <ConditionRow condition={c} attributes={attributes} tempUnit={tempUnit}
+            <ConditionRow condition={c} attributes={attributes} tempUnit={tempUnit} rooms={rooms}
               onChange={nc => setConditions(cond.mode, setAt<LeafCondition>(cond.leaves, i, nc))}
               onRemove={() => setConditions(cond.mode, without(cond.leaves, i))} />
           </div>
         ))}
         {cond.editable && <div className="flex flex-wrap gap-2">
-          {([['time_window', 'Between times'], ['days', 'Days'], ['sun', 'Dark / light'], ['device', 'Device reading']] as const).map(([type, text]) => (
+          {([['time_window', 'Between times'], ['days', 'Days'], ['sun', 'Dark / light'], ['room', 'Room'], ['device', 'Device reading']] as const).map(([type, text]) => (
             <button key={type} type="button" className={addBtn}
-              onClick={() => setConditions(cond.mode, [...cond.leaves, newCondition(type, attributes)])}>
+              onClick={() => setConditions(cond.mode, [...cond.leaves, newCondition(type, attributes, rooms)])}>
               <Plus size={14} /> {text}
             </button>
           ))}
