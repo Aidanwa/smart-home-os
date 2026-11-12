@@ -7,6 +7,8 @@ import aiomqtt
 import redis.asyncio as redis
 from typing import Callable, Optional, Dict, Any
 
+from core.device_settings import summarize_settings
+
 logger = logging.getLogger(__name__)
 
 # category: Z2M marks settings "config" and housekeeping "diagnostic"; the routine pickers hide those by default.
@@ -214,6 +216,9 @@ class AsyncMqttBus:
 
             # Identity, firmware and health per device, for the device drawer's About section
             await self.redis.set("gateway:device_meta", json.dumps(summarize_device_meta(payload)))
+
+            # Each device's own settings and read-only details, for the drawer's "All settings"
+            await self.redis.set("gateway:device_settings", json.dumps(summarize_settings(payload)))
 
             # The Diff Engine: Sync Redis Topology
             current_twin = await self.redis.hgetall("gateway:digital_twin")

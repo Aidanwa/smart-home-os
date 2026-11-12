@@ -82,6 +82,14 @@ async def send_device(bus: AsyncMqttBus, device_id: str, payload: dict) -> None:
     await bus.client.publish(f"{bus.z2m_base}/{friendly_name}/set", json.dumps(payload))
 
 
+async def send_device_get(bus: AsyncMqttBus, device_id: str, payload: dict) -> None:
+    """Ask a device to report these properties (Z2M /get); the answers arrive as state updates."""
+    if not bus.client:
+        raise MqttDisconnected("MQTT Bus is disconnected")
+    friendly_name = await resolve_friendly_name(bus, device_id)
+    await bus.client.publish(f"{bus.z2m_base}/{friendly_name}/get", json.dumps(payload))
+
+
 async def set_group(bus: AsyncMqttBus, group_name: str, payload: dict) -> None:
     """Fire-and-forget group command; member updates trickle into the twin."""
     if not bus.client:

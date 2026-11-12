@@ -17,6 +17,8 @@ interface BaseDeviceCardProps {
   onToggle?: () => void;
   children?: React.ReactNode;
   advancedConfig?: React.ReactNode;
+  /** Settings advancedConfig already shows, left out of the drawer's "All settings". */
+  handledSettings?: string[];
   renameDevice: (oldName: string, newName: string) => void;
   deleteDevice: (deviceId: string, label?: string) => void;
 }
@@ -31,6 +33,7 @@ export function BaseDeviceCard({
   onToggle,
   children,
   advancedConfig,
+  handledSettings,
   renameDevice,
   deleteDevice,
 }: BaseDeviceCardProps) {
@@ -128,6 +131,7 @@ export function BaseDeviceCard({
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         advancedConfig={advancedConfig}
+        handledSettings={handledSettings}
         renameDevice={renameDevice}
         deleteDevice={deleteDevice}
       />

@@ -11,6 +11,7 @@ import type { DeviceState } from '../../hooks/useDevices';
 import { request } from '../../lib/api';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/dialog';
+import { AllSettings } from './AllSettings';
 
 // This is to add tooltips to buttons
 const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => (
@@ -81,6 +82,8 @@ interface DeviceConfigDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   advancedConfig?: React.ReactNode;
+  /** Settings the card's own controls already show (AllSettings leaves them out). */
+  handledSettings?: string[];
   renameDevice: (oldName: string, newName: string) => void;
   deleteDevice: (deviceId: string, label?: string) => void;
 }
@@ -91,6 +94,7 @@ export function DeviceConfigDrawer({
   isOpen, 
   onOpenChange, 
   advancedConfig,
+  handledSettings,
   renameDevice,
   deleteDevice,
 }: DeviceConfigDrawerProps) {
@@ -347,6 +351,9 @@ export function DeviceConfigDrawer({
             {advancedConfig}
           </div>
         )}
+
+        {/* Every other setting the device exposes, collapsed */}
+        <AllSettings deviceId={deviceId} name={name} state={state} isOpen={isOpen} handled={handledSettings} />
 
         {/* Danger Zone: Trigger Modal */}
         <div className="space-y-3 mt-auto pt-8 pb-4">

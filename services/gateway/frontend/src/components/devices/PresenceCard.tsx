@@ -21,6 +21,9 @@ interface Props {
 /** Presence (mmWave, e.g. Aqara FP300) and motion (PIR) sensors. `presence` is the sensor's own
  *  verdict, so it stays true while someone sits still; `occupancy` is a PIR's recent motion.
  *  `presence_changed_at` is added by the gateway when the reading flips. */
+// The settings PresenceSettings has its own controls for (left out of the drawer's "All settings").
+const PRESENCE_SETTINGS = ['presence_detection_options', 'motion_sensitivity', 'absence_delay_timer', 'detection_range', 'led_disabled_night'];
+
 export function PresenceCard({ name, state, sendCommand, renameDevice, deleteDevice }: Props) {
   const now = useNow();
   const radar = state.presence !== undefined;
@@ -46,6 +49,7 @@ export function PresenceCard({ name, state, sendCommand, renameDevice, deleteDev
       iconColorClass={here ? 'bg-emerald-500/15 text-emerald-400' : 'bg-neutral-800 text-neutral-500'}
       subtitle={details.length ? details.join(' • ') : undefined}
       advancedConfig={<PresenceSettings name={name} state={state} sendCommand={sendCommand} />}
+      handledSettings={PRESENCE_SETTINGS}
       renameDevice={renameDevice}
       deleteDevice={deleteDevice}
     >
