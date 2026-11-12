@@ -39,9 +39,12 @@ def _state_matches(requested: str | None, reply: dict) -> bool:
 async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_state: bool = True) -> dict:
     """Publish a state change and return the device's confirmed state.
 
-    The RPC resolves on the device's next state publish from any source, so a stale or
-    unrelated publish can arrive first. If an ON/OFF request comes back with the wrong state,
-    the command is sent once more; a second mismatch raises DeviceStateMismatch.
+    The RPC resolves on the device's state publishes from any source. For an ON/OFF request it
+    waits for a report with the requested state and skips the others: stale ones (a bulb's
+    late report of the previous change, duplicated frames from the adapter, a wall-switch press)
+    otherwise made a quick on-then-off look like a failure. With no matching report in time the
+    command is sent once more; if that also times out and the device reports the other state,
+    DeviceStateMismatch is raised.
     Raises TimeoutError if the device doesn't answer, MqttDisconnected if MQTT is down.
     verify_state=False skips the ON/OFF check (a long fade-to-off can still report ON mid-transition).
     """
@@ -51,21 +54,24 @@ async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_st
     friendly_name = await resolve_friendly_name(bus, device_id)
     topic = f"{bus.z2m_base}/{friendly_name}/set"
     requested = payload.get("state") if verify_state else None
+    if requested not in ("ON", "OFF"):
+        return await bus.rpc(topic, dict(payload))
 
-    result = await bus.rpc(topic, dict(payload))
-    if _state_matches(requested, result):
-        return result
-
-    logger.warning(
-        f"'{friendly_name}' replied state={result.get('state')} after a {requested} request; retrying once"
-    )
-    result = await bus.rpc(topic, dict(payload))
-    if _state_matches(requested, result):
-        return result
-
-    raise DeviceStateMismatch(
-        f"Device '{friendly_name}' reports state {result.get('state')} after being asked for {requested}."
-    )
+    accept = lambda reply: _state_matches(requested, reply)  # noqa: E731
+    try:
+        return await bus.rpc(topic, dict(payload), accept=accept)
+    except TimeoutError:
+        logger.warning(f"'{friendly_name}' didn't report {requested} in time; sending once more")
+    try:
+        return await bus.rpc(topic, dict(payload), accept=accept)
+    except TimeoutError:
+        raw = await bus.redis.hget("gateway:digital_twin", bus._device_registry.get(friendly_name, friendly_name))
+        reported = (json.loads(raw) if raw else {}).get("state")
+        if reported is not None and str(reported).upper() != requested:
+            raise DeviceStateMismatch(
+                f"Device '{friendly_name}' reports state {reported} after being asked for {requested}."
+            )
+        raise
 
 
 async def send_device(bus: AsyncMqttBus, device_id: str, payload: dict) -> None:

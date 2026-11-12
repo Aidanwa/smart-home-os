@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 import aiomqtt
 import redis.asyncio as redis
-from typing import Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,9 @@ class AsyncMqttBus:
         self._pending_rpcs: Dict[str, asyncio.Future] = {}
         # Device RPCs correlate on friendly_name, so only one may be in flight per device.
         self._device_rpc_locks: Dict[str, asyncio.Lock] = {}
+        # Optional per-RPC filter: a device reply resolves the RPC only if this returns True, so
+        # stale or duplicate reports in between are skipped (see device_control.set_device).
+        self._rpc_accept: Dict[str, Callable[[dict], bool]] = {}
         self._listen_task: Optional[asyncio.Task] = None
 
         # A local memory cache of group names to filter the Digital Twin
@@ -282,7 +285,13 @@ class AsyncMqttBus:
                 # If we were waiting on a device state change via RPC, resolve it using the reference name!
                 if device_name in self._pending_rpcs:
                     if not self._pending_rpcs[device_name].done():
-                        self._pending_rpcs[device_name].set_result(payload)
+                        accept = self._rpc_accept.get(device_name)
+                        try:
+                            wanted = accept is None or accept(payload)
+                        except Exception:
+                            wanted = True
+                        if wanted:
+                            self._pending_rpcs[device_name].set_result(payload)
         
         # 2. Resolve pending Bridge RPC Requests via Transaction ID,
         #    explicitly ignore '/request/' topics to ignore outgoing msg we publish
@@ -292,7 +301,10 @@ class AsyncMqttBus:
                 if not self._pending_rpcs[tx_id].done():
                     self._pending_rpcs[tx_id].set_result(payload)
 
-    async def rpc(self, topic: str, payload: dict, timeout: float = 5.0) -> dict:
+    async def rpc(self, topic: str, payload: dict, timeout: float = 5.0,
+                  accept: Optional[Callable[[dict], bool]] = None) -> dict:
+        """Publish and wait for the reply. `accept` (device RPCs only): resolve only on a state
+        report it returns True for; other reports in between are ignored until the timeout."""
         if not self.client:
             raise RuntimeError("MQTT Client is not connected.")
 
@@ -312,15 +324,20 @@ class AsyncMqttBus:
         correlation_key = topic.split("/")[1]
         lock = self._device_rpc_locks.setdefault(correlation_key, asyncio.Lock())
         async with lock:
-            return await self._publish_and_wait(topic, payload, correlation_key, timeout)
+            return await self._publish_and_wait(topic, payload, correlation_key, timeout, accept)
 
-    async def _publish_and_wait(self, topic: str, payload: dict, correlation_key: str, timeout: float) -> dict:
+    async def _publish_and_wait(self, topic: str, payload: dict, correlation_key: str, timeout: float,
+                                accept: Optional[Callable[[dict], bool]] = None) -> dict:
         # Re-check inside the lock: the client may have dropped while we were queued
         if not self.client:
             raise RuntimeError("MQTT Client is not connected.")
 
         future = asyncio.get_running_loop().create_future()
         self._pending_rpcs[correlation_key] = future
+        if accept is not None:
+            self._rpc_accept[correlation_key] = accept
+        else:
+            self._rpc_accept.pop(correlation_key, None)
 
         try:
             await self.client.publish(topic, json.dumps(payload))
@@ -331,6 +348,7 @@ class AsyncMqttBus:
             # Only remove our own future, never a newer one registered under the same key
             if self._pending_rpcs.get(correlation_key) is future:
                 self._pending_rpcs.pop(correlation_key, None)
+                self._rpc_accept.pop(correlation_key, None)
 
     async def get_digital_twin(self) -> dict:
         raw_data = await self.redis.hgetall("gateway:digital_twin")
