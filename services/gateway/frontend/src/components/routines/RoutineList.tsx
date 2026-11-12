@@ -158,7 +158,7 @@ export function RoutineList({ routines, timezone, groups, ctx, onOpen, onHistory
         </label>
         <div className="flex gap-2">
           <Select label="Group routines" value={groupBy} onChange={v => setGroupBy(v as GroupBy)}
-            options={[['when', 'Group: When it runs'], ['room', 'Group: Room'], ['affects', 'Group: What it changes'], ['none', 'No grouping']]} />
+            options={[['when', 'Group: When it runs'], ['room', 'Group: Room'], ['affects', 'Group: Affects'], ['none', 'No grouping']]} />
           <Select label="Sort routines" value={sortBy} onChange={v => setSortBy(v as SortBy)}
             options={[['next', 'Sort: Next run'], ['name', 'Sort: Name'], ['last', 'Sort: Last run']]} />
         </div>
