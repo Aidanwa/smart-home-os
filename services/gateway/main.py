@@ -23,11 +23,13 @@ from api.zone_routes import router as zone_router
 from api.routine_routes import router as routine_router
 from api.push_routes import router as push_router
 from api.device_settings_routes import router as device_settings_router
+from api.curve_routes import router as curve_router
 
 # The installed app's manifest (frontend/public); Python doesn't know the extension.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 from scheduler.engine import Scheduler
 from core.rooms import RoomOccupancy
+from curves.controller import CurveController
 
 # Configure the logging format and level
 logging.basicConfig(
@@ -73,10 +75,16 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     await scheduler.start()
 
+    # 5. Day curves (runs only where the scheduler holds its lock; uses its timezone and location)
+    curves = CurveController(bus, scheduler)
+    app.state.curves = curves
+    await curves.start()
+
     yield  # --- The API is now running and accepting requests ---
 
     # Shutdown
     logger.info("Shutting down Gateway...")
+    await curves.stop()
     await scheduler.stop()
     await rooms.stop()
     await bus.stop()
@@ -117,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(routine_router)
     app.include_router(push_router)
     app.include_router(device_settings_router)
+    app.include_router(curve_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

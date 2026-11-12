@@ -4,6 +4,8 @@ import { Slider as SliderPrimitive } from 'radix-ui';
 import type { DeviceState } from '../../hooks/useDevices';
 import { miredToWarmth, useMiredRange, warmthToMired } from '../../lib/colorTemp';
 import { BaseDeviceCard } from './BaseDeviceCard';
+import { DayCurveSection } from './DayCurveSection';
+import { useCurveStatus } from '../../hooks/useCurves';
 
 interface Props {
   name: string;
@@ -67,7 +69,10 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
   useEffect(() => setBrightness(serverBrightness), [serverBrightness]);
   useEffect(() => setWarmth(serverWarmth), [serverWarmth]);
 
-  const subtitle = isOn ? `On • ${brightness}%` : 'Off';
+  // "· Day curve" while it follows one, "· Curve paused" after a change by hand.
+  const curve = useCurveStatus()[state.ieee_address ?? ''];
+  const curveNote = curve?.enabled ? (curve.paused ? ' · Curve paused' : ' · Day curve') : '';
+  const subtitle = (isOn ? `On • ${brightness}%` : 'Off') + curveNote;
 
   return (
     <BaseDeviceCard
@@ -78,8 +83,10 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
       subtitle={subtitle}
       onToggle={() => toggleDevice(name, state.state)}
       advancedConfig={state.color_temp !== undefined ? (
-        // Zigbee "execute if off": the bulb stores warmth changes sent while it's off (a sunset
-        // routine) and comes on with them. Z2M keeps the setting in the state as color_options.
+        <div className="space-y-3">
+        {state.ieee_address && <DayCurveSection ieee={state.ieee_address} name={name} />}
+        {/* Zigbee "execute if off": the bulb stores warmth changes sent while it's off (a sunset
+            routine) and comes on with them. Z2M keeps the setting in the state as color_options. */}
         <label className="flex items-start justify-between gap-3 p-3 rounded-xl border border-neutral-800/50 bg-neutral-900/50 cursor-pointer">
           <span className="min-w-0">
             <span className="block text-sm text-neutral-200">Remember warmth while off</span>
@@ -92,6 +99,9 @@ export function ColorLightCard({ name, state, sendCommand, toggleDevice, renameD
             checked={state.color_options?.execute_if_off === true}
             onChange={e => sendCommand(name, { color_options: { execute_if_off: e.target.checked } })} />
         </label>
+        </div>
+      ) : state.ieee_address && state.brightness !== undefined ? (
+        <DayCurveSection ieee={state.ieee_address} name={name} />
       ) : undefined}
       renameDevice={renameDevice}
       deleteDevice={deleteDevice}

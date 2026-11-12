@@ -186,3 +186,26 @@ class RoutineRun(Base):
 
 
 
+
+
+class LightCurve(Base):
+    """A day curve: warmth and/or brightness through the day, set by points at clock or sun times.
+    points is JSONB validated by services/gateway/curves/schema.py. The lights following it are
+    LightCurveMember rows; the gateway's curve controller keeps them on it (core of the feature)."""
+    __tablename__ = "light_curves"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
+    points: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class LightCurveMember(Base):
+    """A light (by IEEE) following a curve. The primary key makes it one curve per light."""
+    __tablename__ = "light_curve_members"
+
+    ieee_address: Mapped[str] = mapped_column(String(64), primary_key=True)
+    curve_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("light_curves.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

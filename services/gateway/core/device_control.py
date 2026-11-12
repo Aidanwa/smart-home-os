@@ -4,10 +4,44 @@ Raises plain exceptions; callers map them to HTTP codes or run-log results.
 """
 import json
 import logging
+from typing import Awaitable, Callable
 
 from core.mqtt_bus import AsyncMqttBus
 
 logger = logging.getLogger(__name__)
+
+
+# Called with (IEEE addresses, payload) before a device or group command is sent from the app, a
+# routine or the agent. The day-curve controller uses it to pause lights someone set by hand
+# (curves/controller.py). Its own commands are published directly, so they never come through here.
+CommandHook = Callable[[list[str], dict], Awaitable[None]]
+_command_hooks: list[CommandHook] = []
+
+
+def add_command_hook(fn: CommandHook) -> None:
+    _command_hooks.append(fn)
+
+
+def remove_command_hook(fn: CommandHook) -> None:
+    if fn in _command_hooks:
+        _command_hooks.remove(fn)
+
+
+async def _notify(ieees: list[str], payload: dict) -> None:
+    for fn in list(_command_hooks):
+        try:
+            await fn(ieees, payload)
+        except Exception:
+            logger.exception("Device command hook failed; sending anyway")
+
+
+async def group_members(bus, group_name: str) -> list[str]:
+    """IEEE addresses of a Z2M group's members (by group friendly_name or id)."""
+    raw = await bus.redis.get("gateway:groups")
+    for g in (json.loads(raw) if raw else []):
+        if isinstance(g, dict) and (g.get("friendly_name") == group_name or str(g.get("id")) == str(group_name)):
+            return [m.get("ieee_address") for m in g.get("members") or [] if m.get("ieee_address")]
+    return []
 
 
 class MqttDisconnected(RuntimeError):
@@ -52,6 +86,7 @@ async def set_device(bus: AsyncMqttBus, device_id: str, payload: dict, verify_st
         raise MqttDisconnected("MQTT Bus is disconnected")
 
     friendly_name = await resolve_friendly_name(bus, device_id)
+    await _notify([bus._device_registry.get(friendly_name, device_id)], payload)
     topic = f"{bus.z2m_base}/{friendly_name}/set"
     requested = payload.get("state") if verify_state else None
     if requested not in ("ON", "OFF"):
@@ -94,4 +129,5 @@ async def set_group(bus: AsyncMqttBus, group_name: str, payload: dict) -> None:
     """Fire-and-forget group command; member updates trickle into the twin."""
     if not bus.client:
         raise MqttDisconnected("MQTT Bus is disconnected")
+    await _notify(await group_members(bus, group_name), payload)
     await bus.client.publish(f"{bus.z2m_base}/{group_name}/set", json.dumps(payload))

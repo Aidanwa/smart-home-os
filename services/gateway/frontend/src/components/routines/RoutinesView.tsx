@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, History, Plus, Workflow } from 'lucide-react';
+import { ArrowLeft, History, Plus, TrendingUp, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DeviceState } from '../../hooks/useDevices';
@@ -9,6 +9,8 @@ import { RoutineEditor } from './RoutineEditor';
 import { RunHistory } from './RunHistory';
 import { RoutineList } from './RoutineList';
 import { RoutineActivity } from './RoutineActivity';
+import { CurvesView } from './curves/CurvesView';
+import type { Curve } from './curves/types';
 import type { RoomOption, Routine, RoutineSpec, TempUnit } from './types';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
 import { isPresenceSensor } from '../../lib/deviceUtils';
@@ -19,12 +21,13 @@ const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflo
 
 type Panel = { kind: 'edit'; routine: Routine | null } | { kind: 'history'; routine: Routine } | null;
 
-/** Links from notifications: #routines/activity, #routines/history/<routine id>. */
-type DeepLink = { kind: 'activity' } | { kind: 'history'; id: string } | null;
+/** Links: #routines/activity, #routines/curves, #routines/history/<routine id> (notifications). */
+type DeepLink = { kind: 'activity' } | { kind: 'curves' } | { kind: 'history'; id: string } | null;
 function parseDeepLink(): DeepLink {
-  const m = window.location.hash.match(/^#routines\/(activity|history\/([\w-]+))$/);
+  const m = window.location.hash.match(/^#routines\/(activity|curves|history\/([\w-]+))$/);
   if (!m) return null;
-  return m[2] ? { kind: 'history', id: m[2] } : { kind: 'activity' };
+  if (m[2]) return { kind: 'history', id: m[2] };
+  return m[1] === 'curves' ? { kind: 'curves' } : { kind: 'activity' };
 }
 
 function toSpec(r: Routine): RoutineSpec {
@@ -34,7 +37,8 @@ function toSpec(r: Routine): RoutineSpec {
 
 export function RoutinesView({ devices }: { devices: Record<string, DeviceState> }) {
   const { routines, timezone, schedulerActive, loading, error, save, remove, setEnabled, runNow, duplicate, setReviewed, fetchRuns, preview } = useRoutines();
-  const [view, setView] = useState<'list' | 'activity'>('list');
+  const [view, setView] = useState<'list' | 'activity' | 'curves'>('list');
+  const [editingCurve, setEditingCurve] = useState<Curve | 'new' | null>(null);
   const { groups } = useGroups();
   const attributes = useDeviceAttributes();
   const tempUnit: TempUnit = 'F';  // temperatures are always shown/entered in °F (stored as °C, Z2M native)
@@ -60,6 +64,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
   useEffect(() => {
     if (!deepLink || (deepLink.kind === 'history' && loading)) return;
     if (deepLink.kind === 'activity') setView('activity');
+    else if (deepLink.kind === 'curves') setView('curves');
     else {
       const r = routines.find(x => x.id === deepLink.id);
       if (r) { setView('list'); setPanel({ kind: 'history', routine: r }); }
@@ -119,20 +124,29 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
               className="size-11 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900">
               <ArrowLeft size={20} />
             </button>
-            <h1 className="text-2xl font-medium tracking-tight truncate">Activity</h1>
+            <h1 className="text-2xl font-medium tracking-tight truncate">{view === 'curves' ? 'Day curves' : 'Activity'}</h1>
           </div>
         )}
         <div className="flex items-center gap-2 shrink-0">
         {view === 'list' && (
-          <button type="button" onClick={() => setView('activity')}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 shrink-0">
-            <History size={16} /> Activity
-          </button>
+          <>
+            {/* Icon-only on phones so the title and New still fit. */}
+            <button type="button" onClick={() => setView('curves')} aria-label="Day curves"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 shrink-0">
+              <TrendingUp size={16} /> <span className="hidden sm:inline">Curves</span>
+            </button>
+            <button type="button" onClick={() => setView('activity')} aria-label="Activity"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 shrink-0">
+              <History size={16} /> <span className="hidden sm:inline">Activity</span>
+            </button>
+          </>
         )}
-        <button type="button" onClick={() => setPanel({ kind: 'edit', routine: null })}
+        {view !== 'activity' && (
+        <button type="button" onClick={() => (view === 'curves' ? setEditingCurve('new') : setPanel({ kind: 'edit', routine: null }))}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white shrink-0">
           <Plus size={16} /> New
         </button>
+        )}
         </div>
       </header>
 
@@ -149,6 +163,8 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
         </div>
       ) : view === 'activity' ? (
         <RoutineActivity timezone={timezone} onOpenRoutine={openRoutine} />
+      ) : view === 'curves' ? (
+        <CurvesView devices={devices} timezone={timezone} editing={editingCurve} setEditing={setEditingCurve} />
       ) : routines.length === 0 ? (
         <div className="py-20 text-center text-neutral-500">
           <Workflow className="mx-auto mb-4 opacity-50" size={48} />

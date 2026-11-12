@@ -69,6 +69,9 @@ export function useDevices() {
           detail: data.groups 
         }));
       }
+      if (data.type === 'curve_update') {
+        window.dispatchEvent(new CustomEvent('onCurveUpdate', { detail: data }));
+      }
       if (data.type === 'routine_run') {
         window.dispatchEvent(new CustomEvent('onRoutineRun', { detail: data }));
       }
