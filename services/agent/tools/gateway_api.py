@@ -96,6 +96,8 @@ class GatewayClient:
                 members.setdefault(p["zone_id"], []).append(d.get("friendly_name", p["ieee_address"]))
         lines = []
         for rid, room in sorted(rooms.items(), key=lambda kv: (kv[1].get("floor", 0), kv[1].get("name", ""))):
+            if rid not in members:
+                continue  # empty rooms (closets, stairs) only cost tokens
             occupied = room.get("occupied")
             if occupied is None:
                 status = "no presence sensor"
@@ -104,7 +106,7 @@ class GatewayClient:
                 since = _ago(room.get("since"))
                 if since:
                     status += f" for {since}"
-            names = ", ".join(sorted(members.get(rid, []))) or "no devices"
+            names = ", ".join(sorted(members[rid]))
             lines.append(f"- {room.get('name', rid)} ({status}): {names}")
         return "Rooms:\n" + "\n".join(lines) if lines else ""
 
