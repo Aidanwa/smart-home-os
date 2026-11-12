@@ -100,7 +100,7 @@ export function PresenceLightsDialog({ open, onOpenChange, sensorName, state }: 
       <DialogContent>
         <DialogTitle>Lights follow presence</DialogTitle>
         <DialogDescription>
-          Turns lights on when someone comes into {place} and off once it’s been empty for a while.
+          Turns lights on when someone comes {room ? `into ${room.name}` : `near ${sensorName}`} and off once it’s been empty for a while.
           This adds two routines you can change later.
         </DialogDescription>
 

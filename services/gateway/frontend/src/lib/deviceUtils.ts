@@ -45,10 +45,11 @@ export function isBatteryLow(state: DeviceState): boolean {
   return state.battery_low === true || (typeof state.battery === 'number' && state.battery <= 15);
 }
 
-/** A sensor's temperature as shown on cards: Z2M reports °C unless the device says otherwise. */
+/** A sensor's temperature as shown on cards. Z2M always reports °C; the app shows °F (as the
+ *  routine editor does) unless the device itself is set to show Celsius. */
 export function formatTemperature(state: DeviceState): { value: number; unit: 'F' | 'C' } | null {
   if (typeof state.temperature !== 'number') return null;
-  return state.temperature_units === 'fahrenheit'
-    ? { value: Math.round(state.temperature * 9 / 5 + 32), unit: 'F' }
-    : { value: state.temperature, unit: 'C' };
+  return state.temperature_units === 'celsius'
+    ? { value: state.temperature, unit: 'C' }
+    : { value: Math.round(state.temperature * 9 / 5 + 32), unit: 'F' };
 }
