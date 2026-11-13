@@ -4,15 +4,16 @@ import { toast } from 'sonner';
 import type { DeviceState } from '../../../hooks/useDevices';
 import { previewCurve, useCurves } from '../../../hooks/useCurves';
 import { getDeviceKind } from '../../../lib/deviceUtils';
-import { ConfirmDialog } from '../../ui/dialog';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../../ui/sheet';
+import { ConfirmDialog, Dialog, DialogContent, DialogDescription, DialogTitle } from '../../ui/dialog';
 import { NumberField } from '../NumberField';
 import { card, iconBtn, input, label } from '../styles';
 import type { Curve, CurvePoint, CurvePreview, CurveSpec, CurveWhen } from './types';
 import { defaultCurve, homeTime, newPointId, whenLabel } from './types';
 import { CurveChart } from './CurveChart';
 
-const sheetClass = 'bg-neutral-950 border-l-neutral-800 text-neutral-200 overflow-y-auto overflow-x-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-lg p-4 sm:p-6 gap-4';
+// Full screen on phones; a wide centred window on bigger screens (two columns from lg).
+const editorClass = 'max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:w-full '
+  + 'max-sm:max-w-none max-sm:max-h-none max-sm:h-dvh max-sm:rounded-none max-sm:border-0 sm:max-w-2xl lg:max-w-5xl bg-neutral-950 p-4 sm:p-6 overflow-x-hidden';
 
 /** Lights that can follow a curve: anything with warmth or brightness (not plugs). */
 function curveLights(devices: Record<string, DeviceState>) {
@@ -100,8 +101,8 @@ export function CurvesView({ devices, timezone, editing, setEditing }: {
         );
       })}
 
-      <Sheet open={editing !== null} onOpenChange={open => !open && setEditing(null)}>
-        <SheetContent className={sheetClass}>
+      <Dialog open={editing !== null} onOpenChange={open => !open && setEditing(null)}>
+        <DialogContent className={editorClass}>
           {editing !== null && (
             <CurveEditor key={editing === 'new' ? 'new' : editing.id} curve={editing === 'new' ? null : editing}
               curves={curves} devices={devices} timezone={timezone}
@@ -118,8 +119,8 @@ export function CurvesView({ devices, timezone, editing, setEditing }: {
               }}
               onCancel={() => setEditing(null)} />
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -245,95 +246,102 @@ function CurveEditor({ curve, curves, devices, timezone, onSave, onDelete, onCan
 
   return (
     <div className="flex flex-col gap-5">
-      <SheetHeader className="text-left p-0 pr-8">
-        <SheetTitle className="text-neutral-100">{curve ? 'Edit day curve' : 'New day curve'}</SheetTitle>
-        <SheetDescription className="text-xs text-neutral-500">
+      <div className="pr-8">
+        <DialogTitle className="text-neutral-100">{curve ? 'Edit day curve' : 'New day curve'}</DialogTitle>
+        <DialogDescription className="text-xs text-neutral-500">
           Set warmth and brightness at a few times of day; in between, lights change gradually. Add a point to hold a value.
-        </SheetDescription>
-      </SheetHeader>
-
-      <div>
-        <label className={label} htmlFor="curve-name">Name</label>
-        <input id="curve-name" className={input} value={spec.name} maxLength={100}
-          onChange={e => setSpec(s => ({ ...s, name: e.target.value }))} />
+        </DialogDescription>
       </div>
 
-      <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3 text-sm">
-        {preview ? (
-          <>
-            <CurveChart preview={preview} />
-            <div className="text-neutral-200 mt-3">Now: {nowText(preview.now) || 'nothing set'}</div>
-            {(preview.next.warmth || preview.next.brightness) && (
-              <div className="text-xs text-neutral-500 mt-1">
-                {[preview.next.warmth && `${Math.round(preview.next.warmth.value)}% warm by ${homeTime(preview.next.warmth.at, timezone)}`,
-                  preview.next.brightness && `${Math.round(preview.next.brightness.value)}% bright by ${homeTime(preview.next.brightness.at, timezone)}`]
-                  .filter(Boolean).join(' · ')}
-              </div>
-            )}
-            {(preview.sun.sunrise || preview.sun.sunset) && (
-              <div className="text-xs text-neutral-600 mt-1">
-                Today: sunrise {preview.sun.sunrise && homeTime(preview.sun.sunrise, timezone)}
-                {preview.sun.noon && `, midday ${homeTime(preview.sun.noon, timezone)}`}
-                , sunset {preview.sun.sunset && homeTime(preview.sun.sunset, timezone)}
-              </div>
-            )}
-            {preview.warnings.map(w => <div key={w} className="text-xs text-amber-400 mt-1">{w}</div>)}
-          </>
-        ) : (
-          <div className="text-xs text-neutral-500">{previewError ?? 'Working out today’s values…'}</div>
-        )}
-      </div>
+      {/* One column on phones; on wide screens the chart and lights sit beside the points. */}
+      <div className="grid gap-5 lg:grid-cols-2 lg:gap-8 lg:items-start">
+        <div className="flex flex-col gap-5 min-w-0">
+          <div>
+            <label className={label} htmlFor="curve-name">Name</label>
+            <input id="curve-name" className={input} value={spec.name} maxLength={100}
+              onChange={e => setSpec(s => ({ ...s, name: e.target.value }))} />
+          </div>
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-neutral-300">Points</h3>
-        {ordered.map(p => (
-          <div key={p.id} className={card}>
-            <div className="flex items-start justify-between gap-2">
-              <WhenFields when={p.when} onChange={when => setPoint(p.id, { when })} />
-              <button type="button" className={iconBtn} aria-label={`Remove the ${whenLabel(p.when)} point`}
-                disabled={spec.points.length <= 1} onClick={() => removePoint(p.id)}>
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <PercentField icon={<Thermometer size={14} />} text="Warmth" value={p.warmth} min={0}
-              onChange={warmth => setPoint(p.id, { warmth })} />
-            <PercentField icon={<Sun size={14} />} text="Brightness" value={p.brightness} min={1}
-              onChange={brightness => setPoint(p.id, { brightness })} />
-            {p.warmth === null && p.brightness === null && (
-              <p className="text-xs text-amber-400">Set warmth, brightness or both, or remove this point.</p>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3 text-sm">
+            {preview ? (
+              <>
+                <CurveChart preview={preview} />
+                <div className="text-neutral-200 mt-3">Now: {nowText(preview.now) || 'nothing set'}</div>
+                {(preview.next.warmth || preview.next.brightness) && (
+                  <div className="text-xs text-neutral-500 mt-1">
+                    {[preview.next.warmth && `${Math.round(preview.next.warmth.value)}% warm by ${homeTime(preview.next.warmth.at, timezone)}`,
+                      preview.next.brightness && `${Math.round(preview.next.brightness.value)}% bright by ${homeTime(preview.next.brightness.at, timezone)}`]
+                      .filter(Boolean).join(' · ')}
+                  </div>
+                )}
+                {(preview.sun.sunrise || preview.sun.sunset) && (
+                  <div className="text-xs text-neutral-600 mt-1">
+                    Today: sunrise {preview.sun.sunrise && homeTime(preview.sun.sunrise, timezone)}
+                    {preview.sun.noon && `, midday ${homeTime(preview.sun.noon, timezone)}`}
+                    , sunset {preview.sun.sunset && homeTime(preview.sun.sunset, timezone)}
+                  </div>
+                )}
+                {preview.warnings.map(w => <div key={w} className="text-xs text-amber-400 mt-1">{w}</div>)}
+              </>
+            ) : (
+              <div className="text-xs text-neutral-500">{previewError ?? 'Working out today’s values…'}</div>
             )}
           </div>
-        ))}
-        <button type="button" onClick={addPoint} disabled={spec.points.length >= 24}
-          className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 min-h-11">
-          <Plus size={16} /> Add a point
-        </button>
-      </div>
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-neutral-300">Lights that follow it</h3>
-        {lights.length === 0 && <p className="text-xs text-neutral-500">No lights with warmth or brightness.</p>}
-        <div className="rounded-xl border border-neutral-800 divide-y divide-neutral-800">
-          {lights.map(l => (
-            <label key={l.ieee} className="flex items-center gap-3 px-3 min-h-11 cursor-pointer">
-              <input type="checkbox" className="size-5 accent-blue-500" checked={spec.members.includes(l.ieee)}
-                onChange={() => toggleMember(l.ieee)} />
-              <span className="flex-1 min-w-0 text-sm text-neutral-200 [overflow-wrap:anywhere]">{l.name}</span>
-              {otherCurveOf[l.ieee] && (
-                <span className="text-xs text-neutral-500 shrink-0">
-                  {spec.members.includes(l.ieee) ? `moves from ${otherCurveOf[l.ieee]}` : `on ${otherCurveOf[l.ieee]}`}
-                </span>
-              )}
-            </label>
-          ))}
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-neutral-300">Lights that follow it</h3>
+            {lights.length === 0 && <p className="text-xs text-neutral-500">No lights with warmth or brightness.</p>}
+            <div className="rounded-xl border border-neutral-800 divide-y divide-neutral-800">
+              {lights.map(l => (
+                <label key={l.ieee} className="flex items-center gap-3 px-3 min-h-11 cursor-pointer">
+                  <input type="checkbox" className="size-5 accent-blue-500" checked={spec.members.includes(l.ieee)}
+                    onChange={() => toggleMember(l.ieee)} />
+                  <span className="flex-1 min-w-0 text-sm text-neutral-200 [overflow-wrap:anywhere]">{l.name}</span>
+                  {otherCurveOf[l.ieee] && (
+                    <span className="text-xs text-neutral-500 shrink-0">
+                      {spec.members.includes(l.ieee) ? `moves from ${otherCurveOf[l.ieee]}` : `on ${otherCurveOf[l.ieee]}`}
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-3 min-h-11 cursor-pointer">
+            <input type="checkbox" className="size-5 accent-blue-500" checked={spec.enabled}
+              onChange={e => setSpec(s => ({ ...s, enabled: e.target.checked }))} />
+            <span className="text-sm text-neutral-200">On</span>
+          </label>
+        </div>
+
+        <div className="min-w-0 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:pr-1">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-neutral-300">Points</h3>
+            {ordered.map(p => (
+              <div key={p.id} className={card}>
+                <div className="flex items-start justify-between gap-2">
+                  <WhenFields when={p.when} onChange={when => setPoint(p.id, { when })} />
+                  <button type="button" className={iconBtn} aria-label={`Remove the ${whenLabel(p.when)} point`}
+                    disabled={spec.points.length <= 1} onClick={() => removePoint(p.id)}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                <PercentField icon={<Thermometer size={14} />} text="Warmth" value={p.warmth} min={0}
+                  onChange={warmth => setPoint(p.id, { warmth })} />
+                <PercentField icon={<Sun size={14} />} text="Brightness" value={p.brightness} min={1}
+                  onChange={brightness => setPoint(p.id, { brightness })} />
+                {p.warmth === null && p.brightness === null && (
+                  <p className="text-xs text-amber-400">Set warmth, brightness or both, or remove this point.</p>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addPoint} disabled={spec.points.length >= 24}
+              className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 min-h-11">
+              <Plus size={16} /> Add a point
+            </button>
+          </div>
         </div>
       </div>
-
-      <label className="flex items-center gap-3 min-h-11 cursor-pointer">
-        <input type="checkbox" className="size-5 accent-blue-500" checked={spec.enabled}
-          onChange={e => setSpec(s => ({ ...s, enabled: e.target.checked }))} />
-        <span className="text-sm text-neutral-200">On</span>
-      </label>
 
       <div className="flex flex-wrap gap-2 pt-2">
         <button type="button" disabled={!canSave}
@@ -347,7 +355,7 @@ function CurveEditor({ curve, curves, devices, timezone, onSave, onDelete, onCan
         </button>
         {onDelete && (
           <button type="button" onClick={() => setConfirmDelete(true)}
-            className="basis-full min-h-11 rounded-xl px-4 text-sm font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20">
+            className="basis-full sm:basis-auto sm:flex-1 min-h-11 rounded-xl px-4 text-sm font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20">
             Delete curve
           </button>
         )}
