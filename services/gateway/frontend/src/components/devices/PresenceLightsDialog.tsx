@@ -69,7 +69,7 @@ export function PresenceLightsDialog({ open, onOpenChange, sensorName, state }: 
       ? { id: 't1', type: 'room', room: roomId, state: occupied ? 'occupied' : 'empty', for_s, cooldown_s: 0, fire_on_start: false }
       : { id: 't1', type: 'device', device: ieee, attribute, op: 'eq', value: occupied, rearm: null, for_s, cooldown_s: 0, fire_on_start: false };
     const actions = (on: boolean) => [...selected].map((d, i) => ({ id: `a${i + 1}`, type: 'device', device: d, set: { state: on ? 'ON' : 'OFF' }, stop_on_error: false }));
-    const base = { description: null, enabled: true, mode: 'single', grace_minutes: 5 };
+    const base = { description: null, enabled: true, mode: 'single', grace_minutes: 5, delete_when_done: false };
     const routines = [
       { ...base, name: `${place}: lights on when occupied`, triggers: [trigger(true, null)], actions: actions(true),
         conditions: onlyDark && hasLux ? [{ type: 'device', device: ieee, attribute: 'illuminance', op: 'lt', value: lux }] : [] },

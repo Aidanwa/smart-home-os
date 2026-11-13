@@ -42,6 +42,13 @@ async def load_routine(routine_id: uuid.UUID) -> Routine | None:
         return await s.get(Routine, routine_id)
 
 
+async def delete_routine(routine_id: uuid.UUID) -> None:
+    """Its runs go with it (ON DELETE CASCADE)."""
+    async with AsyncSessionLocal() as s:
+        await s.execute(delete(Routine).where(Routine.id == routine_id))
+        await s.commit()
+
+
 async def mark_interrupted() -> int:
     """Runs still 'running' at startup were cut off by a restart."""
     async with AsyncSessionLocal() as s:

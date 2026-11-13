@@ -41,7 +41,7 @@ No hot reload; Docker is the loop. Deploy: push from the PC, then on the Pi `cd 
 3. `docker compose run --rm -T --no-deps gateway sh -c "cd /app/shared && uv run --no-sync alembic upgrade head && uv run --no-sync alembic check"`. "No new upgrade operations detected" means the migration matches the models.
 4. `docker compose up -d gateway`.
 
-The current head is `e5b8f2c0a913`. `env.py` requires `DATABASE_URL`; Postgres listens only on the Pi's loopback.
+The current head is `f3c1a7d4e2b6`. `env.py` requires `DATABASE_URL`; Postgres listens only on the Pi's loopback.
 
 **Dependencies:** `uv add <pkg> --package gateway|agent|shared`; `npm install` in the frontend.
 
@@ -86,6 +86,7 @@ There are no tests.
 - Routes that change a routine call `scheduler.reload(id)`; home profile changes call `reload_all()`.
 - **Triggers:** time (optionally a one-time `date`), sun (needs the home location), device (edge-triggered; the first reading only seeds unless `fire_on_start`; `for_s`, `cooldown_s`, `rearm`), and room (a device trigger on the pseudo-device `room:<id>`).
 - **Conditions:** AND, plus one level of `any`. Checked when a trigger fires; Run now skips them.
+- **Delete when done** (`delete_when_done`, one-time routines only): the engine deletes the routine, runs and all, once a scheduled run succeeds (or its conditions skip it) and no times are left. Failed, partial and missed runs keep it. The agent sets it for simple reminders.
 - **Late fires:** a time/sun fire later than `max(grace, 30 s)` is logged `missed`; missed ones are caught up once at startup.
 - **Actions:** device, group, delay, fade (native or stepped), Spotify (via the agent's internal endpoint), run routine (loops refused, max depth 5), ask the agent (max 2 per routine per hour), notify (web push).
 - **Units:** values are device-native: °C, and mired for colour temperature. The UI shows °F, and warmth % of each bulb's own range (`lib/colorTemp.ts`).

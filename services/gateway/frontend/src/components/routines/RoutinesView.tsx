@@ -31,8 +31,8 @@ function parseDeepLink(): DeepLink {
 }
 
 function toSpec(r: Routine): RoutineSpec {
-  const { name, description, enabled, mode, grace_minutes, triggers, conditions, actions } = r;
-  return { name, description, enabled, mode, grace_minutes, triggers, conditions, actions };
+  const { name, description, enabled, mode, grace_minutes, delete_when_done, triggers, conditions, actions } = r;
+  return { name, description, enabled, mode, grace_minutes, delete_when_done, triggers, conditions, actions };
 }
 
 export function RoutinesView({ devices }: { devices: Record<string, DeviceState> }) {

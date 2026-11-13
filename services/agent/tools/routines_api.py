@@ -15,11 +15,13 @@ from tools.gateway_api import GatewayClient
 logger = logging.getLogger(__name__)
 
 ROUTINE_FORMAT = """Routine JSON for rt_save. Refer to devices and groups by their names from Home State.
-{"name": str, "enabled": true, "mode": "single"|"restart", "grace_minutes": 5,
+{"name": str, "enabled": true, "mode": "single"|"restart", "grace_minutes": 5, "delete_when_done": false,
  "triggers": [...], "conditions": [...], "actions": [...]}   (ids like "t1"/"a1" are optional)
 TRIGGERS (any one starts it; [] = manual only):
  {"type":"time","at":"HH:MM","days":["mon",..,"sun"] or null (= every day),"date":null}
   One-time (a reminder): "date":"YYYY-MM-DD" with "days":null; it fires once; finished ones drop out of rt_list.
+  For simple reminders and anything that happens only once, set "delete_when_done": true (only allowed when every
+  trigger has a date): it's deleted after it runs successfully. Leave it false if the user may want to reuse it.
  {"type":"sun","event":"sunrise"|"sunset","offset_min":-30,"days":null}
  {"type":"room","room":ROOM_NAME,"state":"occupied"|"empty","for_s":seconds or null,"cooldown_s":0,"fire_on_start":false}
   A room is occupied while any presence/motion sensor in it (see Rooms in Home State) detects someone.
@@ -57,11 +59,12 @@ Values are device-native: temperature is always °C (convert from °F), brightne
 """
 
 
-_SPEC_FIELDS = ("name", "description", "enabled", "mode", "grace_minutes", "triggers", "conditions", "actions")
+_SPEC_FIELDS = ("name", "description", "enabled", "mode", "grace_minutes", "delete_when_done", "triggers", "conditions",
+                "actions")
 
 # Fields left out of rt_list output when they hold their default (saves tokens; rt_save fills them back in).
 _DEFAULTS = {"stop_on_error": False, "wait": False, "check_conditions": False, "fire_on_start": False, "cooldown_s": 0,
-             "method": "native"}
+             "method": "native", "delete_when_done": False}
 
 
 def _strip_nulls(v):
@@ -182,7 +185,7 @@ class RoutineTools:
         return datetime.fromisoformat(iso).astimezone(ZoneInfo(tz)).strftime("%a %d %b %H:%M")
 
     def _brief(self, r: dict, tz: str, devices: dict, groups: dict, routines: dict) -> dict:
-        definition = {k: r.get(k) for k in ("mode", "grace_minutes", "triggers", "conditions", "actions")}
+        definition = {k: r.get(k) for k in ("mode", "grace_minutes", "delete_when_done", "triggers", "conditions", "actions")}
         definition = _strip_nulls(self._to_names(json.loads(json.dumps(definition)), devices, groups, routines))
         if definition.get("mode") == "single":
             definition.pop("mode")

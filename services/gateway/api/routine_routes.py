@@ -57,7 +57,7 @@ def _reminder_done(r: Routine, sched: Scheduler) -> bool:
 def _out(r: Routine, sched: Scheduler, owner_name: str | None = None, reviewed: dict | None = None) -> dict:
     return {
         "id": str(r.id), "name": r.name, "description": r.description, "enabled": r.enabled,
-        "mode": r.mode, "grace_minutes": r.grace_minutes,
+        "mode": r.mode, "grace_minutes": r.grace_minutes, "delete_when_done": r.delete_when_done,
         "triggers": r.triggers, "conditions": r.conditions, "actions": r.actions,
         "owner_user_id": str(r.owner_user_id), "owner_username": owner_name,
         "last_run_at": _iso(r.last_run_at), "last_run_status": r.last_run_status,
@@ -80,7 +80,8 @@ def _run_out(run: RoutineRun) -> dict:
 
 def _apply(r: Routine, spec: RoutineSpec):
     data = spec.model_dump(mode="json")
-    for field in ("name", "description", "enabled", "mode", "grace_minutes", "triggers", "conditions", "actions"):
+    for field in ("name", "description", "enabled", "mode", "grace_minutes", "delete_when_done", "triggers",
+                  "conditions", "actions"):
         setattr(r, field, data[field])
 
 
@@ -443,7 +444,7 @@ async def duplicate_routine(routine_id: uuid.UUID, db: AsyncSession = Depends(ge
     name = f"{src.name} (copy)"
     copy = Routine(
         owner_user_id=user.id, name=name[:100], description=src.description, enabled=False, mode=src.mode,
-        grace_minutes=src.grace_minutes, triggers=src.triggers, conditions=src.conditions, actions=src.actions,
+        grace_minutes=src.grace_minutes, delete_when_done=src.delete_when_done, triggers=src.triggers, conditions=src.conditions, actions=src.actions,
         schema_version=src.schema_version,
     )
     db.add(copy)

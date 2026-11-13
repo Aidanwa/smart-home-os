@@ -145,6 +145,8 @@ export interface RoutineSpec {
   enabled: boolean;
   mode: 'single' | 'restart';
   grace_minutes: number;
+  /** One-time routines only (every trigger a dated time): deleted once its last run succeeds. */
+  delete_when_done: boolean;
   triggers: Trigger[];
   conditions: Condition[];
   actions: Action[];
@@ -205,6 +207,11 @@ export const STATUS_STYLE: Record<RunStatus, string> = {
   interrupted: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
 };
 
+/** Every trigger is a dated time trigger (mirrors is_one_time in scheduler/schema.py). */
+export function isOneTime(triggers: Trigger[]): boolean {
+  return triggers.length > 0 && triggers.every(t => t.type === 'time' && !!t.date);
+}
+
 export function emptyRoutine(): RoutineSpec {
   return {
     name: '',
@@ -212,6 +219,7 @@ export function emptyRoutine(): RoutineSpec {
     enabled: true,
     mode: 'single',
     grace_minutes: 5,
+    delete_when_done: false,
     triggers: [{ id: 't1', type: 'time', at: '07:00', days: null }],
     conditions: [],
     actions: [],

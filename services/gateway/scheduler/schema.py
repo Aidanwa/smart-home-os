@@ -382,6 +382,9 @@ class RoutineSpec(_Strict):
     enabled: bool = True
     mode: Literal["single", "restart"] = "single"
     grace_minutes: int = Field(5, ge=0, le=1440)
+    # One-time routines only: deleted once the last of its times has run successfully (or been
+    # skipped by its conditions). Kept after a failed, partial or missed run, so it shows up.
+    delete_when_done: bool = False
     triggers: list[Trigger] = Field(default_factory=list, max_length=20)  # empty = run-now only
     conditions: list[Condition] = Field(default_factory=list, max_length=20)
     actions: list[Action] = Field(min_length=1, max_length=50)
@@ -399,6 +402,12 @@ class RoutineSpec(_Strict):
         if not v:
             raise ValueError("name can't be blank")
         return v
+
+    @model_validator(mode="after")
+    def _delete_once(self):
+        if self.delete_when_done and not self.is_one_time():
+            raise ValueError("'delete when done' is only for one-time routines (every trigger a time with a date)")
+        return self
 
     @model_validator(mode="after")
     def _unique_ids(self):

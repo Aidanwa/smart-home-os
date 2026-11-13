@@ -23,7 +23,7 @@ from scheduler.actions import CallResult
 from scheduler.matching import compare, device_reading, failing_condition, released
 from core.rooms import ROOM_PREFIX
 from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoomTrigger, RoutineSpec, SunTrigger, TimeTrigger
-from scheduler.timing import Location, is_scheduled, next_fire, prev_fire
+from scheduler.timing import Location, is_scheduled, next_fire, prev_fire, upcoming
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def _utcnow() -> datetime:
 def spec_from_row(row: Routine) -> RoutineSpec:
     return RoutineSpec.model_validate({
         "name": row.name, "description": row.description, "enabled": row.enabled,
-        "mode": row.mode, "grace_minutes": row.grace_minutes,
+        "mode": row.mode, "grace_minutes": row.grace_minutes, "delete_when_done": row.delete_when_done,
         "triggers": row.triggers, "conditions": row.conditions, "actions": row.actions,
     })
 
@@ -397,7 +397,33 @@ class Scheduler:
                 self.bus.broadcast({"type": "routine_run", "routine_id": str(r.id), "run_id": str(run_id), "status": "missed"})
                 alerts.run_finished(r.owner_id, r.id, r.name, "missed")
             return
-        await self._start_run(r, trig.type, trig.id, scheduled_for, int(late) if late >= 5 else None)
+        res = await self._try_start(r, trig.type, trig.id, scheduled_for, int(late) if late >= 5 else None)
+        if res.task is not None:
+            res.task.add_done_callback(lambda t, rid=r.id: self._spawn(self._delete_if_done(rid, t)))
+        elif res.expected:  # skipped by its conditions: that occurrence is over too
+            await self._delete_if_done(r.id, None)
+
+    async def _delete_if_done(self, routine_id: uuid.UUID, task: asyncio.Task | None):
+        """A 'delete when done' routine goes once a scheduled run succeeded (or was skipped by its
+        conditions) and none of its times are left. Failed, partial and missed runs keep it."""
+        if task is not None and (task.cancelled() or task.exception() is not None or task.result() != "success"):
+            return
+        if self._stopping or self.is_running(routine_id):
+            return
+        try:
+            row = await store.load_routine(routine_id)
+            if row is None or not row.delete_when_done:
+                return
+            spec = spec_from_row(row)  # re-read: it may have been edited while it ran
+            if not spec.is_one_time() or upcoming(spec.triggers, _utcnow(), self.tz, self.loc, count=1):
+                return
+            await store.delete_routine(routine_id)
+        except Exception:
+            logger.exception(f"Couldn't delete finished routine {routine_id}")
+            return
+        self._forget(routine_id)
+        logger.info(f"Routine '{row.name}' is done and was deleted (delete when done)")
+        self.bus.broadcast({"type": "routine_run", "routine_id": str(routine_id), "status": "deleted"})
 
     # ------------------------------------------------------------ device triggers
 

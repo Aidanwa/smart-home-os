@@ -4,7 +4,7 @@ import type { DeviceState } from '../../hooks/useDevices';
 import type { GroupInfo } from '../../hooks/useGroups';
 import type { PreviewResult } from '../../hooks/useRoutines';
 import type { Action, AttributeMap, ConditionMode, LeafCondition, RoomOption, RoutineSpec, TempUnit, Trigger } from './types';
-import { ACTION_LABEL, formatInTz, joinConditions, nextId, splitConditions } from './types';
+import { ACTION_LABEL, formatInTz, isOneTime, joinConditions, nextId, splitConditions } from './types';
 import { ActionFields, type RoutineOption } from './ActionFields';
 import { findInfo } from './fieldLogic';
 import { miredRange } from '../../lib/colorTemp';
@@ -92,9 +92,12 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
   const emptyMessage = spec.actions.some(a => a.type === 'notify' && !a.message.trim());
   const noRoutinePicked = spec.actions.some(a => a.type === 'routine' && !a.routine);
 
+  const oneTime = isOneTime(spec.triggers);
+
   const handleSave = async () => {
     setSaving(true);
-    const err = await onSave(spec);
+    // The flag only applies to one-time routines; drop it if the triggers no longer are.
+    const err = await onSave(oneTime ? spec : { ...spec, delete_when_done: false });
     setSaving(false);
     if (err) toast.error(`Couldn’t save ${spec.name.trim() || 'the routine'}`, { description: err, duration: 10000 });
   };
@@ -126,6 +129,14 @@ export function RoutineEditor({ initial, isNew, devices, groups, attributes, tem
         ))}
         {spec.triggers.length === 0 && (
           <p className="text-xs text-neutral-500">Nothing starts it automatically: it only runs when you press Run now.</p>
+        )}
+        {oneTime && (
+          <label className="flex items-center gap-2 min-h-10 text-sm text-neutral-300">
+            <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={spec.delete_when_done}
+              onChange={e => patch({ delete_when_done: e.target.checked })} />
+            Delete when done
+            <span className="text-xs text-neutral-500">(kept if it fails)</span>
+          </label>
         )}
         <div className="flex flex-wrap gap-2">
           {([['time', 'Time'], ['sun', 'Sunrise/sunset'], ['room', 'Room occupied/empty'], ['device', 'Device or sensor']] as const).map(([type, text]) => (

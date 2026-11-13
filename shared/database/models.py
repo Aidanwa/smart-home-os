@@ -1,7 +1,7 @@
 # SQLAlchemy Tables
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint, Integer, Index, Text, text, true
+from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint, Integer, Index, Text, text, true, false
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -163,6 +163,8 @@ class Routine(Base):
     owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     mode: Mapped[str] = mapped_column(String(16), default="single", server_default="single", nullable=False)
     grace_minutes: Mapped[int] = mapped_column(Integer, default=5, server_default="5", nullable=False)
+    # One-time routines only: the scheduler deletes it once its last run succeeds (scheduler/engine.py).
+    delete_when_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
     triggers: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
     conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
     actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
