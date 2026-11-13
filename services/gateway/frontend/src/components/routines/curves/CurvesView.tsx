@@ -314,7 +314,7 @@ function CurveEditor({ curve, curves, devices, timezone, onSave, onDelete, onCan
           </label>
         </div>
 
-        <div className="min-w-0 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:pr-1">
+        <div className="min-w-0 lg:max-h-[calc(100dvh-17rem)] lg:overflow-y-auto lg:pr-1">
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-neutral-300">Points</h3>
             {ordered.map(p => (
