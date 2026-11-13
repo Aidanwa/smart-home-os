@@ -6,6 +6,7 @@ import { AgentSettings } from './AgentSettings';
 import { MemorySettings } from './MemorySettings';
 import { AccountSettings } from './AccountSettings';
 import { NotificationSettings } from './NotificationSettings';
+import { ApiTokenSettings } from './ApiTokenSettings';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { request } from '../../lib/api';
@@ -127,6 +128,7 @@ export function SettingsView() {
 
       {/* Section: Premium External Vault Binding */}
       {settingsTab === 'connections' && (
+        <div className="space-y-6">
         <div className="bg-neutral-900/40 border border-neutral-800 p-6 rounded-xl space-y-4 animate-in fade-in duration-200">
           <h2 className="text-base font-medium text-neutral-200">Linked services</h2>
           <p className="text-xs text-neutral-500 leading-relaxed">Accounts the agent and routines can use.</p>
@@ -172,6 +174,8 @@ export function SettingsView() {
               )}
             </div>
           </div>
+        </div>
+        <ApiTokenSettings />
         </div>
       )}
 

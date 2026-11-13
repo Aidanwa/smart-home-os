@@ -108,6 +108,21 @@ class PushSubscription(Base):
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ApiToken(Base):
+    """A long-lived personal API token (e.g. an iPhone Shortcut). It acts as its user with full
+    access, sent as `Authorization: Bearer <token>`. Only the SHA-256 of the token is stored; it is
+    shown once at creation. Revoking deletes the row."""
+    __tablename__ = "api_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False)  # first characters, to tell tokens apart
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Home(Base):
     """Global Home Configuration, Location & Weather Context (Singleton)"""
     __tablename__ = "home_profile"

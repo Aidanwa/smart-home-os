@@ -17,9 +17,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify an unhashed incoming password against its DB representation."""
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> str:
     """Generate a signed cryptographic token targeting a user's unique identity."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     to_encode = {"sub": user_id, "exp": expire}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

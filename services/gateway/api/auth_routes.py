@@ -11,7 +11,7 @@ import logging
 
 from shared.database.core import get_db
 from shared.database.models import User, UserPreference, UserSecret, LogicalZone, DevicePlacement
-from api.auth import get_current_user
+from api.auth import get_current_user, get_session_user
 from core.security import hash_password, verify_password, create_access_token
 from shared.security import encrypt_secret
 
@@ -147,7 +147,7 @@ async def get_current_identity(current_user: User = Depends(get_current_user)):
 @auth_router.put("/me")
 async def update_current_identity(
     request: UserUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_session_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update the signed-in user's username and/or password.
@@ -175,7 +175,7 @@ async def update_current_identity(
 @auth_router.delete("/me")
 async def delete_account(
     response: Response,
-    user = Depends(get_current_user),
+    user = Depends(get_session_user),
     db: AsyncSession = Depends(get_db)
 ):
     """

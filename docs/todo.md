@@ -40,7 +40,7 @@ Today only the latest state is kept (Redis twin), so nothing has history. A read
 
 ### Presence (home / away)
 
-- Per-user home/away state set by an iPhone Shortcuts "Arrive"/"Leave" automation calling a webhook (test first that iOS runs it without a confirmation tap).
+- Per-user home/away state set by an iPhone Shortcuts "Arrive"/"Leave" automation calling a webhook (test first that iOS runs it without a confirmation tap). The Shortcut can authenticate with a personal API token (Settings → Connections; see [iphone-shortcuts.md](iphone-shortcuts.md)), so this is one endpoint plus the routine condition and trigger.
 - An "anyone home" / "nobody home" routine condition and trigger, which the leaving-home check and vacation mode build on.
 
 ### Notifications
@@ -69,7 +69,6 @@ Today only the latest state is kept (Redis twin), so nothing has history. A read
 
 - Edge devices around the house: always-listening wake word, with spoken replies (STT and TTS).
 - Faster voice input over a WebSocket instead of one upload per recording.
-- "Hey Siri, ask the house…": an iPhone Shortcut sends the dictated text to the agent and Siri speaks the reply (phone, watch, CarPlay). Needs a long-lived, revocable personal API token separate from the cookie session.
 - Cheapest edge device for the wake-word idea: a Pi Zero 2 W with a mic running openWakeWord, sending audio to the existing Whisper endpoint (ESP32-S3 boards expect Home Assistant's protocol).
 
 ### Devices and Zigbee

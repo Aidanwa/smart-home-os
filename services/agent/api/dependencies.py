@@ -100,6 +100,12 @@ ROUTINE_RUN_NOTE = (
     "\n\nYou are running unattended as part of the routine '{routine}'. Nobody is reading or listening "
     "and nobody can answer questions: act on the instruction with the tools, or say briefly why you didn't."
 )
+# For POST /chat with voice=true (an iPhone Shortcut, read out by Siri).
+VOICE_REPLY_NOTE = (
+    "\n\nThis message was spoken to Siri and your reply will be read aloud. Answer in one or two short, "
+    "plain sentences: no markdown, lists, emoji or links. Say temperatures and times the way a person would. "
+    "If you need to ask something, ask one short question; the user can reply by asking again."
+)
 # Used instead when the routine sends the reply to the user's phone.
 ROUTINE_RUN_NOTIFY_NOTE = (
     "\n\nYou are running unattended as part of the routine '{routine}'. Nobody can answer questions: act on "

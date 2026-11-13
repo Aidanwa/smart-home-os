@@ -11,10 +11,10 @@ from fastapi import (
     UploadFile, File
 )
 from typing import Dict, Optional
-from api.models import ChatResponse, HistoryResponse
+from api.models import ChatRequest, ChatResponse, HistoryResponse
 import tempfile
 
-from api.dependencies import get_orchestrator, stt_model
+from api.dependencies import VOICE_REPLY_NOTE, get_orchestrator, stt_model
 from core.orchestrator import SmartHomeOrchestrator, tool_outcome
 
 logger = logging.getLogger(__name__)
@@ -208,15 +208,21 @@ async def delete_user_chat_history(
 @router.post("/chat", response_model=ChatResponse)
 async def chat_sync(
     request: Request,
-    body: Dict[str, str],
+    body: ChatRequest,
     orchestrator_factory = Depends(get_orchestrator)
 ):
+    """One whole reply as JSON (the iPhone Shortcut uses this). Shares the chat history with the
+    web chat."""
     user_id = extract_user_id_from_cookie(request.headers.get("cookie"))
-    user_text = body.get("text", "")
-    
+    user_text = body.text.strip()
+    if not user_text:
+        raise HTTPException(status_code=422, detail="Say something to the house.")
+
     full_response = ""
     try:
         orchestrator: SmartHomeOrchestrator = await orchestrator_factory(user_id)
+        if body.voice:
+            orchestrator.prompt_suffix = VOICE_REPLY_NOTE
         async for chunk in orchestrator.process_intent_stream(user_id, user_text):
             if chunk["type"] == "text_chunk":
                 full_response += chunk["content"]

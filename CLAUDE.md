@@ -41,7 +41,7 @@ No hot reload; Docker is the loop. Deploy: push from the PC, then on the Pi `cd 
 3. `docker compose run --rm -T --no-deps gateway sh -c "cd /app/shared && uv run --no-sync alembic upgrade head && uv run --no-sync alembic check"`. "No new upgrade operations detected" means the migration matches the models.
 4. `docker compose up -d gateway`.
 
-The current head is `d7a3c9e15b42`. `env.py` requires `DATABASE_URL`; Postgres listens only on the Pi's loopback.
+The current head is `e5b8f2c0a913`. `env.py` requires `DATABASE_URL`; Postgres listens only on the Pi's loopback.
 
 **Dependencies:** `uv add <pkg> --package gateway|agent|shared`; `npm install` in the frontend.
 
@@ -76,7 +76,7 @@ There are no tests.
   - It has a command hook and a payload filter (used by day curves).
 - **Models:** `DeviceState`/`DeviceSetRequest` in `api/models.py` drop unknown fields. A new reading or setting the hand-built UI uses must be added there (the generic settings endpoint doesn't need it). `WRITE_ONLY_FIELDS` are sent without waiting.
 - **Realtime:** `/api/ws` pushes `device_update | groups_update | device_delete | routine_run | room_update | curve_update | ota_result`. The frontend re-dispatches some as window events (`onGroupsUpdate`, `onRoutineRun`, `onCurveUpdate`, `onRealtimeReconnect`). Both sockets ping after 25 s of quiet; the client reconnects after 60 s of silence.
-- **Auth:** HS256 JWT in the HttpOnly cookie `access_token` (30 days); `get_current_user` in `api/auth.py`. No RBAC. **Rotating `JWT_SECRET_KEY` invalidates every session and every stored secret** (Fernet key = SHA256 of it).
+- **Auth:** HS256 JWT in the HttpOnly cookie `access_token` (30 days); `get_current_user` in `api/auth.py`. No RBAC. Personal API tokens (`Authorization: Bearer shos_…`, table `api_tokens`, SHA-256 only, [core/api_tokens.py](services/gateway/core/api_tokens.py)) act as their user for iPhone Shortcuts ([docs/iphone-shortcuts.md](docs/iphone-shortcuts.md)); `get_session_user` (cookie only) guards account changes and token management. The agent proxy swaps a token for a 5-minute cookie JWT. **Rotating `JWT_SECRET_KEY` invalidates every session and every stored secret** (Fernet key = SHA256 of it).
 - Fixed API paths must be declared before `/{id}` routes.
 
 ## Routines (`services/gateway/scheduler/`)

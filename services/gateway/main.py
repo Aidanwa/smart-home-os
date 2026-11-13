@@ -24,6 +24,8 @@ from api.routine_routes import router as routine_router
 from api.push_routes import router as push_router
 from api.device_settings_routes import router as device_settings_router
 from api.curve_routes import router as curve_router
+from api.token_routes import router as token_router
+from api.auth import agent_cookie_for
 
 # The installed app's manifest (frontend/public); Python doesn't know the extension.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -126,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(push_router)
     app.include_router(device_settings_router)
     app.include_router(curve_router)
+    app.include_router(token_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)
@@ -139,10 +142,17 @@ def create_app() -> FastAPI:
         query_params = dict(request.query_params)
         incoming_body = await request.body()
         
-        # Forward safe headers (skip 'host' to avoid DNS resolution conflicts)
-        safe_headers = ("cookie", "content-type", "user-agent", "accept", "authorization")
+        # Forward safe headers (skip 'host' to avoid DNS resolution conflicts). The agent authenticates
+        # from the cookie only; an API token (iPhone Shortcut) is swapped for a short-lived one.
+        safe_headers = ("content-type", "user-agent", "accept")
         headers = {k: v for k, v in request.headers.items() if k.lower() in safe_headers}
-        
+        cookie = await agent_cookie_for(request)
+        if cookie is None:
+            return Response(content=json.dumps({"detail": "API token not recognised (revoked?)."}),
+                            status_code=401, media_type="application/json")
+        if cookie:
+            headers["cookie"] = cookie
+
         async with httpx.AsyncClient() as client:
             try:
                 res = await client.request(
@@ -151,7 +161,9 @@ def create_app() -> FastAPI:
                     params=query_params,
                     headers=headers,
                     content=incoming_body,
-                    timeout=15.0
+                    # A whole agent reply (POST chat: up to 5 LLM rounds plus tools) takes longer than a
+                    # history fetch.
+                    timeout=90.0 if path == "chat" else 15.0
                 )
                 return Response(content=res.content, status_code=res.status_code, headers=dict(res.headers))
             except httpx.RequestError as exc:
