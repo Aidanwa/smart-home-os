@@ -226,18 +226,3 @@ class GatewayClient:
             "message": f"Successfully updated {len(successes)} devices.", 
             "data": [r["data"] for r in successes]
         }
-            
-    async def rename_group(self, user_id: str, group_name: str, new_name: str) -> Dict[str, Any]:
-        """
-        Tool: Renames a Zigbee group on behalf of the user.
-        """
-        try:
-            response = await self.client.put(
-                f"/api/groups/{group_name}/rename",
-                params={"new_name": new_name},
-                cookies=self._mint_user_context_cookie(user_id)
-            )
-            response.raise_for_status()
-            return {"status": "success", "message": f"Renamed group {group_name} to {new_name}."}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}

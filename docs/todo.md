@@ -10,15 +10,10 @@ Items marked **(migration)** need a database schema change, which needs Aidan's 
 
 User-made labels for grouping routines beyond the built-in "when it runs" and "room" groupings, e.g. "Morning", "Away", "Kids". Needs a new column on `routines`, the list's group-by dropdown gaining "Tag", and a tag field in the editor (and in the agent's `rt_save`).
 
-## Known bugs
-
-- `GatewayClient.rename_group` in the agent sends `new_name` as a query parameter where the gateway expects a JSON body. It's unregistered dead code; fix it or delete it.
-
 ## Not yet confirmed working
 
 Built, but nobody has seen it work for real yet:
 
-- **The firmware update badge** on device cards ("Update", "Scheduled", "42%"). No device has had an update waiting.
 - **Notifications, the untested parts.** Confirmed so far: turning them on in the iPhone app, the test send, the Notify action, and Ask the agent replies. Not yet seen: the routine failed/missed/partial alerts, tapping one to open that routine's history, and one-time reminders made by the agent ("remind me at 6 to take the bins out").
 
 ## Testing
@@ -53,7 +48,11 @@ Today only the latest state is kept (Redis twin), so nothing has history. A read
 - Message templates with live values ("Freezer is {temperature}°").
 - The app icon badge (`setAppBadge`) for unseen routine problems.
 - **Tell me when the system goes down.** The hub can't send a push while it's offline (Pi off, power out, network down), so this has three parts:
-  - *Fully down:* an outside "dead man's switch". The Pi pings a service such as healthchecks.io (free tier) every few minutes from cron; if the pings stop, that service alerts by email, ntfy or Pushover. The PC isn't always on, so it can't be the watcher. The ping URL is a secret and goes in `.env`, not the repo.
+  - *Fully down:* an outside "dead man's switch". The Pi pings a service such as healthchecks.io (free tier) every few minutes from cron; if the pings stop, that service alerts by email, ntfy or Pushover. The PC isn't always on, so it can't be the watcher. The ping URL is a secret and stays out of the repo. Worth doing before the first trip away; at home you notice an outage yourself within minutes. About 15 minutes, all outside the repo:
+    1. healthchecks.io: one check, 5 min period, 10 min grace. Email alerts are on by default; add ntfy or Pushover for a phone push.
+    2. On the Pi, `crontab -e`: `*/5 * * * * curl -fsS -m 10 --retry 3 https://hc-ping.com/<uuid> > /dev/null` (`-m` stops a hung network stacking up curls; `--retry` rides out blips).
+    3. Test: comment the line out, wait past the grace period, confirm the alert arrives, restore it.
+    - Optional stricter version: a `deploy/pi/heartbeat.sh` that checks `https://localhost:8000/api/system/status` first and pings `<url>/fail` if it's bad, with the URL in `/etc/smarthome-os.conf`. That overlaps with the partly-down push below; prefer the plain ping and leave gateway-level checks to the push.
   - *Partly down* (Zigbee2MQTT or MQTT stopped, agent unreachable, scheduler not running, no device reports for N minutes): the gateway is still up, so it can send a normal web push. `/api/system/status` already checks most of this. Alert after it's been bad for a few minutes, and again when it recovers.
   - *Back up:* on startup, push "Hub was offline from 02:10 to 02:45", using a last-alive timestamp written every minute (Redis or a small file).
 - Note: iOS web push has no action buttons, so a tap (deep link) is the only interaction; don't design around buttons.
