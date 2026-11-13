@@ -10,10 +10,6 @@ Items marked **(migration)** need a database schema change, which needs Aidan's 
 
 User-made labels for grouping routines beyond the built-in "when it runs" and "room" groupings, e.g. "Morning", "Away", "Kids". Needs a new column on `routines`, the list's group-by dropdown gaining "Tag", and a tag field in the editor (and in the agent's `rt_save`).
 
-### 2. Routine starter templates
-
-Starting points in the New routine flow: wake-up (fade lights in), sunset lamp, all off at bedtime.
-
 ## Known bugs
 
 - **Group member removal sometimes uses the wrong group id** and the MQTT side logs an error. It works for the user, but it's noisy. Lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes one (Z2M's members carry `ieee_address`/`endpoint`).

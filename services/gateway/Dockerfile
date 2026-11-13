@@ -27,6 +27,9 @@ COPY pyproject.toml uv.lock ./
 COPY shared/ ./shared/
 
 # Sync dependencies (this uses the root lockfile but creates the venv in /app)
+# Compile the packages' bytecode now: otherwise every fresh container compiles them at
+# startup (on the Pi's SD card that took ~25 s of each gateway restart).
+ENV UV_COMPILE_BYTECODE=1
 RUN uv sync --frozen --no-dev --package gateway
 
 # Copy the backend source code
@@ -44,4 +47,5 @@ ENV PYTHONPATH=/app/services/gateway:/app
 
 # Start the server using uvicorn via uv. 
 # Make sure to run it from the correct directory or use the module path.
-CMD ["uv", "run", "uvicorn", "services.gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-sync: the build installed the locked packages; don't re-check them at every start.
+CMD ["uv", "run", "--no-sync", "uvicorn", "services.gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]

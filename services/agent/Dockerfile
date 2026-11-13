@@ -11,6 +11,9 @@ COPY pyproject.toml uv.lock ./
 COPY shared/ ./shared/
 
 # Sync dependencies for the agent
+# Compile the packages' bytecode now: otherwise every fresh container compiles them at
+# startup (on the Pi's SD card that took ~25 s of each gateway restart).
+ENV UV_COMPILE_BYTECODE=1
 RUN uv sync --frozen --no-dev --package agent
 
 # Correctly copy the agent source code, preserving the folder structure
@@ -23,4 +26,5 @@ EXPOSE 8001
 ENV PYTHONPATH=/app/services/agent:/app
 
 # Start the server using uvicorn via uv run
-CMD ["uv", "run", "uvicorn", "services.agent.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# --no-sync: the build installed the locked packages; don't re-check them at every start.
+CMD ["uv", "run", "--no-sync", "uvicorn", "services.agent.main:app", "--host", "0.0.0.0", "--port", "8001"]
