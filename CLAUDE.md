@@ -131,7 +131,7 @@ React 19, Vite, TypeScript, Tailwind v4, shadcn (`src/components/ui`), react-kon
 
 ## Known issues
 
-- Z2M's `database.db` has duplicate Group records for groupID 2 (the ghost group "2"). The cleanup needs Aidan's OK. See Known bugs in docs/todo.md.
+- Z2M's `database.db` had ten duplicate Group records for groupID 2. Herdsman keeps one per groupID in memory, so deleting the group left the rest on disk, and Z2M re-added a ghost group "2" on every restart. They were removed 2026-11-12, with Z2M stopped; backup in `~/z2m-backup-20261112-precleanup` on the Pi. To check again: `grep -a '"type":"Group"' database.db` should show one line per group.
 - Bulbs ignore warmth while off unless "execute if off" is set (`color_options.execute_if_off`, the drawer's "Remember warmth while off"). Both Hue overheads have it. Brightness can't be stored while off: setting it turns the light on.
 - Stepped fades can't tell a manual change to a recently passed level from bulb reporting lag.
 - The `rt_*` tool schemas cost about 450 tokens per chat message.

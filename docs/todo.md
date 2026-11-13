@@ -1,6 +1,6 @@
 # Roadmap and known issues
 
-The one list of open work: features, bugs, and testing gaps. Finished work isn't kept here; git history has it, and the old frontend UX checklist (`docs/ux-review.md`, merged into this file on 2026-11-09) is in `git log -- docs/ux-review.md`.
+The one list of open work: features, bugs, and testing gaps. Finished work isn't kept here; git history has it
 
 Items marked **(migration)** need a database schema change, which needs Aidan's OK before it's applied on the Pi.
 
@@ -12,7 +12,6 @@ User-made labels for grouping routines beyond the built-in "when it runs" and "r
 
 ## Known bugs
 
-- **Group member removal sometimes uses the wrong group id** and the MQTT side logs an error. It works for the user, but it's noisy. Lead: `delete_group` only evicts members that have a `name` key, and only our own `add_group_member` writes one (Z2M's members carry `ieee_address`/`endpoint`).
 - `GatewayClient.rename_group` in the agent sends `new_name` as a query parameter where the gateway expects a JSON body. It's unregistered dead code; fix it or delete it.
 
 ## Not yet confirmed working
