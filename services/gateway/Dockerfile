@@ -18,18 +18,24 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Install uv (pinned: a new release under a floating tag would invalidate every layer below)
+COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /uvx /bin/
 
-# Copy the ROOT lockfile and workspace configurations
-COPY pyproject.toml uv.lock ./
-# If you have a shared folder, copy it now so uv sync can install it
-COPY shared/ ./shared/
-
-# Sync dependencies (this uses the root lockfile but creates the venv in /app)
+# Third-party packages first, from the lockfile and the workspace members' pyproject files only,
+# so this slow layer (minutes on the Pi's SD card) is cached until uv.lock changes. Copying all
+# of shared/ before it meant any edit there reinstalled everything.
 # Compile the packages' bytecode now: otherwise every fresh container compiles them at
 # startup (on the Pi's SD card that took ~25 s of each gateway restart).
 ENV UV_COMPILE_BYTECODE=1
+COPY pyproject.toml uv.lock ./
+COPY shared/pyproject.toml ./shared/
+COPY services/gateway/pyproject.toml ./services/gateway/
+COPY services/agent/pyproject.toml ./services/agent/
+COPY services/database/pyproject.toml ./services/database/
+RUN uv sync --frozen --no-dev --package gateway --no-install-workspace
+
+# Then the shared package itself (seconds)
+COPY shared/ ./shared/
 RUN uv sync --frozen --no-dev --package gateway
 
 # Copy the backend source code
