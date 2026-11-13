@@ -75,6 +75,9 @@ export function useDevices() {
       if (data.type === 'routine_run') {
         window.dispatchEvent(new CustomEvent('onRoutineRun', { detail: data }));
       }
+      if (data.type === 'presence_update') {
+        window.dispatchEvent(new CustomEvent('onPresenceUpdate', { detail: data }));
+      }
       if (data.type === 'ota_result') {
         const label = data.friendly_name ?? data.device;
         if (data.ok) toast.success(`${label} is up to date`, { description: 'The firmware update finished.' });

@@ -52,7 +52,22 @@ export interface RoomTrigger {
   fire_on_start: boolean;
 }
 
-export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger | RoomTrigger;
+/** A person (user id), or the household: 'anyone' home = at least one person home ('away' = nobody
+ *  home); 'everyone' home = every tracked person ('everyone' away means nobody home too). */
+export type PresenceWho = 'anyone' | 'everyone' | string;
+
+/** Someone arrives or leaves (their phone's Arrive/Leave Shortcut, Settings → Presence). */
+export interface PresenceTrigger {
+  id: string;
+  type: 'presence';
+  who: PresenceWho;
+  state: 'home' | 'away';
+  for_s: number | null;
+  cooldown_s: number;
+  fire_on_start: boolean;
+}
+
+export type Trigger = TimeTrigger | SunTrigger | DeviceTrigger | RoomTrigger | PresenceTrigger;
 
 export type LeafCondition =
   | { type: 'time_window'; after: string; before: string }
@@ -60,7 +75,9 @@ export type LeafCondition =
   | { type: 'device'; device: string; attribute: string; op: ConditionOp; value: Scalar }
   | { type: 'sun'; state: 'up' | 'down' }
   /** for_s: has been occupied/empty for at least this long. */
-  | { type: 'room'; room: string; state: 'occupied' | 'empty'; for_s: number | null };
+  | { type: 'room'; room: string; state: 'occupied' | 'empty'; for_s: number | null }
+  /** for_s: has been home/away for at least this long. */
+  | { type: 'presence'; who: PresenceWho; state: 'home' | 'away'; for_s: number | null };
 
 /** The routine's list is AND; an 'any' group inside it is OR. */
 export type Condition = LeafCondition | { type: 'any'; conditions: LeafCondition[] };
@@ -274,10 +291,26 @@ export const OP_TEXT: Record<TriggerOp, string> = {
 /** A room for the room trigger/condition pickers; hasSensor: a presence or motion sensor is placed in it. */
 export interface RoomOption { id: string; name: string; hasSensor: boolean }
 
+/** A person for the presence pickers; reports: they have an Arrive/Leave Shortcut sending home/away. */
+export interface PersonOption { id: string; name: string; reports: boolean }
+
 export interface DescribeCtx {
   attributes: AttributeMap;
   tempUnit: TempUnit;
   rooms?: RoomOption[];
+  people?: PersonOption[];
+}
+
+/** "Someone comes home", "Everyone has left", "Aidan comes home". */
+export function describePresence(who: PresenceWho, state: 'home' | 'away', people?: PersonOption[], asCondition = false): string {
+  if (who === 'anyone' || (who === 'everyone' && state === 'away')) {
+    if (asCondition) return state === 'home' ? 'Someone is home' : 'Nobody is home';
+    return state === 'home' ? 'Someone comes home' : 'Everyone has left';
+  }
+  if (who === 'everyone') return asCondition ? 'Everyone is home' : 'Everyone is home (the last person arrives)';
+  const name = people?.find(p => p.id === who)?.name ?? 'someone deleted';
+  if (asCondition) return `${name} is ${state}`;
+  return state === 'home' ? `${name} comes home` : `${name} leaves`;
 }
 
 // Plain words for readings and their values in pickers and summaries ("Presence is Clear").
@@ -349,6 +382,12 @@ export function describeTrigger(t: Trigger, ctx?: DescribeCtx): string {
   }
   const held = t.for_s ? ` for ${formatDuration(t.for_s)}` : '';
   if (t.type === 'room') return `When ${roomName(ctx?.rooms, t.room)} is ${t.state}${held}`;
+  if (t.type === 'presence') {
+    const p = describePresence(t.who, t.state, ctx?.people);
+    // "When someone comes home", but keep a person's name as it is.
+    const text = t.who === 'anyone' || t.who === 'everyone' ? p[0].toLowerCase() + p.slice(1) : p;
+    return `When ${text}${held}`;
+  }
   return `When ${describeDeviceRef(t.device, t.attribute, t.op, t.value, ctx)}${held}`;
 }
 

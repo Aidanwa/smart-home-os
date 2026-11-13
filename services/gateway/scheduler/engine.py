@@ -22,7 +22,9 @@ from scheduler import alerts, runner, store
 from scheduler.actions import CallResult
 from scheduler.matching import compare, device_reading, failing_condition, released
 from core.rooms import ROOM_PREFIX
-from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, RoomTrigger, RoutineSpec, SunTrigger, TimeTrigger
+from scheduler.schema import EVENT_ATTRIBUTES, DeviceTrigger, PresenceTrigger, RoomTrigger, RoutineSpec, SunTrigger, TimeTrigger
+from core import presence
+from core.presence import PRESENCE_PREFIX
 from scheduler.timing import Location, is_scheduled, next_fire, prev_fire, upcoming
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,8 @@ def describe_trigger(trig) -> str:
         return trig.event + (f" {trig.offset_min:+d} min" if trig.offset_min else "")
     if isinstance(trig, RoomTrigger):
         return f"room {trig.room} {trig.state}"
+    if isinstance(trig, PresenceTrigger):
+        return presence.describe(trig.who, trig.state)
     return f"{trig.attribute} {trig.op} {trig.value}"
 
 
@@ -67,6 +71,10 @@ def watch_trigger(trig) -> DeviceTrigger | None:
         return DeviceTrigger(id=trig.id, type="device", device=f"{ROOM_PREFIX}{trig.room}", attribute="occupied",
                              op="eq", value=trig.state == "occupied", for_s=trig.for_s,
                              cooldown_s=trig.cooldown_s, fire_on_start=trig.fire_on_start)
+    if isinstance(trig, PresenceTrigger):
+        device, attribute, value, _ = presence.target(trig.who, trig.state)
+        return DeviceTrigger(id=trig.id, type="device", device=device, attribute=attribute, op="eq", value=value,
+                             for_s=trig.for_s, cooldown_s=trig.cooldown_s, fire_on_start=trig.fire_on_start)
     return None
 
 
@@ -495,6 +503,12 @@ class Scheduler:
             logger.info(f"Routine '{r.name}' triggered by {name} {'occupied' if value else 'empty'}")
             self._spawn(self._start_run(r, "room", trig.id, detail=detail))
             return
+        if trig.device.startswith(PRESENCE_PREFIX):
+            text = presence.event_text(name, trig.attribute, value)
+            detail = {"presence": text, **extra}
+            logger.info(f"Routine '{r.name}' triggered by presence: {text}")
+            self._spawn(self._start_run(r, "presence", trig.id, detail=detail))
+            return
         detail = {"device": name, "attribute": trig.attribute, "value": value, **extra}
         logger.info(f"Routine '{r.name}' triggered by {name} {trig.attribute}={value}")
         self._spawn(self._start_run(r, "device", trig.id, detail=detail))
@@ -504,7 +518,7 @@ class Scheduler:
         try:
             while True:
                 msg = await q.get()
-                if msg.get("type") not in ("device_update", "room_update"):
+                if msg.get("type") not in ("device_update", "room_update", "presence_update"):
                     continue
                 keys = self._dev_index.get(msg.get("device"))
                 if not keys:

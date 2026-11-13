@@ -7,6 +7,7 @@ import { MemorySettings } from './MemorySettings';
 import { AccountSettings } from './AccountSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { ApiTokenSettings } from './ApiTokenSettings';
+import { PresenceSettings } from './PresenceSettings';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { request } from '../../lib/api';
@@ -20,7 +21,7 @@ const SpotifyLogo = () => (
 
 export function SettingsView() {
   const { authenticatedFetch } = useAuth();
-  const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'agent' | 'notifications' | 'connections'>('account'); 
+  const [settingsTab, setSettingsTab] = useState<'account' | 'home' | 'presence' | 'agent' | 'notifications' | 'connections'>('account'); 
 
   // Integration states
   // What the Spotify row is busy with, if anything; shown on its button.
@@ -103,13 +104,13 @@ export function SettingsView() {
     <div className="animate-in fade-in duration-500 max-w-4xl w-full">
       <header className="mb-8">
         <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
-        <p className="text-sm text-neutral-500 mt-1">Your account, home profile, assistant, notifications and linked services.</p>
+        <p className="text-sm text-neutral-500 mt-1">Your account, home profile, who’s home, assistant, notifications and linked services.</p>
       </header>
 
       {/* Sub-tab Navigation Switcher */}
       {/* Scrolls sideways on narrow screens instead of pushing the page wider */}
       <div className="flex border-b border-neutral-800 mb-6 gap-6 text-sm font-medium overflow-x-auto overflow-y-hidden">
-        {['account', 'home', 'agent', 'notifications', 'connections'].map((tab) => (
+        {['account', 'home', 'presence', 'agent', 'notifications', 'connections'].map((tab) => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab as any)}
@@ -123,6 +124,7 @@ export function SettingsView() {
       {/* Isolated Settings Modules */}
       {settingsTab === 'account' && <AccountSettings />}
       {settingsTab === 'home' && <HomeSettingsCard />}
+      {settingsTab === 'presence' && <PresenceSettings />}
       {settingsTab === 'agent' && <div className="space-y-6"><AgentSettings /><MemorySettings /></div>}
       {settingsTab === 'notifications' && <NotificationSettings />}
 

@@ -9,7 +9,7 @@ interface Props {
   fetchRuns: (id: string) => Promise<RoutineRun[]>;
 }
 
-const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', room: 'Room', manual: 'Run now', routine: 'Called' };
+const TRIGGER_LABEL: Record<string, string> = { time: 'Scheduled', sun: 'Sun', device: 'Device', room: 'Room', presence: 'Arrive/leave', manual: 'Run now', routine: 'Called' };
 
 export function RunHistory({ routineId, timezone, fetchRuns }: Props) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
@@ -77,6 +77,12 @@ export function RunItem({ run, timezone, expanded, onToggle, title, timeOnly, fo
           {typeof run.trigger_detail?.room === 'string' && (
             <p className="text-neutral-400">
               {String(run.trigger_detail.room)} became {run.trigger_detail.occupied ? 'occupied' : 'empty'}
+              {typeof run.trigger_detail.held_s === 'number' ? ` (for ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
+            </p>
+          )}
+          {typeof run.trigger_detail?.presence === 'string' && (
+            <p className="text-neutral-400">
+              {String(run.trigger_detail.presence)}
               {typeof run.trigger_detail.held_s === 'number' ? ` (for ${Math.round(run.trigger_detail.held_s / 60)} min)` : ''}
             </p>
           )}

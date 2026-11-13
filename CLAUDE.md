@@ -66,6 +66,7 @@ There are no tests.
   - `gateway:device_settings`: [core/device_settings.py](services/gateway/core/device_settings.py), for the drawer's generic "All settings" and "Details".
   - `gateway:device_meta`: identity and pairing health.
   - `gateway:rooms`: occupancy from [core/rooms.py](services/gateway/core/rooms.py). A room is occupied while any presence/motion sensor placed in it says so; `null` means no sensor.
+  - `gateway:presence` / `gateway:presence_household`: home/away per person from [core/presence.py](services/gateway/core/presence.py), set by iPhone Arrive/Leave Shortcuts (`POST /api/presence/me`). Only people who have reported count towards anyone/everyone home; repeats of the current state are ignored.
   - It also adds `presence_changed_at` when presence/occupancy flips.
   - The listen loop must catch per-message exceptions: an uncaught one kills the listener and the twin goes silently stale.
 - **IDs:** the API and frontend use IEEE; Z2M topics use `friendly_name`. Endpoints accept either and translate via `bus._device_registry` and the twin.
@@ -75,7 +76,7 @@ There are no tests.
   - Group `/set` is fire-and-forget.
   - It has a command hook and a payload filter (used by day curves).
 - **Models:** `DeviceState`/`DeviceSetRequest` in `api/models.py` drop unknown fields. A new reading or setting the hand-built UI uses must be added there (the generic settings endpoint doesn't need it). `WRITE_ONLY_FIELDS` are sent without waiting.
-- **Realtime:** `/api/ws` pushes `device_update | groups_update | device_delete | routine_run | room_update | curve_update | ota_result`. The frontend re-dispatches some as window events (`onGroupsUpdate`, `onRoutineRun`, `onCurveUpdate`, `onRealtimeReconnect`). Both sockets ping after 25 s of quiet; the client reconnects after 60 s of silence.
+- **Realtime:** `/api/ws` pushes `device_update | groups_update | device_delete | routine_run | room_update | presence_update | curve_update | ota_result`. The frontend re-dispatches some as window events (`onGroupsUpdate`, `onRoutineRun`, `onCurveUpdate`, `onPresenceUpdate`, `onRealtimeReconnect`). Both sockets ping after 25 s of quiet; the client reconnects after 60 s of silence.
 - **Auth:** HS256 JWT in the HttpOnly cookie `access_token` (30 days); `get_current_user` in `api/auth.py`. No RBAC. Personal API tokens (`Authorization: Bearer shos_…`, table `api_tokens`, SHA-256 only, [core/api_tokens.py](services/gateway/core/api_tokens.py)) act as their user for iPhone Shortcuts ([docs/iphone-shortcuts.md](docs/iphone-shortcuts.md)); `get_session_user` (cookie only) guards account changes and token management. The agent proxy swaps a token for a 5-minute cookie JWT. **Rotating `JWT_SECRET_KEY` invalidates every session and every stored secret** (Fernet key = SHA256 of it).
 - Fixed API paths must be declared before `/{id}` routes.
 
@@ -84,7 +85,7 @@ There are no tests.
 - `schema.py` is the source of truth for routine JSON (`extra=forbid`). The frontend's `components/routines/types.ts` mirrors it; keep both in sync.
 - In-memory state is derived and rebuilt from Postgres at startup. Only the process holding a Postgres advisory lock schedules. If startup fails, the gateway still serves.
 - Routes that change a routine call `scheduler.reload(id)`; home profile changes call `reload_all()`.
-- **Triggers:** time (optionally a one-time `date`), sun (needs the home location), device (edge-triggered; the first reading only seeds unless `fire_on_start`; `for_s`, `cooldown_s`, `rearm`), and room (a device trigger on the pseudo-device `room:<id>`).
+- **Triggers:** time (optionally a one-time `date`), sun (needs the home location), device (edge-triggered; the first reading only seeds unless `fire_on_start`; `for_s`, `cooldown_s`, `rearm`), room (a device trigger on the pseudo-device `room:<id>`), and presence (`who`: a user id, `anyone` or `everyone`; watches `presence:<user id>` or `presence:household`, mapped in `presence.target()`).
 - **Conditions:** AND, plus one level of `any`. Checked when a trigger fires; Run now skips them.
 - **Delete when done** (`delete_when_done`, one-time routines only): the engine deletes the routine, runs and all, once a scheduled run succeeds (or its conditions skip it) and no times are left. Failed, partial and missed runs keep it. The agent sets it for simple reminders.
 - **Late fires:** a time/sun fire later than `max(grace, 30 s)` is logged `missed`; missed ones are caught up once at startup.

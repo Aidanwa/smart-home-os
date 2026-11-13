@@ -4,8 +4,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.mqtt_bus import AsyncMqttBus
+from core import presence
+from core.presence import PRESENCE_PREFIX
 from core.rooms import ROOM_PREFIX, room_state
-from scheduler.schema import DAYS, AnyCondition, DaysCondition, DeviceCondition, RoomCondition, SunCondition, TimeWindowCondition
+from scheduler.schema import DAYS, AnyCondition, DaysCondition, DeviceCondition, PresenceCondition, RoomCondition, SunCondition, TimeWindowCondition
 from scheduler.timing import Location, local_hhmm, sun_is_up
 
 
@@ -42,6 +44,8 @@ def released(op: str, actual, threshold, rearm: float | None) -> bool:
 async def device_reading(bus: AsyncMqttBus, ieee: str) -> dict | None:
     """A device's latest state; for the pseudo-device "room:<id>", {"occupied", "friendly_name"}
     (what room triggers watch)."""
+    if ieee.startswith(PRESENCE_PREFIX):
+        return await presence.reading(bus.redis, ieee)
     if ieee.startswith(ROOM_PREFIX):
         room = await room_state(bus.redis, ieee[len(ROOM_PREFIX):])
         if room is None or room.get("occupied") is None:
@@ -108,5 +112,21 @@ async def _check(c, bus, now, tz, loc) -> str | None:
             held = (now - datetime.fromisoformat(room["since"].replace("Z", "+00:00"))).total_seconds()
             if held < c.for_s:
                 return f"{room['name']} has only been {c.state} for {_minutes(held)}"
+        return None
+    if isinstance(c, PresenceCondition):
+        device, attribute, want, since_key = presence.target(c.who, c.state)
+        state = await presence.reading(bus.redis, device)
+        what = presence.describe(c.who, c.state) if device == presence.HOUSEHOLD_DEVICE else None
+        if state is None:
+            return "nobody has set up presence yet" if what else "that person hasn't reported home/away yet"
+        name = state.get("friendly_name", "someone")
+        if state[attribute] != want:
+            if what:
+                return f"not {what}"
+            return f"{name} is {'home' if state[attribute] else 'away'}"
+        if c.for_s and state.get(since_key):
+            held = (now - datetime.fromisoformat(state[since_key].replace("Z", "+00:00"))).total_seconds()
+            if held < c.for_s:
+                return f"only {what or f'{name} {c.state}'} for {_minutes(held)}"
         return None
     return f"unknown condition type {getattr(c, 'type', '?')}"

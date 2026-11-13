@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react';
-import type { AttributeMap, Day, DeviceTrigger, RoomOption, RoomTrigger, SunTrigger, TempUnit, TimeTrigger, Trigger, TriggerOp } from './types';
-import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDisplay, describeDays, displayUnit, formatDate } from './types';
+import type { AttributeMap, Day, DeviceTrigger, PersonOption, PresenceTrigger, PresenceWho, RoomOption, RoomTrigger, SunTrigger, TempUnit, TimeTrigger, Trigger, TriggerOp } from './types';
+import { DAYS, EVENT_ATTRIBUTES, WEEKDAYS, WEEKEND, deltaFromDisplay, deltaToDisplay, describeDays, describePresence, displayUnit, formatDate } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, isNumericOp, opsFor } from './fieldLogic';
 import { card, chip, iconBtn, input } from './styles';
@@ -44,12 +44,14 @@ interface Ctx {
   attributes: AttributeMap;
   tempUnit: TempUnit;
   rooms?: RoomOption[];
+  people?: PersonOption[];
 }
 
 export function TriggerRow({ trigger, onChange, onRemove, ctx }: { trigger: Trigger; onChange: (t: Trigger) => void; onRemove: () => void; ctx: Ctx }) {
   if (trigger.type === 'time') return <TimeRow trigger={trigger} onChange={onChange} onRemove={onRemove} />;
   if (trigger.type === 'sun') return <SunRow trigger={trigger} onChange={onChange} onRemove={onRemove} />;
   if (trigger.type === 'room') return <RoomRow trigger={trigger} onChange={onChange} onRemove={onRemove} rooms={ctx.rooms ?? []} />;
+  if (trigger.type === 'presence') return <PresenceRow trigger={trigger} onChange={onChange} onRemove={onRemove} people={ctx.people ?? []} />;
   return <DeviceRow trigger={trigger} onChange={onChange} onRemove={onRemove} ctx={ctx} />;
 }
 
@@ -153,6 +155,70 @@ function RoomRow({ trigger, onChange, onRemove, rooms }: { trigger: RoomTrigger;
           <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
             <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
             Also fire if it's already {trigger.state} when saved or when the hub restarts
+          </label>
+          <MinutesField text="At most once every" seconds={trigger.cooldown_s || null} onChange={s => onChange({ ...trigger, cooldown_s: s ?? 0 })} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/** Who a presence trigger/condition is about: the household (anyone / everyone) or one person.
+ *  People without an Arrive/Leave Shortcut are listed but marked, with a hint underneath. */
+export function WhoPicker({ people, who, onPick }: { people: PersonOption[]; who: PresenceWho; onPick: (w: PresenceWho) => void }) {
+  const household = who === 'anyone' || who === 'everyone';
+  const person = people.find(p => p.id === who);
+  return (
+    <div className="space-y-1">
+      <select className={input} value={who} onChange={e => onPick(e.target.value)} aria-label="Who">
+        <option value="anyone">Anyone</option>
+        <option value="everyone">Everyone</option>
+        {!household && !person && <option value={who}>Someone deleted</option>}
+        {people.map(p => <option key={p.id} value={p.id}>{p.name}{p.reports ? '' : ' (not set up)'}</option>)}
+      </select>
+      {person && !person.reports && (
+        <p className="text-xs text-amber-400/90">{person.name}’s phone doesn’t report home/away yet. Set it up in Settings → Presence.</p>
+      )}
+      {household && people.length > 0 && !people.some(p => p.reports) && (
+        <p className="text-xs text-amber-400/90">Nobody’s phone reports home/away yet. Set it up in Settings → Presence.</p>
+      )}
+    </div>
+  );
+}
+
+/** Home / away as two chips, worded for who it's about ("Everyone has left", "Aidan comes home"). */
+export function PresenceChoice({ who, state, people, asCondition, onChange }: {
+  who: PresenceWho; state: 'home' | 'away'; people: PersonOption[]; asCondition?: boolean; onChange: (s: 'home' | 'away') => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {(['home', 'away'] as const).map(s => (
+        <button key={s} type="button" className={chip(state === s)} onClick={() => onChange(s)}>
+          {describePresence(who, s, people, asCondition)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PresenceRow({ trigger, onChange, onRemove, people }: { trigger: PresenceTrigger; onChange: (t: PresenceTrigger) => void; onRemove: () => void; people: PersonOption[] }) {
+  // Leaving waits 5 minutes by default: a phone near the edge of home can report away and back within a minute.
+  const setState = (state: 'home' | 'away') =>
+    onChange({ ...trigger, state, for_s: state === 'away' && trigger.for_s === null ? 300 : state === 'home' ? null : trigger.for_s });
+  return (
+    <div className={card}>
+      <RowHeader title="Arrive / leave home" onRemove={onRemove} />
+      <WhoPicker people={people} who={trigger.who} onPick={who => onChange({ ...trigger, who })} />
+      <PresenceChoice who={trigger.who} state={trigger.state} people={people} onChange={setState} />
+      <MinutesField text={trigger.state === 'away' ? 'Only once they’ve been away for' : 'Only once they’ve been home for'}
+        seconds={trigger.for_s} onChange={for_s => onChange({ ...trigger, for_s })}
+        hint={trigger.state === 'away' ? 'So a phone briefly crossing the edge of home doesn’t fire it.' : undefined} />
+      <details className="text-xs">
+        <summary className="cursor-pointer text-neutral-500 select-none min-h-10 flex items-center">Options</summary>
+        <div className="mt-2 space-y-3">
+          <label className="flex items-center gap-2 min-h-10 text-xs text-neutral-400">
+            <input type="checkbox" className="size-5 shrink-0 accent-blue-500" checked={trigger.fire_on_start} onChange={e => onChange({ ...trigger, fire_on_start: e.target.checked })} />
+            Also fire if it's already true when saved or when the hub restarts
           </label>
           <MinutesField text="At most once every" seconds={trigger.cooldown_s || null} onChange={s => onChange({ ...trigger, cooldown_s: s ?? 0 })} />
         </div>

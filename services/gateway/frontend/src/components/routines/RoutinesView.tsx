@@ -11,7 +11,8 @@ import { RoutineList } from './RoutineList';
 import { RoutineActivity } from './RoutineActivity';
 import { CurvesView } from './curves/CurvesView';
 import type { Curve } from './curves/types';
-import type { RoomOption, Routine, RoutineSpec, TempUnit } from './types';
+import type { PersonOption, RoomOption, Routine, RoutineSpec, TempUnit } from './types';
+import { usePresence } from '../../hooks/usePresence';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
 import { isPresenceSensor } from '../../lib/deviceUtils';
 import { emptyRoutine } from './types';
@@ -48,7 +49,10 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
     id: r.id, name: r.name,
     hasSensor: Object.entries(devices).some(([ieee, st]) => roomIndex?.roomOf[ieee] === r.id && isPresenceSensor(st)),
   })), [roomIndex, devices]);
-  const ctx = useMemo(() => ({ attributes, tempUnit, rooms }), [attributes, rooms]);
+  // People for presence triggers/conditions; reports: their phone sends home/away.
+  const { data: presence } = usePresence();
+  const people = useMemo((): PersonOption[] => (presence?.people ?? []).map(p => ({ id: p.user_id, name: p.username, reports: p.home !== null })), [presence]);
+  const ctx = useMemo(() => ({ attributes, tempUnit, rooms, people }), [attributes, rooms, people]);
   const [panel, setPanel] = useState<Panel>(null);
   // Delete from a card's menu. The routine stays set while the dialog animates closed.
   const [deleting, setDeleting] = useState<Routine | null>(null);
@@ -202,6 +206,7 @@ export function RoutinesView({ devices }: { devices: Record<string, DeviceState>
                 attributes={attributes}
                 tempUnit={tempUnit}
                 rooms={rooms}
+                people={people}
                 timezone={timezone}
                 preview={preview}
                 routineId={editing?.id}

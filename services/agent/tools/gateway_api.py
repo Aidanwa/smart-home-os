@@ -75,6 +75,23 @@ class GatewayClient:
         # Return in the exact format httpx expects for cookie injection
         return {"access_token": token}
 
+    async def _presence_section(self, user_id: str) -> str:
+        """One line of who's home, from their phones (Arrive/Leave Shortcuts). Empty if nobody reports."""
+        try:
+            res = await self.client.get("/api/presence", cookies=self._mint_user_context_cookie(user_id))
+            res.raise_for_status()
+            people = res.json().get("people", [])
+        except Exception as e:
+            logger.warning(f"Couldn't load presence for the prompt: {e}")
+            return ""
+        parts = []
+        for p in people:
+            if p.get("home") is None:
+                continue
+            since = _ago(p.get("since"))
+            parts.append(f"{p['username']} {'home' if p['home'] else 'away'}" + (f" (for {since})" if since else ""))
+        return f"Presence (from phones): {', '.join(parts)}\n" if parts else ""
+
     async def _rooms_section(self, user_id: str, devices: dict) -> str:
         """The prompt's Rooms section, from the Rooms floor plan: each room's devices and, where it has a presence
         or motion sensor, whether it's occupied and for how long. Empty if rooms can't be read."""
@@ -160,7 +177,8 @@ class GatewayClient:
                 formatted_lines.append(f"{friendly_name}: {attributes_string}")
 
             rooms = await self._rooms_section(user_id, devices)
-            return (rooms + "\nDevices:\n" if rooms else "") + "\n".join(formatted_lines)
+            people = await self._presence_section(user_id)
+            return people + (rooms + "\nDevices:\n" if rooms else "") + "\n".join(formatted_lines)
 
         except httpx.HTTPStatusError as e:
             logger.error(f"Gateway returned HTTP error {e.response.status_code}: {e.response.text}")

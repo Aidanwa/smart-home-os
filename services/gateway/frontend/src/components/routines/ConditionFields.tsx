@@ -1,21 +1,22 @@
 import { Trash2 } from 'lucide-react';
-import type { AttributeMap, ConditionOp, LeafCondition, RoomOption, TempUnit } from './types';
+import type { AttributeMap, ConditionOp, LeafCondition, PersonOption, RoomOption, TempUnit } from './types';
 import { CurrentReading, DeviceAttributePicker, OpSelect, ValueInput } from './DeviceFields';
 import { defaultComparison, findInfo, opsFor } from './fieldLogic';
-import { DayChips, MinutesField, OccupiedChoice, RoomPicker } from './TriggerFields';
+import { DayChips, MinutesField, OccupiedChoice, PresenceChoice, RoomPicker, WhoPicker } from './TriggerFields';
 import { card, chip, iconBtn, input } from './styles';
 
 const TITLES: Record<LeafCondition['type'], string> = {
-  time_window: 'Between times', days: 'On days', device: 'Device reading', sun: 'Sun', room: 'Room occupancy',
+  time_window: 'Between times', days: 'On days', device: 'Device reading', sun: 'Sun', room: 'Room occupancy', presence: 'Home / away',
 };
 
-export function ConditionRow({ condition, onChange, onRemove, attributes, tempUnit, rooms = [] }: {
+export function ConditionRow({ condition, onChange, onRemove, attributes, tempUnit, rooms = [], people = [] }: {
   condition: LeafCondition;
   onChange: (c: LeafCondition) => void;
   onRemove: () => void;
   attributes: AttributeMap;
   tempUnit: TempUnit;
   rooms?: RoomOption[];
+  people?: PersonOption[];
 }) {
   return (
     <div className={card}>
@@ -23,17 +24,26 @@ export function ConditionRow({ condition, onChange, onRemove, attributes, tempUn
         <span className="text-xs uppercase tracking-wider text-neutral-500">{TITLES[condition.type]}</span>
         <button type="button" className={`${iconBtn} hover:text-red-400`} onClick={onRemove} aria-label="Remove"><Trash2 size={16} /></button>
       </div>
-      <Fields condition={condition} onChange={onChange} attributes={attributes} tempUnit={tempUnit} rooms={rooms} />
+      <Fields condition={condition} onChange={onChange} attributes={attributes} tempUnit={tempUnit} rooms={rooms} people={people} />
     </div>
   );
 }
 
-function Fields({ condition: c, onChange, attributes, tempUnit, rooms }: { condition: LeafCondition; onChange: (c: LeafCondition) => void; attributes: AttributeMap; tempUnit: TempUnit; rooms: RoomOption[] }) {
+function Fields({ condition: c, onChange, attributes, tempUnit, rooms, people }: { condition: LeafCondition; onChange: (c: LeafCondition) => void; attributes: AttributeMap; tempUnit: TempUnit; rooms: RoomOption[]; people: PersonOption[] }) {
   if (c.type === 'room') {
     return (
       <>
         <RoomPicker rooms={rooms} room={c.room} onPick={room => onChange({ ...c, room })} />
         <OccupiedChoice state={c.state} onChange={state => onChange({ ...c, state })} />
+        <MinutesField text="And has been for at least" seconds={c.for_s} onChange={for_s => onChange({ ...c, for_s })} />
+      </>
+    );
+  }
+  if (c.type === 'presence') {
+    return (
+      <>
+        <WhoPicker people={people} who={c.who} onPick={who => onChange({ ...c, who })} />
+        <PresenceChoice who={c.who} state={c.state} people={people} asCondition onChange={state => onChange({ ...c, state })} />
         <MinutesField text="And has been for at least" seconds={c.for_s} onChange={for_s => onChange({ ...c, for_s })} />
       </>
     );

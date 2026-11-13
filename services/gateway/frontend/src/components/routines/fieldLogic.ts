@@ -49,6 +49,7 @@ export function newTrigger(type: Trigger['type'], id: string, attributes: Attrib
   if (type === 'time') return { id, type, at: '07:00', days: null };
   if (type === 'sun') return { id, type, event: 'sunset', offset_min: 0, days: null };
   if (type === 'room') return { id, type, room: firstRoom(rooms)?.id ?? '', state: 'occupied', for_s: null, cooldown_s: 0, fire_on_start: false };
+  if (type === 'presence') return { id, type, who: 'anyone', state: 'home', for_s: null, cooldown_s: 0, fire_on_start: false };
   const [device, info] = Object.entries(attributes).sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name))[0] ?? ['', undefined];
   const prop = firstReading(info?.properties);
   const attribute = prop?.property ?? '';
@@ -61,6 +62,7 @@ export function newCondition(type: LeafCondition['type'], attributes: AttributeM
   if (type === 'days') return { type, days: ['mon', 'tue', 'wed', 'thu', 'fri'] };
   if (type === 'sun') return { type, state: 'down' };
   if (type === 'room') return { type, room: firstRoom(rooms)?.id ?? '', state: 'occupied', for_s: null };
+  if (type === 'presence') return { type, who: 'anyone', state: 'away', for_s: null };
   const [device, info] = Object.entries(attributes).sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name))[0] ?? ['', undefined];
   const attribute = firstReading(info?.properties, true)?.property ?? '';
   const d = defaultComparison(findInfo(attributes, device, attribute), attribute, info?.current?.[attribute]);

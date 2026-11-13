@@ -134,7 +134,24 @@ class RoomTrigger(_Strict):
     fire_on_start: bool = False
 
 
-Trigger = Annotated[Union[TimeTrigger, SunTrigger, DeviceTrigger, RoomTrigger], Field(discriminator="type")]
+# A person (user id), or the household: "anyone" home = at least one person home ("away" = nobody
+# home); "everyone" home = every tracked person home ("everyone away" is the same as nobody home).
+PresenceWho = Union[Literal["anyone", "everyone"], uuid.UUID]
+
+
+class PresenceTrigger(_Strict):
+    """Fires when someone arrives or leaves (core/presence.py, set by iPhone Shortcuts). Runs on the
+    device-trigger machinery, watching "presence:<user id>" or "presence:household" (see watch_trigger)."""
+    id: ShortId
+    type: Literal["presence"]
+    who: PresenceWho
+    state: Literal["home", "away"]
+    for_s: int | None = Field(None, ge=1, le=86400)
+    cooldown_s: int = Field(0, ge=0, le=86400)
+    fire_on_start: bool = False
+
+
+Trigger = Annotated[Union[TimeTrigger, SunTrigger, DeviceTrigger, RoomTrigger, PresenceTrigger], Field(discriminator="type")]
 
 
 # ---------------------------------------------------------------- conditions (all must pass)
@@ -187,7 +204,15 @@ class RoomCondition(_Strict):
     for_s: int | None = Field(None, ge=1, le=86400)
 
 
-LeafCondition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition], Field(discriminator="type")]
+class PresenceCondition(_Strict):
+    """Someone / nobody / everyone is home (optionally: has been for at least for_s)."""
+    type: Literal["presence"]
+    who: PresenceWho
+    state: Literal["home", "away"]
+    for_s: int | None = Field(None, ge=1, le=86400)
+
+
+LeafCondition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition, PresenceCondition], Field(discriminator="type")]
 
 
 class AnyCondition(_Strict):
@@ -196,7 +221,7 @@ class AnyCondition(_Strict):
     conditions: list[LeafCondition] = Field(min_length=1, max_length=20)
 
 
-Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition, AnyCondition], Field(discriminator="type")]
+Condition = Annotated[Union[TimeWindowCondition, DaysCondition, DeviceCondition, SunCondition, RoomCondition, PresenceCondition, AnyCondition], Field(discriminator="type")]
 
 
 def leaf_conditions(conditions: list) -> list:

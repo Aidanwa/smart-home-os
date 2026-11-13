@@ -39,7 +39,28 @@ These call the hub's REST API directly: faster, free and predictable. Use them f
 
 Routine ids are in the routine's URL in the app (`#routines/history/<id>`).
 
-## 4. Automations
+## 4. Arrive / leave home (presence)
+
+Your phone tells the hub when you get home and when you leave. Routines can then start on "someone comes home", "everyone has left" or a person arriving, and check "nobody is home". Settings → Presence shows everyone's state and lets you fix it by hand.
+
+Two automations (Shortcuts → Automation → New):
+
+1. **Arrive** → your home location → **Run Immediately**. One action, **Get Contents of URL**:
+   - URL: `https://<pi-host>.<tailnet>.ts.net:8000/api/presence/me`
+   - Method: POST, header `Authorization` = `Bearer shos_…`
+   - Request Body: JSON, `state` = `home`
+2. **Leave** → the same, with `state` = `away`.
+3. Optional backup: **Wi-Fi** → joins your home network → the same request as Arrive, with `source` = `wifi` added to the body. Only for arriving: phones drop Wi-Fi when they sleep, so "leaves Wi-Fi" isn't a reliable signal for leaving.
+
+Test each by tapping the automation's play button and watching Settings → Presence. Location automations are the ones iOS is most likely to ask about before running; if yours shows a confirmation, check that **Run Immediately** is selected and **Notify When Run** is off.
+
+How it behaves:
+- A repeat of the current state is ignored, so the Wi-Fi backup and the location automation can both fire without running anything twice.
+- Only people whose phone reports count towards "anyone" and "everyone". Someone who never set this up isn't treated as away.
+- The routine editor waits 5 minutes on "leaves" triggers by default, so a phone briefly crossing the edge of the home zone doesn't fire them.
+- If a phone dies, its last state stays. Fix it in Settings → Presence; the phone takes over again on its next report.
+
+## 5. Automations
 
 Shortcuts → Automation can run any of the above with no tap, e.g.:
 

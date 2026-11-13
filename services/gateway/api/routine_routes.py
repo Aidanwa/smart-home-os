@@ -19,9 +19,9 @@ from api.auth import get_current_user
 from scheduler.engine import Scheduler
 from scheduler import agent_client
 from scheduler.schema import (DeviceAction, DeviceCondition, DeviceTrigger, FadeAction, GroupAction, NotifyAction,
-                              RoomCondition, RoomTrigger, RoutineAction, RoutineSpec, SpotifyCtrlAction,
-                              SpotifyPlayAction, is_one_time, leaf_conditions)
-from core import push
+                              PresenceCondition, PresenceTrigger, RoomCondition, RoomTrigger, RoutineAction, RoutineSpec,
+                              SpotifyCtrlAction, SpotifyPlayAction, is_one_time, leaf_conditions)
+from core import presence, push
 from core.rooms import all_rooms
 from scheduler.timing import upcoming
 
@@ -220,6 +220,19 @@ async def preview_routine(spec: RoutineSpec, request: Request, routine_id: uuid.
                 warnings.append(f"{label}: that room no longer exists")
             elif room.get("occupied") is None:
                 warnings.append(f"{label}: {room['name']} has no presence or motion sensor (place one there in Rooms)")
+    presence_refs = [(f"Trigger {t.id}", t.who) for t in spec.triggers if isinstance(t, PresenceTrigger)]
+    presence_refs += [(f"Condition {i}", c.who) for i, c in enumerate(leaf_conditions(spec.conditions), 1) if isinstance(c, PresenceCondition)]
+    if presence_refs:
+        snap = await presence.snapshot(bus.redis)
+        people = {p["user_id"]: p for p in snap["people"]}
+        for label, who in presence_refs:
+            if who in ("anyone", "everyone"):
+                if not any(p["home"] is not None for p in people.values()):
+                    warnings.append(f"{label}: nobody reports home/away yet (Settings → Presence)")
+            elif str(who) not in people:
+                warnings.append(f"{label}: that person no longer has an account")
+            elif people[str(who)]["home"] is None:
+                warnings.append(f"{label}: {people[str(who)]['username']} doesn't report home/away yet (Settings → Presence)")
     if spec.uses_sun() and sched.loc is None:
         warnings.append("Sunrise/sunset needs the home location (Settings → Home)")
     if not spec.triggers:

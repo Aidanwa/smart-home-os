@@ -25,6 +25,7 @@ from api.push_routes import router as push_router
 from api.device_settings_routes import router as device_settings_router
 from api.curve_routes import router as curve_router
 from api.token_routes import router as token_router
+from api.presence_routes import router as presence_router
 from api.auth import agent_cookie_for
 
 # The installed app's manifest (frontend/public); Python doesn't know the extension.
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(device_settings_router)
     app.include_router(curve_router)
     app.include_router(token_router)
+    app.include_router(presence_router)
 
     # ----------------------------------------------------------------------
     # UNIFIED WILD-CARD REVERSE PROXY PIPELINE (The Agent Container Boundary)

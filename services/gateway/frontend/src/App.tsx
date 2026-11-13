@@ -20,6 +20,7 @@ import { LoginCard } from './components/auth/LoginCard';
 import { Sidebar } from './components/layout/Sidebar';
 import { ConnectionBanner } from './components/layout/ConnectionBanner';
 import { HealthButton } from './components/layout/HealthStatus';
+import { PresenceChip } from './components/layout/PresenceChip';
 import { useSystemHealth } from './hooks/useSystemHealth';
 import { SettingsView } from './components/settings/SettingsView';
 import { RoomsView } from './components/rooms/RoomsView';
@@ -183,10 +184,13 @@ function AuthenticatedDashboard() {
           // CHANGED: Moved the padding and scroll into the specific home container
           <div className="flex-1 overflow-y-auto p-6 md:p-10 animate-in fade-in duration-500">
             <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-              <div className="flex items-center justify-between gap-3 min-w-0">
-                <h1 className="text-2xl font-medium tracking-tight truncate">Welcome back, {user?.username}</h1>
-                {/* Phones have no sidebar, so the hub status dot lives here. */}
-                <div className="md:hidden -mr-2"><HealthButton health={health} /></div>
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <h1 className="text-2xl font-medium tracking-tight truncate">Welcome back, {user?.username}</h1>
+                  {/* Phones have no sidebar, so the hub status dot lives here. */}
+                  <div className="md:hidden -mr-2"><HealthButton health={health} /></div>
+                </div>
+                <PresenceChip userId={user?.id} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {/* Grouping only applies to the device list; groups have their own order. */}

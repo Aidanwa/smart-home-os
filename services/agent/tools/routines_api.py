@@ -27,6 +27,10 @@ TRIGGERS (any one starts it; [] = manual only):
   A room is occupied while any presence/motion sensor in it (see Rooms in Home State) detects someone.
   Prefer this over a sensor's presence reading. E.g. "lights off when the bedroom's been empty 10 min" =
   room trigger state "empty", for_s 600.
+ {"type":"presence","who":USERNAME|"anyone"|"everyone","state":"home"|"away","for_s":seconds or null,"cooldown_s":0,"fire_on_start":false}
+  Home/away from people's phones (see Presence in Home State). "anyone" home = first person arrives; "anyone" away =
+  last person leaves (nobody home); "everyone" home = the last person arrives. For leaving, use for_s 300 so a phone
+  briefly crossing the edge of home doesn't fire it.
  {"type":"device","device":NAME,"attribute":"state"|"temperature"|"power"|"action"|...,
   "op":"eq"|"ne"|"gt"|"gte"|"lt"|"lte"|"changes","value":X (null for changes),
   "rearm":margin or null (numeric ops only: won't refire until it moves back past threshold by this much),
@@ -36,6 +40,7 @@ CONDITIONS (all must hold; for OR use one {"type":"any","conditions":[...]}):
  {"type":"time_window","after":"22:00","before":"06:00"}  {"type":"days","days":["sat","sun"]}
  {"type":"sun","state":"up"|"down"}  {"type":"device","device":NAME,"attribute":..,"op":"eq"|"ne"|"gt"|"gte"|"lt"|"lte","value":X}
  {"type":"room","room":ROOM_NAME,"state":"occupied"|"empty","for_s":seconds or null (has been for at least this long)}
+ {"type":"presence","who":USERNAME|"anyone"|"everyone","state":"home"|"away","for_s":null}  ("anyone" away = nobody home)
  Only when it's dark in a room: a device condition on its sensor's "illuminance" (lux), e.g. "lt" 30.
 ACTIONS (in order):
  {"type":"device","device":NAME,"set":{"state":"ON"|"OFF"|"TOGGLE","brightness":0-254,"color_temp":150-500,"transition":s}}
@@ -81,6 +86,7 @@ class RoutineTools:
     def __init__(self, gateway: GatewayClient):
         self.gw = gateway
         self._rooms: dict[str, str] = {}  # room id -> name, loaded by _names
+        self._people: dict[str, str] = {}  # user id -> username (presence "who"), loaded by _names
 
     async def _call(self, user_id, method: str, path: str, **kw):
         return await self.gw.client.request(method, path, cookies=self.gw._mint_user_context_cookie(user_id), **kw)
@@ -95,6 +101,8 @@ class RoutineTools:
             routines = res.json().get("routines", []) if res.status_code == 200 else []
         rooms_res = await self._call(user_id, "GET", "/api/zones/occupancy")
         self._rooms = {rid: r.get("name", rid) for rid, r in rooms_res.json().items()} if rooms_res.status_code == 200 else {}
+        pres_res = await self._call(user_id, "GET", "/api/presence")
+        self._people = {p["user_id"]: p["username"] for p in pres_res.json().get("people", [])} if pres_res.status_code == 200 else {}
         return ({ieee: d.get("friendly_name", ieee) for ieee, d in devs.items()},
                 {g["id"]: g["friendly_name"] for g in groups},
                 {r["id"]: r["name"] for r in routines})
@@ -128,6 +136,13 @@ class RoutineTools:
                     item["room"] = room_by_name[rm.lower()]
                 elif rm not in self._rooms:
                     problems.append(f"unknown room '{rm}' (rooms: {', '.join(sorted(self._rooms.values())) or 'none'})")
+            if item.get("type") == "presence" and isinstance(item.get("who"), str) and item["who"] not in ("anyone", "everyone"):
+                who = item["who"]
+                person_by_name = {n.lower(): uid for uid, n in self._people.items()}
+                if who.lower() in person_by_name:
+                    item["who"] = person_by_name[who.lower()]
+                elif who not in self._people:
+                    problems.append(f"unknown person '{who}' (people: {', '.join(sorted(self._people.values())) or 'none'}; or anyone/everyone)")
             if item.get("type") == "routine" and isinstance(item.get("routine"), str):
                 r = item["routine"]
                 if r.lower() in rt_by_name:
@@ -157,6 +172,8 @@ class RoutineTools:
             if isinstance(item, dict):
                 if item.get("type") == "room" and item.get("room") in self._rooms:
                     item["room"] = self._rooms[item["room"]]
+                if item.get("type") == "presence" and item.get("who") in self._people:
+                    item["who"] = self._people[item["who"]]
                 if item.get("type") == "routine" and item.get("routine") in routines:
                     item["routine"] = routines[item["routine"]]
                 if isinstance(item.get("device"), str) and item["device"] in devices:

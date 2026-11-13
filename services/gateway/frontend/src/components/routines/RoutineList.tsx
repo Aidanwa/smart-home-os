@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, MapPinOff, MoreHorizontal, Music, PersonStanding, Play, Power, PowerOff, Radio, Search, Sparkles, Sunrise, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ChevronDown, Clock, Copy, DoorOpen, Hand, History, House, MapPinOff, MoreHorizontal, Music, PersonStanding, Play, Power, PowerOff, Radio, Search, Sparkles, Sunrise, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GroupInfo } from '../../hooks/useGroups';
 import { useRoomIndex } from '../../hooks/useRoomIndex';
@@ -26,6 +26,7 @@ const WHEN_SECTIONS: { key: string; title: string; icon: ReactNode }[] = [
   { key: 'time', title: 'Schedule', icon: <Clock size={16} /> },
   { key: 'sun', title: 'Sunrise & sunset', icon: <Sunrise size={16} /> },
   { key: 'room', title: 'Room occupancy', icon: <PersonStanding size={16} /> },
+  { key: 'presence', title: 'Arrive & leave', icon: <House size={16} /> },
   { key: 'device', title: 'Sensors & buttons', icon: <Radio size={16} /> },
   { key: 'manual', title: 'Manual only', icon: <Hand size={16} /> },
 ];

@@ -28,20 +28,17 @@ Built, but nobody has seen it work for real yet:
 Ideas considered but not built:
 - a stale-sensor guard ("no report from X for N hours");
 - rate-of-change triggers ("humidity +10 in 10 min");
-- webhook triggers (also the way in for home/away, see Presence below);
+- webhook triggers (home/away has its own endpoint already, `POST /api/presence/me`);
 - colour (`xy`/`hue`) in device actions;
 - a run-as switch in the editor;
-- a leaving-home / bedtime check: push "3 lights and the space heater are still on";
-- vacation mode: lights on and off at randomized times around sunset while away.
+- a leaving-home / bedtime check: push "3 lights and the space heater are still on" (presence triggers exist: "Everyone has left" → check → notify);
+- vacation mode: lights on and off at randomized times around sunset while away (build on the "Nobody is home" condition).
 
 ### Sensor history (migration)
 
 Today only the latest state is kept (Redis twin), so nothing has history. A readings table, downsampled to one row per sensor every ~5 min to spare the SD card, with pruning. Unlocks charts on device cards (temperature, humidity, CO₂, power), an energy-use view, and the stale-sensor and rate-of-change triggers above. The biggest single unlock on this list.
 
-### Presence (home / away)
-
-- Per-user home/away state set by an iPhone Shortcuts "Arrive"/"Leave" automation calling a webhook (test first that iOS runs it without a confirmation tap). The Shortcut can authenticate with a personal API token (Settings → Connections; see [iphone-shortcuts.md](iphone-shortcuts.md)), so this is one endpoint plus the routine condition and trigger.
-- An "anyone home" / "nobody home" routine condition and trigger, which the leaving-home check and vacation mode build on.
+Presence history belongs here too: today only each person's current home/away is kept (Redis `gateway:presence`), so there's no "came home at 17:42" log. A `presence_events` row per arrival/departure would give the agent "when did I get home yesterday?" and patterns (usual arrival time) for routines.
 
 ### Notifications
 
