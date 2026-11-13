@@ -87,7 +87,6 @@ Presence history belongs here too: today only each person's current home/away is
 - Calendar (ICS feed URL or Google Calendar): the agent can answer "what's on today"; a "workday" / "event soon" routine condition.
 - Wake-on-LAN: "turn on my PC" from the agent or a routine.
 - Pi-hole (already on the Pi): "pause ad blocking for 5 minutes" as an agent tool, plus blocked-query stats.
-- TV control over local APIs (Roku ECP, LG, Samsung): pause, input, "movie mode".
 
 ### Users and admin
 
@@ -96,6 +95,12 @@ Presence history belongs here too: today only each person's current home/away is
 ### Digital wardrobe
 
 - A wardrobe table, filled one item at a time in the UI or in bulk from a CSV import.
+
+## On hold
+
+Waiting on something outside the code:
+
+- Roku (ECP) playback triggers: put the stick's play/pause/app state in the twin as `roku:<serial>` so device triggers can dim lights on play and raise them on pause. Small: a poller, `ROKU_HOST` in `.env`, and a picker entry. No card, agent tool or routine action, because the stick can't control TV power or volume and its remote already covers navigation. **On hold because there's no TV room with lights set up yet.**
 
 ## Decided against
 

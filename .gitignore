@@ -46,3 +46,4 @@ Thumbs.db
 *.swp
 # Local, host-specific notes (repo is public)
 CLAUDE.local.md
+settings.local.json
